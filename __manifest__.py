@@ -22,6 +22,7 @@
         'purchase',
         'uom',
         'employee_purchase_requisition',
+        'material_purchase_requisition',
     ],
     'data': [
         'security/ir.model.access.csv',

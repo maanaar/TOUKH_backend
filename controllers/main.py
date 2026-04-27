@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
-from odoo import http
+from datetime import date, timedelta
+from odoo import http, fields as odoo_fields
 from odoo.http import request, Response
 
 
@@ -1099,6 +1100,907 @@ class RequisitionCreateController(http.Controller):
                     'partner_name':     line.partner_id.name if line.partner_id else None,
                 } for line in rec.requisition_order_ids],
             }, 201)
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  UPDATE endpoints  (PUT)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ProductUpdateController(http.Controller):
+
+    @http.route('/api/v1/products/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update_product(self, rec_id, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+            rec = request.env['product.template'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+
+            vals = {}
+            for field in ['name', 'default_code', 'barcode', 'type', 'list_price',
+                          'standard_price', 'sale_ok', 'purchase_ok', 'active',
+                          'description', 'description_sale', 'description_purchase',
+                          'tracking', 'description_picking', 'description_pickingout',
+                          'description_pickingin']:
+                if field in body:
+                    vals[field] = body[field]
+
+            m2o_fields = {
+                'categ_id':  'product.category',
+                'uom_id':    'uom.uom',
+                'uom_po_id': 'uom.uom',
+            }
+            for field, model in m2o_fields.items():
+                if field in body:
+                    if body[field] is None:
+                        vals[field] = False
+                    else:
+                        related = request.env[model].sudo().browse(int(body[field]))
+                        if not related.exists():
+                            return http_response({'error': f'{field} not found'}, 400)
+                        vals[field] = related.id
+
+            if vals:
+                rec.write(vals)
+
+            return http_response({
+                'id':             rec.id,
+                'name':           rec.name,
+                'default_code':   rec.default_code or '',
+                'type':           rec.type,
+                'list_price':     rec.list_price,
+                'standard_price': rec.standard_price,
+                'categ_id':       rec.categ_id.id if rec.categ_id else None,
+                'categ_name':     rec.categ_id.name if rec.categ_id else None,
+                'uom_id':         rec.uom_id.id if rec.uom_id else None,
+                'uom_name':       rec.uom_id.name if rec.uom_id else None,
+                'tracking':       rec.tracking,
+                'active':         rec.active,
+            })
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+class CategoryUpdateController(http.Controller):
+
+    @http.route('/api/v1/categories/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update_category(self, rec_id, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+            rec = request.env['product.category'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+
+            vals = {}
+            if 'name' in body:
+                vals['name'] = body['name']
+            if 'parent_id' in body:
+                if body['parent_id'] is None:
+                    vals['parent_id'] = False
+                else:
+                    parent = request.env['product.category'].sudo().browse(int(body['parent_id']))
+                    if not parent.exists():
+                        return http_response({'error': 'parent_id not found'}, 400)
+                    vals['parent_id'] = parent.id
+
+            if vals:
+                rec.write(vals)
+
+            return http_response({
+                'id':            rec.id,
+                'name':          rec.name,
+                'complete_name': rec.complete_name,
+                'parent_id':     rec.parent_id.id if rec.parent_id else None,
+                'parent_name':   rec.parent_id.name if rec.parent_id else None,
+            })
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  stock.quant  (on-hand inventory with lot / expiry info)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class QuantController(http.Controller):
+
+    @http.route('/api/v1/stock/quants', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env['stock.quant'].sudo().search([
+            ('location_id.usage', '=', 'internal'),
+        ])
+        data = []
+        for rec in records:
+            data.append({
+                'id':                   rec.id,
+                'product_id':           rec.product_id.id if rec.product_id else None,
+                'product_name':         rec.product_id.name if rec.product_id else None,
+                'product_default_code': rec.product_id.default_code or '' if rec.product_id else '',
+                'product_uom_id':       rec.product_uom_id.id if rec.product_uom_id else None,
+                'product_uom_name':     rec.product_uom_id.name if rec.product_uom_id else None,
+                'location_id':          rec.location_id.id if rec.location_id else None,
+                'location_name':        rec.location_id.complete_name if rec.location_id else None,
+                'lot_id':               rec.lot_id.id if rec.lot_id else None,
+                'lot_name':             rec.lot_id.name if rec.lot_id else None,
+                'expiration_date':      str(rec.lot_id.expiration_date) if rec.lot_id and rec.lot_id.expiration_date else None,
+                'quantity':             rec.quantity,
+                'reserved_quantity':    rec.reserved_quantity,
+                'available_quantity':   rec.available_quantity,
+                'inventory_quantity':   rec.inventory_quantity,
+                'in_date':              str(rec.in_date) if rec.in_date else None,
+                'company_id':           rec.company_id.id if rec.company_id else None,
+                'company_name':         rec.company_id.name if rec.company_id else None,
+            })
+        return http_response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  stock.warehouse
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WarehouseController(http.Controller):
+
+    @http.route('/api/v1/stock/warehouses', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env['stock.warehouse'].sudo().search([])
+        data = []
+        for rec in records:
+            data.append({
+                'id':                     rec.id,
+                'name':                   rec.name,
+                'code':                   rec.code,
+                'partner_id':             rec.partner_id.id if rec.partner_id else None,
+                'partner_name':           rec.partner_id.name if rec.partner_id else None,
+                'lot_stock_id':           rec.lot_stock_id.id if rec.lot_stock_id else None,
+                'lot_stock_name':         rec.lot_stock_id.complete_name if rec.lot_stock_id else None,
+                'view_location_id':       rec.view_location_id.id if rec.view_location_id else None,
+                'wh_input_stock_loc_id':  rec.wh_input_stock_loc_id.id if rec.wh_input_stock_loc_id else None,
+                'wh_output_stock_loc_id': rec.wh_output_stock_loc_id.id if rec.wh_output_stock_loc_id else None,
+                'reception_steps':        rec.reception_steps,
+                'delivery_steps':         rec.delivery_steps,
+                'in_type_id':             rec.in_type_id.id if rec.in_type_id else None,
+                'out_type_id':            rec.out_type_id.id if rec.out_type_id else None,
+                'int_type_id':            rec.int_type_id.id if rec.int_type_id else None,
+                'company_id':             rec.company_id.id if rec.company_id else None,
+                'company_name':           rec.company_id.name if rec.company_id else None,
+            })
+        return http_response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  stock.picking  — CREATE + VALIDATE
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PickingCreateController(http.Controller):
+
+    @http.route('/api/v1/stock/pickings', type='http', auth='user', methods=['POST'], csrf=False)
+    def create_picking(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+
+            for required in ('picking_type_id', 'location_id', 'location_dest_id', 'moves'):
+                if not body.get(required):
+                    return http_response({'error': f'{required} is required'}, 400)
+
+            picking_type = request.env['stock.picking.type'].sudo().browse(int(body['picking_type_id']))
+            if not picking_type.exists():
+                return http_response({'error': 'picking_type_id not found'}, 400)
+
+            location_src = request.env['stock.location'].sudo().browse(int(body['location_id']))
+            if not location_src.exists():
+                return http_response({'error': 'location_id not found'}, 400)
+
+            location_dst = request.env['stock.location'].sudo().browse(int(body['location_dest_id']))
+            if not location_dst.exists():
+                return http_response({'error': 'location_dest_id not found'}, 400)
+
+            vals = {
+                'picking_type_id':  picking_type.id,
+                'location_id':      location_src.id,
+                'location_dest_id': location_dst.id,
+            }
+
+            for field in ('origin', 'note', 'scheduled_date', 'date_deadline'):
+                if body.get(field):
+                    vals[field] = body[field]
+
+            if body.get('partner_id'):
+                partner = request.env['res.partner'].sudo().browse(int(body['partner_id']))
+                if partner.exists():
+                    vals['partner_id'] = partner.id
+
+            move_vals_list = []
+            for i, move in enumerate(body['moves']):
+                if not move.get('product_id'):
+                    return http_response({'error': f'moves[{i}]: product_id is required'}, 400)
+                product = request.env['product.product'].sudo().browse(int(move['product_id']))
+                if not product.exists():
+                    return http_response({'error': f'moves[{i}]: product_id not found'}, 400)
+
+                qty = float(move.get('quantity', move.get('product_uom_qty', 1)))
+                move_vals_list.append((0, 0, {
+                    'name':             product.display_name,
+                    'product_id':       product.id,
+                    'product_uom_qty':  qty,
+                    'quantity':         qty,
+                    'product_uom':      product.uom_id.id,
+                    'location_id':      location_src.id,
+                    'location_dest_id': location_dst.id,
+                }))
+
+            vals['move_ids'] = move_vals_list
+            rec = request.env['stock.picking'].sudo().create(vals)
+
+            return http_response({
+                'id':                 rec.id,
+                'name':               rec.name,
+                'state':              rec.state,
+                'picking_type_id':    rec.picking_type_id.id,
+                'picking_type_name':  rec.picking_type_id.name,
+                'location_id':        rec.location_id.id,
+                'location_name':      rec.location_id.complete_name,
+                'location_dest_id':   rec.location_dest_id.id,
+                'location_dest_name': rec.location_dest_id.complete_name,
+                'move_ids_count':     len(rec.move_ids),
+            }, 201)
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+class PickingValidateController(http.Controller):
+
+    @http.route('/api/v1/stock/pickings/<int:rec_id>/validate', type='http', auth='user', methods=['POST'], csrf=False)
+    def validate_picking(self, rec_id, **kw):
+        try:
+            rec = request.env['stock.picking'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state == 'done':
+                return http_response({'error': 'picking is already done'}, 400)
+            if rec.state == 'cancel':
+                return http_response({'error': 'picking is cancelled'}, 400)
+
+            body = json.loads(request.httprequest.data or '{}')
+            if body.get('immediate_transfer', True):
+                for move in rec.move_ids:
+                    if move.quantity == 0:
+                        move.quantity = move.product_uom_qty
+
+            rec.button_validate()
+
+            return http_response({
+                'id':        rec.id,
+                'name':      rec.name,
+                'state':     rec.state,
+                'date_done': str(rec.date_done) if rec.date_done else None,
+            })
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  stock.lot  (batch / serial / lot tracking)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class LotController(http.Controller):
+
+    @http.route('/api/v1/stock/lots', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env['stock.lot'].sudo().search([])
+        data = []
+        for rec in records:
+            data.append({
+                'id':               rec.id,
+                'name':             rec.name,
+                'ref':              rec.ref or '',
+                'product_id':       rec.product_id.id if rec.product_id else None,
+                'product_name':     rec.product_id.name if rec.product_id else None,
+                'product_uom_id':   rec.product_uom_id.id if rec.product_uom_id else None,
+                'product_uom_name': rec.product_uom_id.name if rec.product_uom_id else None,
+                'expiration_date':  str(rec.expiration_date) if rec.expiration_date else None,
+                'use_date':         str(rec.use_date) if rec.use_date else None,
+                'removal_date':     str(rec.removal_date) if rec.removal_date else None,
+                'alert_date':       str(rec.alert_date) if rec.alert_date else None,
+                'note':             rec.note or '',
+                'product_qty':      rec.product_qty,
+                'company_id':       rec.company_id.id if rec.company_id else None,
+                'company_name':     rec.company_id.name if rec.company_id else None,
+            })
+        return http_response(data)
+
+    @http.route('/api/v1/stock/lots', type='http', auth='user', methods=['POST'], csrf=False)
+    def create_lot(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+
+            if not body.get('name'):
+                return http_response({'error': 'name is required'}, 400)
+            if not body.get('product_id'):
+                return http_response({'error': 'product_id is required'}, 400)
+
+            product = request.env['product.product'].sudo().browse(int(body['product_id']))
+            if not product.exists():
+                return http_response({'error': 'product_id not found'}, 400)
+
+            vals = {
+                'name':       body['name'],
+                'product_id': product.id,
+            }
+
+            for field in ('ref', 'expiration_date', 'use_date', 'removal_date', 'alert_date', 'note'):
+                if body.get(field):
+                    vals[field] = body[field]
+
+            if body.get('company_id'):
+                company = request.env['res.company'].sudo().browse(int(body['company_id']))
+                if company.exists():
+                    vals['company_id'] = company.id
+
+            rec = request.env['stock.lot'].sudo().create(vals)
+
+            return http_response({
+                'id':              rec.id,
+                'name':            rec.name,
+                'ref':             rec.ref or '',
+                'product_id':      rec.product_id.id,
+                'product_name':    rec.product_id.name,
+                'expiration_date': str(rec.expiration_date) if rec.expiration_date else None,
+                'use_date':        str(rec.use_date) if rec.use_date else None,
+            }, 201)
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  hr.employee
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EmployeeController(http.Controller):
+
+    @http.route('/api/v1/hr/employees', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env['hr.employee'].sudo().search([('active', '=', True)])
+        data = []
+        for rec in records:
+            data.append({
+                'id':              rec.id,
+                'name':            rec.name,
+                'job_title':       rec.job_title or '',
+                'job_id':          rec.job_id.id if rec.job_id else None,
+                'job_name':        rec.job_id.name if rec.job_id else None,
+                'department_id':   rec.department_id.id if rec.department_id else None,
+                'department_name': rec.department_id.name if rec.department_id else None,
+                'parent_id':       rec.parent_id.id if rec.parent_id else None,
+                'parent_name':     rec.parent_id.name if rec.parent_id else None,
+                'work_email':      rec.work_email or '',
+                'work_phone':      rec.work_phone or '',
+                'user_id':         rec.user_id.id if rec.user_id else None,
+                'user_name':       rec.user_id.name if rec.user_id else None,
+                'company_id':      rec.company_id.id if rec.company_id else None,
+                'company_name':    rec.company_id.name if rec.company_id else None,
+                'image_url':       '/web/image/hr.employee/%d/image_1920' % rec.id if rec.image_1920 else '',
+            })
+        return http_response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  hr.department
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DepartmentController(http.Controller):
+
+    @http.route('/api/v1/departments', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env['hr.department'].sudo().search([('active', '=', True)])
+        data = []
+        for rec in records:
+            data.append({
+                'id':            rec.id,
+                'name':          rec.name,
+                'complete_name': rec.complete_name,
+                'parent_id':     rec.parent_id.id if rec.parent_id else None,
+                'parent_name':   rec.parent_id.name if rec.parent_id else None,
+                'manager_id':    rec.manager_id.id if rec.manager_id else None,
+                'manager_name':  rec.manager_id.name if rec.manager_id else None,
+                'member_ids':    rec.member_ids.ids,
+                'child_ids':     rec.child_ids.ids,
+                'company_id':    rec.company_id.id if rec.company_id else None,
+                'company_name':  rec.company_id.name if rec.company_id else None,
+            })
+        return http_response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  res.partner  — vendors only
+# ─────────────────────────────────────────────────────────────────────────────
+
+class VendorController(http.Controller):
+
+    @http.route('/api/v1/partners/vendors', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_vendors(self, **kw):
+        records = request.env['res.partner'].sudo().search([
+            ('supplier_rank', '>', 0),
+            ('active', '=', True),
+        ])
+        data = []
+        for rec in records:
+            data.append({
+                'id':            rec.id,
+                'name':          rec.name,
+                'ref':           rec.ref or '',
+                'email':         rec.email or '',
+                'phone':         rec.phone or '',
+                'mobile':        rec.mobile or '',
+                'street':        rec.street or '',
+                'city':          rec.city or '',
+                'country_id':    rec.country_id.id if rec.country_id else None,
+                'country_name':  rec.country_id.name if rec.country_id else None,
+                'vat':           rec.vat or '',
+                'supplier_rank': rec.supplier_rank,
+                'company_type':  rec.company_type,
+                'parent_id':     rec.parent_id.id if rec.parent_id else None,
+                'parent_name':   rec.parent_id.name if rec.parent_id else None,
+                'image_url':     '/web/image/res.partner/%d/image_1920' % rec.id if rec.image_1920 else '',
+            })
+        return http_response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  purchase.order  — CREATE + CONFIRM
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PurchaseOrderCreateController(http.Controller):
+
+    @http.route('/api/v1/purchase/orders', type='http', auth='user', methods=['POST'], csrf=False)
+    def create_order(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+
+            if not body.get('partner_id'):
+                return http_response({'error': 'partner_id is required'}, 400)
+            if not body.get('lines'):
+                return http_response({'error': 'lines is required and must not be empty'}, 400)
+
+            partner = request.env['res.partner'].sudo().browse(int(body['partner_id']))
+            if not partner.exists():
+                return http_response({'error': 'partner_id not found'}, 400)
+
+            vals = {'partner_id': partner.id}
+
+            for field in ('origin', 'partner_ref', 'date_order', 'date_planned', 'notes'):
+                if body.get(field):
+                    vals[field] = body[field]
+
+            if body.get('currency_id'):
+                currency = request.env['res.currency'].sudo().browse(int(body['currency_id']))
+                if currency.exists():
+                    vals['currency_id'] = currency.id
+
+            now_str = odoo_fields.Datetime.to_string(odoo_fields.Datetime.now())
+            line_vals_list = []
+            for i, line in enumerate(body['lines']):
+                if not line.get('product_id'):
+                    return http_response({'error': f'lines[{i}]: product_id is required'}, 400)
+                product = request.env['product.product'].sudo().browse(int(line['product_id']))
+                if not product.exists():
+                    return http_response({'error': f'lines[{i}]: product_id not found'}, 400)
+
+                qty = float(line.get('product_qty', 1))
+                price = float(line.get('price_unit', product.standard_price))
+                uom_id = (product.uom_po_id or product.uom_id).id
+
+                if line.get('uom_id'):
+                    uom = request.env['uom.uom'].sudo().browse(int(line['uom_id']))
+                    if uom.exists():
+                        uom_id = uom.id
+
+                line_vals_list.append((0, 0, {
+                    'product_id':   product.id,
+                    'name':         product.display_name,
+                    'product_qty':  qty,
+                    'price_unit':   price,
+                    'product_uom':  uom_id,
+                    'date_planned': line.get('date_planned') or body.get('date_planned') or now_str,
+                }))
+
+            vals['order_line'] = line_vals_list
+            rec = request.env['purchase.order'].sudo().create(vals)
+
+            return http_response({
+                'id':            rec.id,
+                'name':          rec.name,
+                'state':         rec.state,
+                'partner_id':    rec.partner_id.id,
+                'partner_name':  rec.partner_id.name,
+                'amount_total':  rec.amount_total,
+                'currency_name': rec.currency_id.name if rec.currency_id else None,
+                'date_order':    str(rec.date_order) if rec.date_order else None,
+            }, 201)
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+class PurchaseOrderConfirmController(http.Controller):
+
+    @http.route('/api/v1/purchase/orders/<int:rec_id>/confirm', type='http', auth='user', methods=['POST'], csrf=False)
+    def confirm_order(self, rec_id, **kw):
+        try:
+            rec = request.env['purchase.order'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state not in ('draft', 'sent'):
+                return http_response({'error': f'cannot confirm order in state: {rec.state}'}, 400)
+
+            rec.button_confirm()
+
+            return http_response({
+                'id':           rec.id,
+                'name':         rec.name,
+                'state':        rec.state,
+                'date_approve': str(rec.date_approve) if rec.date_approve else None,
+            })
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  employee.purchase.requisition  — workflow actions
+# ─────────────────────────────────────────────────────────────────────────────
+
+class RequisitionActionController(http.Controller):
+
+    @http.route('/api/v1/purchase/requisitions/<int:rec_id>/approve', type='http', auth='user', methods=['POST'], csrf=False)
+    def approve_requisition(self, rec_id, **kw):
+        try:
+            rec = request.env['employee.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+
+            if rec.state in ('new', 'waiting_department_approval'):
+                if hasattr(rec, 'action_department_approval'):
+                    rec.action_department_approval()
+                else:
+                    rec.write({'state': 'waiting_head_approval'})
+            elif rec.state == 'waiting_head_approval':
+                if hasattr(rec, 'action_head_approval'):
+                    rec.action_head_approval()
+                else:
+                    rec.write({'state': 'approved'})
+            else:
+                return http_response({'error': f'cannot approve requisition in state: {rec.state}'}, 400)
+
+            return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/purchase/requisitions/<int:rec_id>/cancel', type='http', auth='user', methods=['POST'], csrf=False)
+    def cancel_requisition(self, rec_id, **kw):
+        try:
+            rec = request.env['employee.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state == 'cancelled':
+                return http_response({'error': 'requisition is already cancelled'}, 400)
+
+            if hasattr(rec, 'action_cancel'):
+                rec.action_cancel()
+            else:
+                rec.write({'state': 'cancelled'})
+
+            return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  inventory dashboard  — aggregated KPIs
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DashboardController(http.Controller):
+
+    @http.route('/api/v1/inventory/dashboard', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_dashboard(self, **kw):
+        env = request.env
+
+        total_products = env['product.template'].sudo().search_count([
+            ('type', '=', 'product'), ('active', '=', True),
+        ])
+
+        quants = env['stock.quant'].sudo().search([('location_id.usage', '=', 'internal')])
+        total_qty = sum(quants.mapped('quantity'))
+
+        below_safety_ids = {q.product_id.id for q in quants if q.quantity <= 0}
+        below_safety_count = len(below_safety_ids)
+
+        today = date.today()
+        in_30 = today + timedelta(days=30)
+        expiring_count = env['stock.lot'].sudo().search_count([
+            ('expiration_date', '!=', False),
+            ('expiration_date', '>=', str(today)),
+            ('expiration_date', '<=', str(in_30)),
+        ])
+
+        today_start = odoo_fields.Datetime.to_string(
+            odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+        todays_movements = env['stock.picking'].sudo().search_count([
+            ('state', '=', 'done'),
+            ('date_done', '>=', today_start),
+        ])
+
+        pending_requisitions = env['employee.purchase.requisition'].sudo().search_count([
+            ('state', 'in', ['new', 'waiting_department_approval', 'waiting_head_approval']),
+        ])
+
+        pending_pos = env['purchase.order'].sudo().search_count([
+            ('state', 'in', ['draft', 'sent']),
+        ])
+
+        return http_response({
+            'total_products':       total_products,
+            'total_qty_onhand':     total_qty,
+            'below_safety_count':   below_safety_count,
+            'expiring_soon_count':  expiring_count,
+            'todays_movements':     todays_movements,
+            'pending_requisitions': pending_requisitions,
+            'pending_pos':          pending_pos,
+        })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  material.purchase.requisition
+#  model: material.purchase.requisition  |  lines: material.purchase.requisition.line
+#  route prefix: /api/v1/purchase/cr-requisitions
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CrRequisitionController(http.Controller):
+
+    @http.route('/api/v1/purchase/cr-requisitions', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env['material.purchase.requisition'].sudo().search([])
+        data = []
+        for rec in records:
+            data.append({
+                'id':                           rec.id,
+                'name':                         rec.name,
+                'state':                        rec.state,
+                # state: new / waiting_department_approval / waiting_ir_approval
+                #        approved / purchase_order_created / received / rejected
+                'request_action':               rec.request_action or '',
+                # request_action: purchase order / internal picking
+                'reason_for_requisition':       rec.reason_for_requisition or '',
+                'reason_for_rejection':         rec.reason_for_rejection or '',
+                'employee_id':                  rec.employee_id.id if rec.employee_id else None,
+                'employee_name':                rec.employee_id.name if rec.employee_id else None,
+                'department_id':                rec.department_id.id if rec.department_id else None,
+                'department_name':              rec.department_id.name if rec.department_id else None,
+                'requisition_responsible':      rec.requisition_responsible.id if rec.requisition_responsible else None,
+                'requisition_responsible_name': rec.requisition_responsible.name if rec.requisition_responsible else None,
+                'confirmed_by_id':              rec.confirmed_by_id.id if rec.confirmed_by_id else None,
+                'confirmed_by_name':            rec.confirmed_by_id.name if rec.confirmed_by_id else None,
+                'department_manager_id':        rec.department_manager_id.id if rec.department_manager_id else None,
+                'department_manager_name':      rec.department_manager_id.name if rec.department_manager_id else None,
+                'approved_id':                  rec.approved_id.id if rec.approved_id else None,
+                'approved_name':                rec.approved_id.name if rec.approved_id else None,
+                'rejected_id':                  rec.rejected_id.id if rec.rejected_id else None,
+                'rejected_name':                rec.rejected_id.name if rec.rejected_id else None,
+                'requisition_date':             str(rec.requisition_date) if rec.requisition_date else None,
+                'requisition_deadline':         str(rec.requisition_deadline) if rec.requisition_deadline else None,
+                'received_date':                str(rec.received_date) if rec.received_date else None,
+                'confirmed_date':               str(rec.confirmed_date) if rec.confirmed_date else None,
+                'department_approval_date':     str(rec.department_approval_date) if rec.department_approval_date else None,
+                'approved_date':                str(rec.approved_date) if rec.approved_date else None,
+                'rejected_date':                str(rec.rejected_date) if rec.rejected_date else None,
+                'source_location_id':           rec.source_location_id.id if rec.source_location_id else None,
+                'source_location_name':         rec.source_location_id.complete_name if rec.source_location_id else None,
+                'destination_location_id':      rec.destination_location_id.id if rec.destination_location_id else None,
+                'destination_location_name':    rec.destination_location_id.complete_name if rec.destination_location_id else None,
+                'picking_type_id':              rec.picking_type_id.id if rec.picking_type_id else None,
+                'picking_type_name':            rec.picking_type_id.name if rec.picking_type_id else None,
+                'purchase_count':               rec.purchase_count,
+                'internal_transfer_count':      rec.internal_transfer_count,
+                'company_id':                   rec.company_id.id if rec.company_id else None,
+                'company_name':                 rec.company_id.name if rec.company_id else None,
+            })
+        return http_response(data)
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_one(self, rec_id, **kw):
+        rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+        if not rec.exists():
+            return http_response({'error': 'not found'}, 404)
+
+        lines = []
+        for line in rec.requisition_line_ids:
+            lines.append({
+                'id':               line.id,
+                'product_id':       line.product_id.id if line.product_id else None,
+                'product_name':     line.product_id.name if line.product_id else None,
+                'default_code':     line.product_id.default_code or '' if line.product_id else '',
+                'qty':              line.qty,
+                'uom_id':           line.uom_id.id if line.uom_id else None,
+                'uom_name':         line.uom_id.name if line.uom_id else None,
+                'partner_id':       line.partner_id.id if line.partner_id else None,
+                'partner_name':     line.partner_id.name if line.partner_id else None,
+                'requisition_type': line.requisition_type if hasattr(line, 'requisition_type') else '',
+            })
+
+        data = {
+            'id':                           rec.id,
+            'name':                         rec.name,
+            'state':                        rec.state,
+            'request_action':               rec.request_action or '',
+            'reason_for_requisition':       rec.reason_for_requisition or '',
+            'reason_for_rejection':         rec.reason_for_rejection or '',
+            'employee_id':                  rec.employee_id.id if rec.employee_id else None,
+            'employee_name':                rec.employee_id.name if rec.employee_id else None,
+            'department_id':                rec.department_id.id if rec.department_id else None,
+            'department_name':              rec.department_id.name if rec.department_id else None,
+            'requisition_responsible':      rec.requisition_responsible.id if rec.requisition_responsible else None,
+            'requisition_responsible_name': rec.requisition_responsible.name if rec.requisition_responsible else None,
+            'confirmed_by_id':              rec.confirmed_by_id.id if rec.confirmed_by_id else None,
+            'confirmed_by_name':            rec.confirmed_by_id.name if rec.confirmed_by_id else None,
+            'department_manager_id':        rec.department_manager_id.id if rec.department_manager_id else None,
+            'department_manager_name':      rec.department_manager_id.name if rec.department_manager_id else None,
+            'approved_id':                  rec.approved_id.id if rec.approved_id else None,
+            'approved_name':                rec.approved_id.name if rec.approved_id else None,
+            'rejected_id':                  rec.rejected_id.id if rec.rejected_id else None,
+            'rejected_name':                rec.rejected_id.name if rec.rejected_id else None,
+            'requisition_date':             str(rec.requisition_date) if rec.requisition_date else None,
+            'requisition_deadline':         str(rec.requisition_deadline) if rec.requisition_deadline else None,
+            'received_date':                str(rec.received_date) if rec.received_date else None,
+            'confirmed_date':               str(rec.confirmed_date) if rec.confirmed_date else None,
+            'department_approval_date':     str(rec.department_approval_date) if rec.department_approval_date else None,
+            'approved_date':                str(rec.approved_date) if rec.approved_date else None,
+            'rejected_date':                str(rec.rejected_date) if rec.rejected_date else None,
+            'source_location_id':           rec.source_location_id.id if rec.source_location_id else None,
+            'source_location_name':         rec.source_location_id.complete_name if rec.source_location_id else None,
+            'destination_location_id':      rec.destination_location_id.id if rec.destination_location_id else None,
+            'destination_location_name':    rec.destination_location_id.complete_name if rec.destination_location_id else None,
+            'picking_type_id':              rec.picking_type_id.id if rec.picking_type_id else None,
+            'picking_type_name':            rec.picking_type_id.name if rec.picking_type_id else None,
+            'purchase_count':               rec.purchase_count,
+            'internal_transfer_count':      rec.internal_transfer_count,
+            'company_id':                   rec.company_id.id if rec.company_id else None,
+            'company_name':                 rec.company_id.name if rec.company_id else None,
+            'requisition_line_ids':         lines,
+        }
+        return http_response(data)
+
+
+class CrRequisitionCreateController(http.Controller):
+
+    @http.route('/api/v1/purchase/cr-requisitions', type='http', auth='user', methods=['POST'], csrf=False)
+    def create_cr_requisition(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+
+            if not body.get('employee_id'):
+                return http_response({'error': 'employee_id is required'}, 400)
+            if not body.get('lines'):
+                return http_response({'error': 'lines is required and must not be empty'}, 400)
+
+            employee = request.env['hr.employee'].sudo().browse(int(body['employee_id']))
+            if not employee.exists():
+                return http_response({'error': 'employee_id not found'}, 400)
+
+            vals = {'employee_id': employee.id}
+
+            for field in ('reason_for_requisition', 'request_action',
+                          'requisition_date', 'requisition_deadline'):
+                if body.get(field):
+                    vals[field] = body[field]
+
+            if body.get('department_id'):
+                dept = request.env['hr.department'].sudo().browse(int(body['department_id']))
+                if dept.exists():
+                    vals['department_id'] = dept.id
+
+            if body.get('requisition_responsible'):
+                user = request.env['res.users'].sudo().browse(int(body['requisition_responsible']))
+                if user.exists():
+                    vals['requisition_responsible'] = user.id
+
+            VALID_TYPES = ('purchase_order', 'internal_transfer', 'purchase order', 'internal picking')
+            line_vals_list = []
+            for i, line in enumerate(body['lines']):
+                if not line.get('product_id'):
+                    return http_response({'error': f'lines[{i}]: product_id is required'}, 400)
+                product = request.env['product.product'].sudo().browse(int(line['product_id']))
+                if not product.exists():
+                    return http_response({'error': f'lines[{i}]: product_id not found'}, 400)
+
+                qty = float(line.get('qty', line.get('quantity', 1)))
+                line_val = {
+                    'product_id': product.id,
+                    'qty':        qty,
+                }
+
+                if line.get('uom_id'):
+                    uom = request.env['uom.uom'].sudo().browse(int(line['uom_id']))
+                    if uom.exists():
+                        line_val['uom_id'] = uom.id
+
+                if line.get('partner_id'):
+                    partner = request.env['res.partner'].sudo().browse(int(line['partner_id']))
+                    if partner.exists():
+                        line_val['partner_id'] = partner.id
+
+                if line.get('requisition_type'):
+                    line_val['requisition_type'] = line['requisition_type']
+
+                line_vals_list.append((0, 0, line_val))
+
+            vals['requisition_line_ids'] = line_vals_list
+            rec = request.env['material.purchase.requisition'].sudo().create(vals)
+
+            return http_response({
+                'id':          rec.id,
+                'name':        rec.name,
+                'state':       rec.state,
+                'employee_id': rec.employee_id.id,
+                'employee_name': rec.employee_id.name,
+                'department_id': rec.department_id.id if rec.department_id else None,
+                'department_name': rec.department_id.name if rec.department_id else None,
+            }, 201)
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+class CrRequisitionActionController(http.Controller):
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/approve', type='http', auth='user', methods=['POST'], csrf=False)
+    def approve(self, rec_id, **kw):
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+
+            if rec.state in ('new', 'waiting_department_approval'):
+                if hasattr(rec, 'action_department_approval'):
+                    rec.action_department_approval()
+                else:
+                    rec.write({'state': 'waiting_ir_approval'})
+            elif rec.state == 'waiting_ir_approval':
+                if hasattr(rec, 'action_ir_approval'):
+                    rec.action_ir_approval()
+                else:
+                    rec.write({'state': 'approved'})
+            else:
+                return http_response({'error': f'cannot approve in state: {rec.state}'}, 400)
+
+            return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
+
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/cancel', type='http', auth='user', methods=['POST'], csrf=False)
+    def cancel(self, rec_id, **kw):
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state == 'rejected':
+                return http_response({'error': 'requisition is already rejected'}, 400)
+
+            if hasattr(rec, 'action_reject'):
+                rec.action_reject()
+            else:
+                rec.write({'state': 'rejected'})
+
+            return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
 
         except Exception as e:
             return http_response({'error': str(e)}, 500)
