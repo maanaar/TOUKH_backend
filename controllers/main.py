@@ -144,8 +144,8 @@ class ProductController(http.Controller):
                 # ── uom ───────────────────────────────────────────────────
                 'uom_id':                   rec.uom_id.id if rec.uom_id else None,
                 'uom_name':                 rec.uom_id.name if rec.uom_id else None,
-                'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
-                'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
+                # 'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
+                # 'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
                 # ── pricing ───────────────────────────────────────────────
                 'list_price':               rec.list_price,
                 'standard_price':           rec.standard_price,
@@ -159,7 +159,7 @@ class ProductController(http.Controller):
                 'incoming_qty':             rec.incoming_qty,
                 'tracking':                 rec.tracking,       # none / lot / serial
                 'sale_delay':               rec.sale_delay,
-                'produce_delay':            rec.produce_delay,
+                # 'produce_delay':            rec.produce_delay,
                 'route_ids':                rec.route_ids.ids,
                 # ── supplier ─────────────────────────────────────────────
                 'seller_ids': [{
@@ -212,8 +212,8 @@ class ProductController(http.Controller):
             'can_be_expensed':          rec.can_be_expensed,
             'uom_id':                   rec.uom_id.id if rec.uom_id else None,
             'uom_name':                 rec.uom_id.name if rec.uom_id else None,
-            'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
-            'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
+            # 'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
+            # 'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
             'list_price':               rec.list_price,
             'standard_price':           rec.standard_price,
             'currency_id':              rec.currency_id.id if rec.currency_id else None,
@@ -225,7 +225,7 @@ class ProductController(http.Controller):
             'incoming_qty':             rec.incoming_qty,
             'tracking':                 rec.tracking,
             'sale_delay':               rec.sale_delay,
-            'produce_delay':            rec.produce_delay,
+            # 'produce_delay':            rec.produce_delay,
             'route_ids':                rec.route_ids.ids,
             'seller_ids': [{
                 'partner_id':   s.partner_id.id,
@@ -941,8 +941,8 @@ class ProductCreateController(http.Controller):
                 'categ_name':     rec.categ_id.name if rec.categ_id else None,
                 'uom_id':         rec.uom_id.id if rec.uom_id else None,
                 'uom_name':       rec.uom_id.name if rec.uom_id else None,
-                'uom_po_id':      rec.uom_po_id.id if rec.uom_po_id else None,
-                'uom_po_name':    rec.uom_po_id.name if rec.uom_po_id else None,
+                # 'uom_po_id':      rec.uom_po_id.id if rec.uom_po_id else None,
+                # 'uom_po_name':    rec.uom_po_id.name if rec.uom_po_id else None,
                 'list_price':     rec.list_price,
                 'standard_price': rec.standard_price,
                 'sale_ok':        rec.sale_ok,
@@ -1385,6 +1385,32 @@ class PickingValidateController(http.Controller):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  stock.picking.type
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PickingTypeController(http.Controller):
+
+    @http.route('/api/v1/stock/picking-types', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env['stock.picking.type'].sudo().search([('active', '=', True)])
+        data = []
+        for rec in records:
+            data.append({
+                'id':                           rec.id,
+                'name':                         rec.name,
+                'code':                         rec.code,
+                'warehouse_id':                 rec.warehouse_id.id if rec.warehouse_id else None,
+                'warehouse_name':               rec.warehouse_id.name if rec.warehouse_id else None,
+                'default_location_src_id':      rec.default_location_src_id.id if rec.default_location_src_id else None,
+                'default_location_dest_id':     rec.default_location_dest_id.id if rec.default_location_dest_id else None,
+                'default_location_src_name':    rec.default_location_src_id.complete_name if rec.default_location_src_id else None,
+                'default_location_dest_name':   rec.default_location_dest_id.complete_name if rec.default_location_dest_id else None,
+                'sequence_code':                rec.sequence_code,
+            })
+        return http_response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  stock.lot  (batch / serial / lot tracking)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1594,7 +1620,7 @@ class PurchaseOrderCreateController(http.Controller):
 
                 qty = float(line.get('product_qty', 1))
                 price = float(line.get('price_unit', product.standard_price))
-                uom_id = (product.uom_po_id or product.uom_id).id
+                uom_id = product.uom_id.id
 
                 if line.get('uom_id'):
                     uom = request.env['uom.uom'].sudo().browse(int(line['uom_id']))
