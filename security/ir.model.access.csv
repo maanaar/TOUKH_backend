@@ -5,3 +5,11 @@ access_saycare_visit_user,saycare.visit user,model_saycare_visit,,1,1,1,0
 access_saycare_visit_admin,saycare.visit admin,model_saycare_visit,base.group_system,1,1,1,1
 access_saycare_medication_order_user,saycare.medication.order user,model_saycare_medication_order,,1,1,1,0
 access_saycare_medication_order_admin,saycare.medication.order admin,model_saycare_medication_order,base.group_system,1,1,1,1
+access_saycare_vital_signs_user,saycare.vital.signs user,model_saycare_vital_signs,,1,1,1,0
+access_saycare_vital_signs_admin,saycare.vital.signs admin,model_saycare_vital_signs,base.group_system,1,1,1,1
+access_saycare_clinical_note_user,saycare.clinical.note user,model_saycare_clinical_note,,1,1,1,0
+access_saycare_clinical_note_admin,saycare.clinical.note admin,model_saycare_clinical_note,base.group_system,1,1,1,1
+access_saycare_lab_order_user,saycare.lab.order user,model_saycare_lab_order,,1,1,1,0
+access_saycare_lab_order_admin,saycare.lab.order admin,model_saycare_lab_order,base.group_system,1,1,1,1
+access_saycare_rad_order_user,saycare.rad.order user,model_saycare_rad_order,,1,1,1,0
+access_saycare_rad_order_admin,saycare.rad.order admin,model_saycare_rad_order,base.group_system,1,1,1,1
