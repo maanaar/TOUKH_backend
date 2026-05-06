@@ -17,11 +17,13 @@ class SaycareVisit(models.Model):
     discharge_date = fields.Datetime(string='Discharge Date')
 
     state = fields.Selection([
-        ('draft',      'مسودة'),
-        ('admitted',   'مقيم'),
-        ('discharged', 'خروج'),
-        ('cancelled',  'ملغي'),
-    ], string='Status', default='draft', index=True)
+        ('waiting',      'في الانتظار'),
+        ('triage',       'قيد التقييم'),
+        ('doctor_queue', 'انتظار الطبيب'),
+        ('in_progress',  'قيد الفحص'),
+        ('done',         'مكتمل'),
+        ('cancelled',    'ملغي'),
+    ], string='Status', default='waiting', index=True)
 
     visit_type = fields.Selection([
         ('outpatient', 'عيادات خارجية'),
@@ -32,9 +34,23 @@ class SaycareVisit(models.Model):
     specialty_id = fields.Many2one('saycare.specialty', string='Specialty')
     doctor_id    = fields.Many2one('hr.employee', string='Doctor',
                                    domain=[('medical_role', '=', 'doctor')])
+    nurse_id     = fields.Many2one('hr.employee', string='Nurse',
+                                   domain=[('medical_role', '=', 'nurse')])
+
+    financial_class = fields.Selection([
+        ('government', 'حكومي'),
+        ('insurance',  'تأمين'),
+        ('self_pay',   'خاص'),
+        ('free',       'مجاني'),
+    ], string='Financial Class')
+
+    chief_complaint = fields.Char(string='Chief Complaint')
+    triage_notes    = fields.Text(string='Triage Notes')
 
     medication_order_ids = fields.One2many('saycare.medication.order', 'visit_id',
                                            string='Medication Orders')
+    vital_sign_ids       = fields.One2many('saycare.vital.signs', 'visit_id',
+                                           string='Vital Signs')
 
     notes = fields.Text(string='Notes')
 
