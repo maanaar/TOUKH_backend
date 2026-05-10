@@ -9,5 +9,13 @@
             <field name="number_next">1</field>
             <field name="number_increment">1</field>
         </record>
+        <record id="seq_saycare_appointment" model="ir.sequence">
+            <field name="name">Appointment</field>
+            <field name="code">saycare.appointment</field>
+            <field name="prefix">APT/%(year)s/</field>
+            <field name="padding">5</field>
+            <field name="number_next">1</field>
+            <field name="number_increment">1</field>
+        </record>
     </data>
 </odoo>

@@ -1,0 +1,65 @@
+# -*- coding: utf-8 -*-
+import json
+from odoo import http
+from odoo.http import request
+from .utils import _json
+
+
+def _appt_dict(a):
+    return {
+        'id':             a.id,
+        'name':           a.name or '',
+        'patient_id':     a.patient_id.id if a.patient_id else None,
+        'patient_name':   a.patient_id.name if a.patient_id else '',
+        'patient_mrn':    a.patient_id.mrn if a.patient_id else '',
+        'doctor_id':      a.doctor_id.id if a.doctor_id else None,
+        'doctor_name':    a.doctor_id.name if a.doctor_id else '',
+        'specialty_id':   a.specialty_id.id if a.specialty_id else None,
+        'specialty_name': a.specialty_id.name if a.specialty_id else '',
+        'date':           str(a.date) if a.date else None,
+        'start_time':     a.start_time,
+        'end_time':       a.end_time,
+        'visit_type':     a.visit_type or '',
+        'state':          a.state,
+        'visit_id':       a.visit_id.id if a.visit_id else None,
+        'visit_state':    a.visit_id.state if a.visit_id else None,
+        'notes':          a.notes or '',
+    }
+
+
+class AppointmentController(http.Controller):
+
+    @http.route('/saycare/api/appointments', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, date='', doctor_id='', specialty_id='', **kw):
+        domain = []
+        if date:
+            domain.append(('date', '=', date))
+        if doctor_id:
+            domain.append(('doctor_id', '=', int(doctor_id)))
+        if specialty_id:
+            domain.append(('specialty_id', '=', int(specialty_id)))
+        records = request.env['saycare.appointment'].sudo().search(
+            domain, order='date asc, start_time asc'
+        )
+        return _json([_appt_dict(a) for a in records])
+
+    @http.route('/saycare/api/appointments', type='http', auth='user', methods=['POST'], csrf=False)
+    def create(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except json.JSONDecodeError:
+            return _json({'error': 'invalid JSON'}, 400)
+        if not body.get('patient_id') or not body.get('date'):
+            return _json({'error': 'patient_id and date are required'}, 400)
+        vals = {
+            'patient_id':   body['patient_id'],
+            'doctor_id':    body.get('doctor_id'),
+            'specialty_id': body.get('specialty_id'),
+            'date':         body['date'],
+            'start_time':   body.get('start_time', 0.0),
+            'end_time':     body.get('end_time', 0.0),
+            'visit_type':   body.get('visit_type', 'outpatient'),
+            'notes':        body.get('notes', ''),
+        }
+        rec = request.env['saycare.appointment'].sudo().create(vals)
+        return _json(_appt_dict(rec), 201)

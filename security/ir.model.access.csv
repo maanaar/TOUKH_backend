@@ -13,3 +13,13 @@ access_saycare_lab_order_user,saycare.lab.order user,model_saycare_lab_order,,1,
 access_saycare_lab_order_admin,saycare.lab.order admin,model_saycare_lab_order,base.group_system,1,1,1,1
 access_saycare_rad_order_user,saycare.rad.order user,model_saycare_rad_order,,1,1,1,0
 access_saycare_rad_order_admin,saycare.rad.order admin,model_saycare_rad_order,base.group_system,1,1,1,1
+access_saycare_appointment_user,saycare.appointment user,model_saycare_appointment,,1,1,1,0
+access_saycare_appointment_admin,saycare.appointment admin,model_saycare_appointment,base.group_system,1,1,1,1
+access_saycare_patient_allergy_user,saycare.patient.allergy user,model_saycare_patient_allergy,,1,1,1,0
+access_saycare_patient_allergy_admin,saycare.patient.allergy admin,model_saycare_patient_allergy,base.group_system,1,1,1,1
+access_saycare_patient_condition_user,saycare.patient.condition user,model_saycare_patient_condition,,1,1,1,0
+access_saycare_patient_condition_admin,saycare.patient.condition admin,model_saycare_patient_condition,base.group_system,1,1,1,1
+access_saycare_patient_surgery_user,saycare.patient.surgery user,model_saycare_patient_surgery,,1,1,1,0
+access_saycare_patient_surgery_admin,saycare.patient.surgery admin,model_saycare_patient_surgery,base.group_system,1,1,1,1
+access_saycare_patient_medication_user,saycare.patient.medication user,model_saycare_patient_medication,,1,1,1,0
+access_saycare_patient_medication_admin,saycare.patient.medication admin,model_saycare_patient_medication,base.group_system,1,1,1,1

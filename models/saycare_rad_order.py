@@ -3,25 +3,30 @@ from odoo import models, fields
 
 
 class SaycareRadOrder(models.Model):
-    _name = 'saycare.rad.order'
+    _name        = 'saycare.rad.order'
     _description = 'Radiology Order'
-    _order = 'requested_at desc, id desc'
+    _order       = 'requested_at desc'
 
-    visit_id = fields.Many2one('saycare.visit', string='Visit', required=True, ondelete='cascade', index=True)
-    patient_id = fields.Many2one('res.partner', string='Patient', related='visit_id.patient_id', store=True, index=True)
-    
-    study_type = fields.Char(string='Study Type', required=True)
-    body_part = fields.Char(string='Body Part')
+    visit_id            = fields.Many2one('saycare.visit',  ondelete='cascade',  index=True)
+    patient_id          = fields.Many2one('res.partner',    ondelete='restrict', index=True,
+                                          domain=[('is_patient', '=', True)])
+    study_type          = fields.Selection([
+        ('xray',      'أشعة سينية'),
+        ('ct',        'CT Scan'),
+        ('mri',       'MRI'),
+        ('ultrasound','موجات صوتية'),
+        ('other',     'أخرى'),
+    ], string='Study Type', required=True)
+    body_part           = fields.Char(string='Body Part')
     clinical_indication = fields.Text(string='Clinical Indication')
-    
-    notes = fields.Text(string='Notes')
-    
-    state = fields.Selection([
-        ('draft', 'Draft'),
-        ('requested', 'Requested'),
-        ('completed', 'Completed'),
-        ('cancelled', 'Cancelled'),
-    ], string='Status', default='draft', index=True)
-    
-    requested_by = fields.Many2one('res.users', string='Requested By', default=lambda self: self.env.user, required=True)
-    requested_at = fields.Datetime(string='Requested At', default=fields.Datetime.now, required=True)
+    notes               = fields.Text(string='Notes')
+    state               = fields.Selection([
+        ('requested',  'مطلوب'),
+        ('scheduled',  'مجدول'),
+        ('done',       'منجز'),
+        ('cancelled',  'ملغي'),
+    ], string='Status', default='requested', index=True)
+    result_notes        = fields.Text(string='Result Notes')
+    result_at           = fields.Datetime(string='Result At')
+    requested_by        = fields.Many2one('hr.employee', string='Requested By')
+    requested_at        = fields.Datetime(string='Requested At', default=fields.Datetime.now)

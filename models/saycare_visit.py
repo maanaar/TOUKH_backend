@@ -38,10 +38,12 @@ class SaycareVisit(models.Model):
                                    domain=[('medical_role', '=', 'nurse')])
 
     financial_class = fields.Selection([
-        ('government', 'حكومي'),
-        ('insurance',  'تأمين'),
-        ('self_pay',   'خاص'),
-        ('free',       'مجاني'),
+        ('cash',         'نقدي'),
+        ('state',        'نفقة الدولة'),
+        ('consultation', 'مشورة'),
+        ('takaful',      'تكافل وكرامة'),
+        ('insurance',    'تأمين صحي'),
+        ('contract',     'تعاقدات'),
     ], string='Financial Class')
 
     chief_complaint = fields.Char(string='Chief Complaint')
@@ -49,8 +51,14 @@ class SaycareVisit(models.Model):
 
     medication_order_ids = fields.One2many('saycare.medication.order', 'visit_id',
                                            string='Medication Orders')
-    vital_sign_ids       = fields.One2many('saycare.vital.signs', 'visit_id',
+    vital_sign_ids       = fields.One2many('saycare.vital.signs',    'visit_id',
                                            string='Vital Signs')
+    clinical_note_ids    = fields.One2many('saycare.clinical.note',  'visit_id',
+                                           string='Clinical Notes')
+    lab_order_ids        = fields.One2many('saycare.lab.order',      'visit_id',
+                                           string='Lab Orders')
+    rad_order_ids        = fields.One2many('saycare.rad.order',      'visit_id',
+                                           string='Rad Orders')
 
     notes = fields.Text(string='Notes')
 

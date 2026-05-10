@@ -50,7 +50,7 @@ class ResPartnerPatient(models.Model):
     # ── Financial class ───────────────────────────────────────────────────────
     financial_class = fields.Selection([
         ('cash',          'نقدي'),
-        ('state_expense', 'نفقة الدولة'),
+        ('state',         'نفقة الدولة'),
         ('consultation',  'مشورة'),
         ('takaful',       'تكافل وكرامة'),
         ('insurance',     'تأمين صحي'),
