@@ -2,6 +2,7 @@
 import json
 from odoo import http
 from odoo.http import request
+from odoo.fields import Datetime as DT
 from .utils import _json, _patient_dict
 
 VALID_TRANSITIONS = {
@@ -30,6 +31,7 @@ def _visit_dict(v, full=False):
         'chief_complaint': v.chief_complaint or '',
         'triage_notes':    v.triage_notes or '',
         'admission_date':  str(v.admission_date) if v.admission_date else None,
+        'discharge_date':  str(v.discharge_date) if v.discharge_date else None,
         'patient_id':      v.patient_id.id if v.patient_id else None,
         'patient_name':    v.patient_id.name if v.patient_id else '',
         'patient_mrn':     v.patient_id.mrn if v.patient_id else '',
@@ -50,6 +52,37 @@ def _visit_dict(v, full=False):
         note = v.clinical_note_ids[:1]
         d['clinical_note']     = _note_dict(note[0]) if note else None
     return d
+
+
+class VisitListController(http.Controller):
+
+    @http.route('/saycare/api/visits', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, date='', date_from='', date_to='', state='', specialty_id='',
+                doctor_id='', patient_id='', visit_type='', **kw):
+        domain = []
+        if date:
+            domain += [('admission_date', '>=', f'{date} 00:00:00'),
+                       ('admission_date', '<=', f'{date} 23:59:59')]
+        else:
+            if date_from:
+                domain.append(('admission_date', '>=', f'{date_from} 00:00:00'))
+            if date_to:
+                domain.append(('admission_date', '<=', f'{date_to} 23:59:59'))
+        if state:
+            states = [s.strip() for s in state.split(',') if s.strip()]
+            domain.append(('state', 'in', states) if len(states) > 1 else ('state', '=', states[0]))
+        if specialty_id:
+            domain.append(('specialty_id', '=', int(specialty_id)))
+        if doctor_id:
+            domain.append(('doctor_id', '=', int(doctor_id)))
+        if patient_id:
+            domain.append(('patient_id', '=', int(patient_id)))
+        if visit_type:
+            domain.append(('visit_type', '=', visit_type))
+        records = request.env['saycare.visit'].sudo().search(
+            domain, order='admission_date desc', limit=200
+        )
+        return _json([_visit_dict(v) for v in records])
 
 
 class VisitController(http.Controller):
@@ -100,5 +133,12 @@ class VisitController(http.Controller):
         vals = {'state': new_state}
         if body.get('nurse_id'):
             vals['nurse_id'] = body['nurse_id']
+        if body.get('triage_notes'):
+            vals['triage_notes'] = body['triage_notes']
+        if body.get('chief_complaint'):
+            vals['chief_complaint'] = body['chief_complaint']
+        if new_state == 'done':
+            vals['discharge_date'] = DT.now()
         v.write(vals)
-        return _json({'ok': True, 'state': v.state})
+        return _json({'ok': True, 'state': v.state,
+                      'discharge_date': str(v.discharge_date) if v.discharge_date else None})

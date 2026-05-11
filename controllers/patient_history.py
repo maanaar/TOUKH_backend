@@ -34,6 +34,15 @@ class PatientHistoryController(http.Controller):
         return _json({'id': rec.id, 'allergen': rec.allergen,
                       'reaction': rec.reaction or '', 'severity': rec.severity}, 201)
 
+    @http.route('/saycare/api/patient/<int:patient_id>/allergies/<int:record_id>',
+                type='http', auth='user', methods=['DELETE'], csrf=False)
+    def delete_allergy(self, patient_id, record_id, **kw):
+        rec = request.env['saycare.patient.allergy'].sudo().browse(record_id)
+        if not rec.exists() or rec.patient_id.id != patient_id:
+            return _json({'error': 'not found'}, 404)
+        rec.write({'active': False})
+        return _json({'ok': True})
+
     # ── Conditions ────────────────────────────────────────────────────────────
 
     @http.route('/saycare/api/patient/<int:patient_id>/conditions', type='http', auth='user', methods=['GET'], csrf=False)
@@ -61,6 +70,15 @@ class PatientHistoryController(http.Controller):
             'notes':      body.get('notes', ''),
         })
         return _json({'id': rec.id, 'name': rec.name}, 201)
+
+    @http.route('/saycare/api/patient/<int:patient_id>/conditions/<int:record_id>',
+                type='http', auth='user', methods=['DELETE'], csrf=False)
+    def delete_condition(self, patient_id, record_id, **kw):
+        rec = request.env['saycare.patient.condition'].sudo().browse(record_id)
+        if not rec.exists() or rec.patient_id.id != patient_id:
+            return _json({'error': 'not found'}, 404)
+        rec.write({'active': False})
+        return _json({'ok': True})
 
     # ── Surgeries ─────────────────────────────────────────────────────────────
 
@@ -90,6 +108,15 @@ class PatientHistoryController(http.Controller):
         })
         return _json({'id': rec.id, 'procedure_name': rec.procedure_name}, 201)
 
+    @http.route('/saycare/api/patient/<int:patient_id>/surgeries/<int:record_id>',
+                type='http', auth='user', methods=['DELETE'], csrf=False)
+    def delete_surgery(self, patient_id, record_id, **kw):
+        rec = request.env['saycare.patient.surgery'].sudo().browse(record_id)
+        if not rec.exists() or rec.patient_id.id != patient_id:
+            return _json({'error': 'not found'}, 404)
+        rec.unlink()
+        return _json({'ok': True})
+
     # ── Current Medications ───────────────────────────────────────────────────
 
     @http.route('/saycare/api/patient/<int:patient_id>/medications', type='http', auth='user', methods=['GET'], csrf=False)
@@ -117,3 +144,12 @@ class PatientHistoryController(http.Controller):
             'start_date': body.get('start_date'),
         })
         return _json({'id': rec.id, 'drug_name': rec.drug_name}, 201)
+
+    @http.route('/saycare/api/patient/<int:patient_id>/medications/<int:record_id>',
+                type='http', auth='user', methods=['DELETE'], csrf=False)
+    def delete_medication(self, patient_id, record_id, **kw):
+        rec = request.env['saycare.patient.medication'].sudo().browse(record_id)
+        if not rec.exists() or rec.patient_id.id != patient_id:
+            return _json({'error': 'not found'}, 404)
+        rec.write({'active': False})
+        return _json({'ok': True})

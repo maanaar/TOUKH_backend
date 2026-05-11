@@ -1237,6 +1237,68 @@ class QuantController(http.Controller):
             })
         return http_response(data)
 
+    @http.route('/api/v1/stock/quants/adjust', type='http', auth='user', methods=['POST'], csrf=False)
+    def adjust_quantity(self, **kw):
+        """
+        Inventory adjustment — sets the on-hand quantity of a product at a location.
+        Body: { product_id, location_id, quantity, lot_id? }
+        Equivalent to Odoo's "Update Quantity" button on stock.quant.
+        """
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except Exception:
+            return http_response({'error': 'invalid JSON'}, 400)
+
+        product_id  = body.get('product_id')
+        location_id = body.get('location_id')
+        quantity    = body.get('quantity')
+        lot_id      = body.get('lot_id')
+
+        if not product_id or not location_id or quantity is None:
+            return http_response({'error': 'product_id, location_id and quantity are required'}, 400)
+
+        try:
+            quantity = float(quantity)
+        except (TypeError, ValueError):
+            return http_response({'error': 'quantity must be a number'}, 400)
+
+        try:
+            env = request.env['stock.quant'].sudo()
+            domain = [
+                ('product_id', '=', product_id),
+                ('location_id', '=', location_id),
+            ]
+            if lot_id:
+                domain.append(('lot_id', '=', lot_id))
+            quants = env.search(domain)
+
+            if quants:
+                quant = quants[0]
+            else:
+                quant = env.create({
+                    'product_id':  product_id,
+                    'location_id': location_id,
+                    'lot_id':      lot_id or False,
+                    'quantity':    0,
+                })
+
+            quant.write({'inventory_quantity': quantity})
+            quant.with_context(inventory_mode=True).action_apply_inventory()
+
+            return http_response({
+                'id':                  quant.id,
+                'product_id':          quant.product_id.id,
+                'product_name':        quant.product_id.name,
+                'location_id':         quant.location_id.id,
+                'location_name':       quant.location_id.complete_name,
+                'lot_id':              quant.lot_id.id if quant.lot_id else None,
+                'lot_name':            quant.lot_id.name if quant.lot_id else None,
+                'quantity':            quant.quantity,
+                'available_quantity':  quant.available_quantity,
+            })
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  stock.warehouse

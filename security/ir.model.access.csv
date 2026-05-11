@@ -1,6 +1,8 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_saycare_specialty_user,saycare.specialty user,model_saycare_specialty,,1,0,0,0
+access_saycare_specialty_user,saycare.specialty user,model_saycare_specialty,,1,1,1,0
 access_saycare_specialty_admin,saycare.specialty admin,model_saycare_specialty,base.group_system,1,1,1,1
+access_saycare_service_user,saycare.service user,model_saycare_service,,1,1,1,0
+access_saycare_service_admin,saycare.service admin,model_saycare_service,base.group_system,1,1,1,1
 access_saycare_visit_user,saycare.visit user,model_saycare_visit,,1,1,1,0
 access_saycare_visit_admin,saycare.visit admin,model_saycare_visit,base.group_system,1,1,1,1
 access_saycare_medication_order_user,saycare.medication.order user,model_saycare_medication_order,,1,1,1,0

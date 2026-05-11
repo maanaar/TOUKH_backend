@@ -2,6 +2,7 @@
 from . import (
     partner_ext,
     saycare_specialty,
+    saycare_service,
     saycare_visit,
     saycare_medication_order,
     saycare_vital_signs,

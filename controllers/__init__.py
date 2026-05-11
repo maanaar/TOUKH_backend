@@ -13,5 +13,6 @@ from . import (
     rad_orders,
     patient_history,
     appointments,
+    services,
     dashboard,
 )

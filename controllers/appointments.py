@@ -4,6 +4,13 @@ from odoo import http
 from odoo.http import request
 from .utils import _json
 
+APPT_VALID_TRANSITIONS = {
+    'scheduled':  ['confirmed', 'cancelled'],
+    'confirmed':  ['arrived',   'cancelled'],
+    'arrived':    ['cancelled'],
+    'cancelled':  [],
+}
+
 
 def _appt_dict(a):
     return {
@@ -30,7 +37,7 @@ def _appt_dict(a):
 class AppointmentController(http.Controller):
 
     @http.route('/saycare/api/appointments', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, date='', doctor_id='', specialty_id='', **kw):
+    def get_all(self, date='', doctor_id='', specialty_id='', state='', **kw):
         domain = []
         if date:
             domain.append(('date', '=', date))
@@ -38,10 +45,19 @@ class AppointmentController(http.Controller):
             domain.append(('doctor_id', '=', int(doctor_id)))
         if specialty_id:
             domain.append(('specialty_id', '=', int(specialty_id)))
+        if state:
+            domain.append(('state', '=', state))
         records = request.env['saycare.appointment'].sudo().search(
             domain, order='date asc, start_time asc'
         )
         return _json([_appt_dict(a) for a in records])
+
+    @http.route('/saycare/api/appointments/<int:appt_id>', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_one(self, appt_id, **kw):
+        a = request.env['saycare.appointment'].sudo().browse(appt_id)
+        if not a.exists():
+            return _json({'error': 'appointment not found'}, 404)
+        return _json(_appt_dict(a))
 
     @http.route('/saycare/api/appointments', type='http', auth='user', methods=['POST'], csrf=False)
     def create(self, **kw):
@@ -63,3 +79,33 @@ class AppointmentController(http.Controller):
         }
         rec = request.env['saycare.appointment'].sudo().create(vals)
         return _json(_appt_dict(rec), 201)
+
+    @http.route('/saycare/api/appointments/<int:appt_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update(self, appt_id, **kw):
+        a = request.env['saycare.appointment'].sudo().browse(appt_id)
+        if not a.exists():
+            return _json({'error': 'appointment not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except json.JSONDecodeError:
+            return _json({'error': 'invalid JSON'}, 400)
+        allowed = ['doctor_id', 'specialty_id', 'date', 'start_time',
+                   'end_time', 'visit_type', 'notes']
+        vals = {k: body[k] for k in allowed if k in body}
+        a.write(vals)
+        return _json(_appt_dict(a))
+
+    @http.route('/saycare/api/appointments/<int:appt_id>/state', type='http', auth='user', methods=['POST'], csrf=False)
+    def change_state(self, appt_id, **kw):
+        a = request.env['saycare.appointment'].sudo().browse(appt_id)
+        if not a.exists():
+            return _json({'error': 'appointment not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except json.JSONDecodeError:
+            return _json({'error': 'invalid JSON'}, 400)
+        new_state = body.get('state')
+        if new_state not in APPT_VALID_TRANSITIONS.get(a.state, []):
+            return _json({'error': f'cannot transition from {a.state} to {new_state}'}, 400)
+        a.write({'state': new_state})
+        return _json({'ok': True, 'state': a.state})

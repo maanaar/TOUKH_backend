@@ -100,6 +100,24 @@ class MedicationOrderController(http.Controller):
             'dispensed_by': body.get('dispensed_by'),
             'dispensed_at': DT.now(),
         })
+
+        if med.product_id and med.quantity:
+            warehouse = request.env['stock.warehouse'].sudo().search(
+                [('company_id', '=', request.env.company.id)], limit=1
+            )
+            move = request.env['stock.move'].sudo().create({
+                'name':             med.drug_name or med.product_id.name,
+                'product_id':       med.product_id.id,
+                'product_uom_qty':  med.quantity,
+                'product_uom':      (med.uom_id or med.product_id.uom_id).id,
+                'location_id':      warehouse.lot_stock_id.id,
+                'location_dest_id': request.env.ref('stock.location_production').id,
+            })
+            move._action_confirm()
+            move._action_assign()
+            move.write({'quantity': med.quantity})
+            move._action_done()
+
         return _json(_med_dict(med))
 
 

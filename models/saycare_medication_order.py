@@ -12,7 +12,7 @@ class SaycareMedicationOrder(models.Model):
     patient_id = fields.Many2one('res.partner',      string='Patient', ondelete='restrict', index=True)
 
     # ── Drug ──────────────────────────────────────────────────────────────────
-    product_id = fields.Many2one('product.template', string='Drug (Product)')
+    product_id = fields.Many2one('product.product', string='Drug (Product)')
     drug_name  = fields.Char(string='Drug Name')
 
     # ── Dosing ────────────────────────────────────────────────────────────────

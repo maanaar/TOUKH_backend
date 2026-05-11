@@ -26,9 +26,10 @@ class SaycareVisit(models.Model):
     ], string='Status', default='waiting', index=True)
 
     visit_type = fields.Selection([
-        ('outpatient', 'عيادات خارجية'),
-        ('inpatient',  'داخلي'),
-        ('emergency',  'طوارئ'),
+        ('outpatient',   'عيادات خارجية'),
+        ('inpatient',    'داخلي'),
+        ('emergency',    'طوارئ'),
+        ('consultation', 'مشورة'),
     ], string='Visit Type', default='outpatient')
 
     specialty_id = fields.Many2one('saycare.specialty', string='Specialty')

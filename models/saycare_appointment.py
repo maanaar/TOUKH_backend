@@ -19,9 +19,10 @@ class SaycareAppointment(models.Model):
     start_time   = fields.Float(string='Start Time')
     end_time     = fields.Float(string='End Time')
     visit_type   = fields.Selection([
-        ('outpatient', 'عيادات خارجية'),
-        ('inpatient',  'داخلي'),
-        ('emergency',  'طوارئ'),
+        ('outpatient',   'عيادات خارجية'),
+        ('inpatient',    'داخلي'),
+        ('emergency',    'طوارئ'),
+        ('consultation', 'مشورة'),
     ], string='Visit Type', default='outpatient')
     state        = fields.Selection([
         ('scheduled',  'مجدول'),
