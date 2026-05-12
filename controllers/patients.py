@@ -45,7 +45,7 @@ class PatientController(http.Controller):
             body.get('first_name', ''), body.get('second_name', ''),
             body.get('third_name', ''), body.get('last_name', ''),
         ]
-        full_name = ' '.join(p for p in name_parts if p).strip()
+        full_name = ' '.join(p for p in name_parts if p).strip() or body.get('name', '').strip()
         if not full_name:
             return _json({'error': 'patient name is required'}, 400)
 

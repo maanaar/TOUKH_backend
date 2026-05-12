@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields
+import re
+from odoo import models, fields, api
 
 
 class ResPartnerPatient(models.Model):
@@ -59,3 +60,21 @@ class ResPartnerPatient(models.Model):
 
     insurance_company = fields.Char(string='Insurance Company')
     contract_entity   = fields.Char(string='Contract Entity')
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('is_patient') and not vals.get('mrn'):
+                vals['mrn'] = self._next_mrn()
+        return super().create(vals_list)
+
+    def _next_mrn(self):
+        last = self.search(
+            [('is_patient', '=', True), ('mrn', '!=', False)],
+            order='id desc', limit=1,
+        )
+        if last and last.mrn:
+            m = re.search(r'(\d+)$', last.mrn)
+            if m:
+                return f'MRN{int(m.group(1)) + 1:06d}'
+        return self.env['ir.sequence'].next_by_code('saycare.patient.mrn') or 'MRN000001'
