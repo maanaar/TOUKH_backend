@@ -256,36 +256,25 @@ class LocationController(http.Controller):
 
     @http.route('/api/v1/stock/locations', type='http', auth='user', methods=['GET'], csrf=False)
     def get_all(self, **kw):
-        records = request.env['stock.location'].sudo().search([])
+        records = request.env['stock.location'].sudo().search([('active', '=', True)])
         data = []
         for rec in records:
-            data.append({
-                'id':                   rec.id,
-                'name':                 rec.name,
-                'complete_name':        rec.complete_name,
-                'usage':                rec.usage,      # supplier/view/internal/customer/inventory/production/transit
-                'location_id':          rec.location_id.id if rec.location_id else None,
-                'parent_name':          rec.location_id.complete_name if rec.location_id else None,
-                'child_ids':            rec.child_ids.ids,
-                'active':               rec.active,
-                'scrap_location':       rec.scrap_location,
-                'return_location':      rec.return_location,
-                'replenish_location':   rec.replenish_location,
-                'comment':              rec.comment or '',
-                'posx':                 rec.posx,
-                'posy':                 rec.posy,
-                'posz':                 rec.posz,
-                'barcode':              rec.barcode or '',
-                'removal_strategy_id':  rec.removal_strategy_id.id if rec.removal_strategy_id else None,
-                'removal_strategy_name': rec.removal_strategy_id.name if rec.removal_strategy_id else None,
-                'cyclic_inventory_frequency': rec.cyclic_inventory_frequency,
-                'last_inventory_date':  str(rec.last_inventory_date) if rec.last_inventory_date else None,
-                'next_inventory_date':  str(rec.next_inventory_date) if rec.next_inventory_date else None,
-                'company_id':           rec.company_id.id if rec.company_id else None,
-                'company_name':         rec.company_id.name if rec.company_id else None,
-                'warehouse_id':         rec.warehouse_id.id if rec.warehouse_id else None,
-                'warehouse_name':       rec.warehouse_id.name if rec.warehouse_id else None,
-            })
+            try:
+                data.append({
+                    'id':           rec.id,
+                    'name':         rec.name,
+                    'complete_name': rec.complete_name,
+                    'usage':        rec.usage,
+                    'location_id':  rec.location_id.id if rec.location_id else None,
+                    'parent_name':  rec.location_id.complete_name if rec.location_id else None,
+                    'active':       rec.active,
+                    'company_id':   rec.company_id.id if rec.company_id else None,
+                    'company_name': rec.company_id.name if rec.company_id else None,
+                    'warehouse_id': rec.warehouse_id.id if rec.warehouse_id else None,
+                    'warehouse_name': rec.warehouse_id.name if rec.warehouse_id else None,
+                })
+            except Exception:
+                continue
         return http_response(data)
 
     @http.route('/api/v1/stock/locations/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
@@ -379,7 +368,7 @@ class PickingController(http.Controller):
                 'company_name':             rec.company_id.name if rec.company_id else None,
                 # ── bool flags ────────────────────────────────────────────
                 'is_locked':                rec.is_locked,
-                'immediate_transfer':       rec.immediate_transfer,
+                'immediate_transfer':       getattr(rec, 'immediate_transfer', False),
             })
         return http_response(data)
 
@@ -1385,10 +1374,8 @@ class PickingCreateController(http.Controller):
 
                 qty = float(move.get('quantity', move.get('product_uom_qty', 1)))
                 move_vals_list.append((0, 0, {
-                    'name':             product.display_name,
                     'product_id':       product.id,
                     'product_uom_qty':  qty,
-                    'quantity':         qty,
                     'product_uom':      product.uom_id.id,
                     'location_id':      location_src.id,
                     'location_dest_id': location_dst.id,
@@ -1433,7 +1420,16 @@ class PickingValidateController(http.Controller):
                     if move.quantity == 0:
                         move.quantity = move.product_uom_qty
 
-            rec.button_validate()
+            # skip_backorder / skip_immediate prevent wizard popups in Odoo 17+
+            res = rec.with_context(
+                skip_backorder=True,
+                skip_sms=True,
+                skip_immediate=True,
+                picking_ids_not_to_backorder=rec.ids,
+            ).button_validate()
+            # If Odoo still returned a wizard action, force-validate directly
+            if isinstance(res, dict) and res.get('res_model'):
+                rec._action_done()
 
             return http_response({
                 'id':        rec.id,
@@ -1611,6 +1607,44 @@ class DepartmentController(http.Controller):
 
 class VendorController(http.Controller):
 
+    _WRITABLE = [
+        'name', 'email', 'phone', 'mobile', 'website',
+        'street', 'street2', 'city', 'zip', 'vat', 'comment', 'ref',
+    ]
+
+    def _vendor_dict(self, rec):
+        po_count = 0
+        try:
+            po_count = rec.purchase_order_count
+        except Exception:
+            pass
+        return {
+            'id':            rec.id,
+            'name':          rec.name,
+            'ref':           rec.ref or '',
+            'email':         rec.email or '',
+            'phone':         rec.phone or '',
+            'mobile':        rec.mobile or '',
+            'website':       rec.website or '',
+            'street':        rec.street or '',
+            'street2':       rec.street2 or '',
+            'city':          rec.city or '',
+            'zip':           rec.zip or '',
+            'state_name':    rec.state_id.name if rec.state_id else '',
+            'country_id':    rec.country_id.id if rec.country_id else None,
+            'country_name':  rec.country_id.name if rec.country_id else None,
+            'vat':           rec.vat or '',
+            'lang':          rec.lang or '',
+            'comment':       rec.comment or '',
+            'supplier_rank': rec.supplier_rank,
+            'is_company':    rec.is_company,
+            'company_type':  rec.company_type,
+            'parent_id':     rec.parent_id.id if rec.parent_id else None,
+            'parent_name':   rec.parent_id.name if rec.parent_id else None,
+            'image_url':     '/web/image/res.partner/%d/image_1920' % rec.id if rec.image_1920 else '',
+            'purchase_order_count': po_count,
+        }
+
     @http.route('/api/v1/partners/vendors', type='http', auth='user', methods=['GET'], csrf=False)
     def get_vendors(self, **kw):
         records = request.env['res.partner'].sudo().search([
@@ -1619,25 +1653,53 @@ class VendorController(http.Controller):
         ])
         data = []
         for rec in records:
-            data.append({
-                'id':            rec.id,
-                'name':          rec.name,
-                'ref':           rec.ref or '',
-                'email':         rec.email or '',
-                'phone':         rec.phone or '',
-                'mobile':        rec.mobile or '',
-                'street':        rec.street or '',
-                'city':          rec.city or '',
-                'country_id':    rec.country_id.id if rec.country_id else None,
-                'country_name':  rec.country_id.name if rec.country_id else None,
-                'vat':           rec.vat or '',
-                'supplier_rank': rec.supplier_rank,
-                'company_type':  rec.company_type,
-                'parent_id':     rec.parent_id.id if rec.parent_id else None,
-                'parent_name':   rec.parent_id.name if rec.parent_id else None,
-                'image_url':     '/web/image/res.partner/%d/image_1920' % rec.id if rec.image_1920 else '',
-            })
+            try:
+                data.append(self._vendor_dict(rec))
+            except Exception:
+                continue
         return http_response(data)
+
+    @http.route('/api/v1/partners/vendors/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_vendor(self, rec_id, **kw):
+        rec = request.env['res.partner'].sudo().browse(rec_id)
+        if not rec.exists():
+            return http_response({'error': 'not found'}, 404)
+        try:
+            return http_response(self._vendor_dict(rec))
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/partners/vendors/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update_vendor(self, rec_id, **kw):
+        rec = request.env['res.partner'].sudo().browse(rec_id)
+        if not rec.exists():
+            return http_response({'error': 'not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+            vals = {f: body[f] for f in self._WRITABLE if f in body}
+            if 'is_company' in body:
+                vals['is_company'] = bool(body['is_company'])
+            if vals:
+                rec.write(vals)
+            return http_response(self._vendor_dict(rec))
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/partners/vendors', type='http', auth='user', methods=['POST'], csrf=False)
+    def create_vendor(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+            if not body.get('name'):
+                return http_response({'error': 'name is required'}, 400)
+            vals = {
+                'supplier_rank': 1,
+                'is_company': bool(body.get('is_company', True)),
+            }
+            vals.update({f: body[f] for f in self._WRITABLE if body.get(f)})
+            rec = request.env['res.partner'].sudo().create(vals)
+            return http_response(self._vendor_dict(rec))
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1827,13 +1889,19 @@ class DashboardController(http.Controller):
             ('date_done', '>=', today_start),
         ])
 
-        pending_requisitions = env['employee.purchase.requisition'].sudo().search_count([
-            ('state', 'in', ['new', 'waiting_department_approval', 'waiting_head_approval']),
-        ])
+        try:
+            pending_requisitions = env['employee.purchase.requisition'].sudo().search_count([
+                ('state', 'in', ['new', 'waiting_department_approval', 'waiting_head_approval']),
+            ])
+        except Exception:
+            pending_requisitions = 0
 
-        pending_pos = env['purchase.order'].sudo().search_count([
-            ('state', 'in', ['draft', 'sent']),
-        ])
+        try:
+            pending_pos = env['purchase.order'].sudo().search_count([
+                ('state', 'in', ['draft', 'sent']),
+            ])
+        except Exception:
+            pending_pos = 0
 
         return http_response({
             'total_products':       total_products,
@@ -1843,6 +1911,80 @@ class DashboardController(http.Controller):
             'todays_movements':     todays_movements,
             'pending_requisitions': pending_requisitions,
             'pending_pos':          pending_pos,
+        })
+
+    @http.route('/api/v1/inventory/alerts', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_alerts(self, **kw):
+        env = request.env
+        today  = date.today()
+        in_30  = today + timedelta(days=30)
+
+        # ── low-stock: quants with qty <= 0 in internal locations ────────────
+        quants = env['stock.quant'].sudo().search([('location_id.usage', '=', 'internal')])
+        low_stock = []
+        seen = set()
+        for q in quants:
+            try:
+                if q.quantity <= 0 and q.product_id.id not in seen:
+                    seen.add(q.product_id.id)
+                    low_stock.append({
+                        'id':    q.product_id.id,
+                        'name':  q.product_id.name,
+                        'qty':   q.quantity,
+                        'unit':  q.product_uom_id.name if q.product_uom_id else 'وحدة',
+                        'categ': q.product_id.categ_id.name if q.product_id.categ_id else '',
+                    })
+            except Exception:
+                continue
+
+        # ── expiring soon: lots expiring in next 30 days ─────────────────────
+        lots = env['stock.lot'].sudo().search([
+            ('expiration_date', '!=', False),
+            ('expiration_date', '>=', str(today)),
+            ('expiration_date', '<=', str(in_30)),
+        ], limit=20, order='expiration_date asc')
+        expiring = []
+        for lot in lots:
+            try:
+                qty = sum(lot.quant_ids.filtered(
+                    lambda q: q.location_id.usage == 'internal'
+                ).mapped('quantity'))
+                expiring.append({
+                    'id':           lot.id,
+                    'product_name': lot.product_id.name if lot.product_id else '',
+                    'lot':          lot.name,
+                    'expiry':       str(lot.expiration_date)[:10] if lot.expiration_date else '',
+                    'qty':          qty,
+                })
+            except Exception:
+                continue
+
+        # ── recent moves: today's done pickings ──────────────────────────────
+        today_start = odoo_fields.Datetime.to_string(
+            odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+        pickings = env['stock.picking'].sudo().search([
+            ('state', '=', 'done'),
+            ('date_done', '>=', today_start),
+        ], limit=20, order='date_done desc')
+        recent = []
+        for p in pickings:
+            try:
+                recent.append({
+                    'id':      p.id,
+                    'name':    p.name,
+                    'partner': p.partner_id.name if p.partner_id else '',
+                    'type':    p.picking_type_id.name if p.picking_type_id else '',
+                    'state':   p.state,
+                    'date':    str(p.date_done)[:16] if p.date_done else '',
+                })
+            except Exception:
+                continue
+
+        return http_response({
+            'low_stock':    low_stock[:20],
+            'expiring':     expiring,
+            'recent_moves': recent,
         })
 
 
