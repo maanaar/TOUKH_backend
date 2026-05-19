@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from . import (
     main,
+    hr,
     utils,
     patients,
     specialties,

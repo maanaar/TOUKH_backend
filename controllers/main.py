@@ -1543,65 +1543,6 @@ class LotController(http.Controller):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  hr.employee
-# ─────────────────────────────────────────────────────────────────────────────
-
-class EmployeeController(http.Controller):
-
-    @http.route('/api/v1/hr/employees', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, **kw):
-        records = request.env['hr.employee'].sudo().search([('active', '=', True)])
-        data = []
-        for rec in records:
-            data.append({
-                'id':              rec.id,
-                'name':            rec.name,
-                'job_title':       rec.job_title or '',
-                'job_id':          rec.job_id.id if rec.job_id else None,
-                'job_name':        rec.job_id.name if rec.job_id else None,
-                'department_id':   rec.department_id.id if rec.department_id else None,
-                'department_name': rec.department_id.name if rec.department_id else None,
-                'parent_id':       rec.parent_id.id if rec.parent_id else None,
-                'parent_name':     rec.parent_id.name if rec.parent_id else None,
-                'work_email':      rec.work_email or '',
-                'work_phone':      rec.work_phone or '',
-                'user_id':         rec.user_id.id if rec.user_id else None,
-                'user_name':       rec.user_id.name if rec.user_id else None,
-                'company_id':      rec.company_id.id if rec.company_id else None,
-                'company_name':    rec.company_id.name if rec.company_id else None,
-                'image_url':       '/web/image/hr.employee/%d/image_1920' % rec.id if rec.image_1920 else '',
-            })
-        return http_response(data)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  hr.department
-# ─────────────────────────────────────────────────────────────────────────────
-
-class DepartmentController(http.Controller):
-
-    @http.route('/api/v1/departments', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, **kw):
-        records = request.env['hr.department'].sudo().search([('active', '=', True)])
-        data = []
-        for rec in records:
-            data.append({
-                'id':            rec.id,
-                'name':          rec.name,
-                'complete_name': rec.complete_name,
-                'parent_id':     rec.parent_id.id if rec.parent_id else None,
-                'parent_name':   rec.parent_id.name if rec.parent_id else None,
-                'manager_id':    rec.manager_id.id if rec.manager_id else None,
-                'manager_name':  rec.manager_id.name if rec.manager_id else None,
-                'member_ids':    rec.member_ids.ids,
-                'child_ids':     rec.child_ids.ids,
-                'company_id':    rec.company_id.id if rec.company_id else None,
-                'company_name':  rec.company_id.name if rec.company_id else None,
-            })
-        return http_response(data)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 #  res.partner  — vendors only
 # ─────────────────────────────────────────────────────────────────────────────
 
