@@ -31,6 +31,8 @@
     'data': [
         'security/ir.model.access.csv',
         'data/sequences.xml',
+        'views/product_template_inherit.xml',
+        'views/partner_inherit.xml',
     ],
     'installable': True,
     'application': False,

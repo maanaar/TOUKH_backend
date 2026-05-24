@@ -60,6 +60,11 @@ class ResPartnerPatient(models.Model):
 
     insurance_company = fields.Char(string='Insurance Company')
     contract_entity   = fields.Char(string='Contract Entity')
+    is_vendor = fields.Boolean(
+        string='مصنّع / مورد رئيسي',
+        default=False,
+        help='تحديد هذا الحقل يجعل الشريك يظهر في قائمة الشركة المصنّعة',
+    )
 
     @api.model_create_multi
     def create(self, vals_list):

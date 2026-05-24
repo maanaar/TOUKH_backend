@@ -35,8 +35,6 @@ class CategoryController(http.Controller):
                 # accounts
                 'property_account_income_categ_id':    rec.property_account_income_categ_id.id if rec.property_account_income_categ_id else None,
                 'property_account_expense_categ_id':   rec.property_account_expense_categ_id.id if rec.property_account_expense_categ_id else None,
-                'property_stock_account_input_categ_id':  rec.property_stock_account_input_categ_id.id if rec.property_stock_account_input_categ_id else None,
-                'property_stock_account_output_categ_id': rec.property_stock_account_output_categ_id.id if rec.property_stock_account_output_categ_id else None,
                 'property_stock_valuation_account_id':    rec.property_stock_valuation_account_id.id if rec.property_stock_valuation_account_id else None,
                 'property_stock_journal':                 rec.property_stock_journal.id if rec.property_stock_journal else None,
             })
@@ -59,8 +57,6 @@ class CategoryController(http.Controller):
             'property_valuation':        rec.property_valuation,
             'property_account_income_categ_id':    rec.property_account_income_categ_id.id if rec.property_account_income_categ_id else None,
             'property_account_expense_categ_id':   rec.property_account_expense_categ_id.id if rec.property_account_expense_categ_id else None,
-            'property_stock_account_input_categ_id':  rec.property_stock_account_input_categ_id.id if rec.property_stock_account_input_categ_id else None,
-            'property_stock_account_output_categ_id': rec.property_stock_account_output_categ_id.id if rec.property_stock_account_output_categ_id else None,
             'property_stock_valuation_account_id':    rec.property_stock_valuation_account_id.id if rec.property_stock_valuation_account_id else None,
             'property_stock_journal':                 rec.property_stock_journal.id if rec.property_stock_journal else None,
         }
@@ -81,13 +77,9 @@ class UomController(http.Controller):
             data.append({
                 'id':            rec.id,
                 'name':          rec.name,
-                'category_id':   rec.category_id.id if rec.category_id else None,
-                'category_name': rec.category_id.name if rec.category_id else None,
                 'factor':        rec.factor,
-                'factor_inv':    rec.factor_inv,
                 'rounding':      rec.rounding,
                 'active':        rec.active,
-                'uom_type':      rec.uom_type,   # bigger / reference / smaller
             })
         return http_response(data)
 
@@ -99,13 +91,9 @@ class UomController(http.Controller):
         data = {
             'id':            rec.id,
             'name':          rec.name,
-            'category_id':   rec.category_id.id if rec.category_id else None,
-            'category_name': rec.category_id.name if rec.category_id else None,
             'factor':        rec.factor,
-            'factor_inv':    rec.factor_inv,
             'rounding':      rec.rounding,
             'active':        rec.active,
-            'uom_type':      rec.uom_type,
         }
         return http_response(data)
 
@@ -135,15 +123,20 @@ class ProductController(http.Controller):
                 'description_pickingin':    rec.description_pickingin or '',
                 # ── classification ────────────────────────────────────────
                 'type':                     rec.type,           # consu / service / product
+                'is_storable': rec.is_storable,
                 'categ_id':                 rec.categ_id.id if rec.categ_id else None,
                 'categ_name':               rec.categ_id.complete_name if rec.categ_id else None,
                 'active':                   rec.active,
                 'sale_ok':                  rec.sale_ok,
                 'purchase_ok':              rec.purchase_ok,
-                'can_be_expensed':          rec.can_be_expensed,
+                'can_be_expensed':          getattr(rec, 'can_be_expensed', False),
                 # ── uom ───────────────────────────────────────────────────
                 'uom_id':                   rec.uom_id.id if rec.uom_id else None,
                 'uom_name':                 rec.uom_id.name if rec.uom_id else None,
+                'uom_largee':       rec.uom_largee.id   if rec.uom_largee   else None,
+                'uom_large_name': rec.uom_largee.name if rec.uom_largee else '',
+                'uom_mediumm': rec.uom_mediumm.id if rec.uom_mediumm else None,
+                'uom_medium_name': rec.uom_mediumm.name if rec.uom_mediumm else '',
                 # 'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
                 # 'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
                 # ── pricing ───────────────────────────────────────────────
@@ -204,14 +197,19 @@ class ProductController(http.Controller):
             'description_pickingout':   rec.description_pickingout or '',
             'description_pickingin':    rec.description_pickingin or '',
             'type':                     rec.type,
+            'is_storable' : rec.is_storable,
             'categ_id':                 rec.categ_id.id if rec.categ_id else None,
             'categ_name':               rec.categ_id.complete_name if rec.categ_id else None,
             'active':                   rec.active,
             'sale_ok':                  rec.sale_ok,
             'purchase_ok':              rec.purchase_ok,
-            'can_be_expensed':          rec.can_be_expensed,
-            'uom_id':                   rec.uom_id.id if rec.uom_id else None,
-            'uom_name':                 rec.uom_id.name if rec.uom_id else None,
+            'can_be_expensed':          getattr(rec, 'can_be_expensed', False),
+            'uom_id': rec.uom_id.id if rec.uom_id else None,
+            'uom_name': rec.uom_id.name if rec.uom_id else None,
+            'uom_largee': rec.uom_largee.id if rec.uom_largee else None,
+            'uom_large_name': rec.uom_largee.name if rec.uom_largee else '',
+            'uom_mediumm': rec.uom_mediumm.id if rec.uom_mediumm else None,
+            'uom_medium_name': rec.uom_mediumm.name if rec.uom_mediumm else '',
             # 'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
             # 'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
             'list_price':               rec.list_price,
@@ -896,8 +894,9 @@ class ProductCreateController(http.Controller):
             }
 
             # ── optional simple fields ────────────────────────────────────
-            for field in ['default_code', 'barcode', 'type', 'list_price',
-                          'standard_price', 'sale_ok', 'purchase_ok',
+            # ── optional simple fields ────────────────────────────────────
+            for field in ['default_code', 'barcode', 'type',
+                          'sale_ok', 'purchase_ok',
                           'description', 'description_sale',
                           'description_purchase', 'tracking',
                           'description_picking', 'description_pickingout',
@@ -905,11 +904,38 @@ class ProductCreateController(http.Controller):
                 if field in body:
                     vals[field] = body[field]
 
+            # ── price fields (cast to float) ──────────────────────────────
+            # standard_price = سعر الشراء الموحد (Cost)
+            # list_price     = سعر الشراء الجبري (Sales Price)
+            for price_field in ('standard_price', 'list_price'):
+                if price_field in body and body[price_field] is not None and body[price_field] != '':
+                    try:
+                        vals[price_field] = float(body[price_field])
+                    except (TypeError, ValueError):
+                        return http_response(
+                            {'error': f'{price_field} must be a number'}, 400
+                        )
+            if 'type' in body:
+             if body['type'] == 'product':
+                vals['type'] = 'consu'
+                vals['is_storable'] = True
+             elif body['type'] == 'consu':
+                  vals['type'] = 'consu'
+                  vals['is_storable'] = False
+             elif body['type'] == 'service':
+                 vals['type'] = 'service'
+                 vals['is_storable'] = False
+                        # ── image (base64 string) ─────────────────────────────────────
+            if body.get('image_1920'):
+             vals['image_1920'] = body['image_1920']
+
             # ── many2one fields – validate existence ──────────────────────
             m2o_fields = {
                 'categ_id':   'product.category',
                 'uom_id':     'uom.uom',
                 'uom_po_id':  'uom.uom',
+                'uom_large': 'uom.uom',
+                'uom_medium': 'uom.uom',
             }
             for field, model in m2o_fields.items():
                 if body.get(field):
@@ -1109,13 +1135,42 @@ class ProductUpdateController(http.Controller):
                 return http_response({'error': 'not found'}, 404)
 
             vals = {}
-            for field in ['name', 'default_code', 'barcode', 'type', 'list_price',
-                          'standard_price', 'sale_ok', 'purchase_ok', 'active',
+
+            for field in ['name', 'default_code', 'barcode', 'type',
+                          'sale_ok', 'purchase_ok', 'active',
                           'description', 'description_sale', 'description_purchase',
                           'tracking', 'description_picking', 'description_pickingout',
-                          'description_pickingin']:
+                          'description_pickingin',
+                          'uom_large', 'uom_medium']:
                 if field in body:
                     vals[field] = body[field]
+
+            # ── price fields (cast to float) ──────────────────────────────
+            # standard_price = سعر الشراء الموحد (Cost)
+            # list_price     = سعر الشراء الجبري (Sales Price)
+            for price_field in ('standard_price', 'list_price'):
+                if price_field in body:
+                    if body[price_field] is None or body[price_field] == '':
+                        continue
+                    try:
+                        vals[price_field] = float(body[price_field])
+                    except (TypeError, ValueError):
+                        return http_response(
+                            {'error': f'{price_field} must be a number'}, 400
+                        )
+            if 'type' in body:
+                if body['type'] == 'product':
+                   vals['type'] = 'consu'
+                   vals['is_storable'] = True
+                elif body['type'] == 'consu':
+                    vals['type'] = 'consu'
+                    vals['is_storable'] = False
+                elif body['type'] == 'service':
+                     vals['type'] = 'service'
+                     vals['is_storable'] = False
+                        # ── image (base64 string, or null to clear) ───────────────────
+            if 'image_1920' in body:
+             vals['image_1920'] = body['image_1920'] or False
 
             m2o_fields = {
                 'categ_id':  'product.category',
@@ -1549,8 +1604,8 @@ class LotController(http.Controller):
 class VendorController(http.Controller):
 
     _WRITABLE = [
-        'name', 'email', 'phone', 'mobile', 'website',
-        'street', 'street2', 'city', 'zip', 'vat', 'comment', 'ref',
+        'name', 'email', 'phone', 'website',
+        'street', 'street2', 'city', 'zip', 'vat', 'comment', 'ref', 'is_vendor',
     ]
 
     def _vendor_dict(self, rec):
@@ -1565,7 +1620,7 @@ class VendorController(http.Controller):
             'ref':           rec.ref or '',
             'email':         rec.email or '',
             'phone':         rec.phone or '',
-            'mobile':        rec.mobile or '',
+            'mobile':        getattr(rec, 'mobile', None) or '',
             'website':       rec.website or '',
             'street':        rec.street or '',
             'street2':       rec.street2 or '',
@@ -1584,14 +1639,30 @@ class VendorController(http.Controller):
             'parent_name':   rec.parent_id.name if rec.parent_id else None,
             'image_url':     '/web/image/res.partner/%d/image_1920' % rec.id if rec.image_1920 else '',
             'purchase_order_count': po_count,
+            'is_vendor': bool(getattr(rec, 'is_vendor', False)),
         }
-
     @http.route('/api/v1/partners/vendors', type='http', auth='user', methods=['GET'], csrf=False)
     def get_vendors(self, **kw):
-        records = request.env['res.partner'].sudo().search([
-            ('supplier_rank', '>', 0),
-            ('active', '=', True),
-        ])
+        # Base filter: active partners only
+        domain = [('active', '=', True)]
+
+        # ── Optional: filter by custom is_vendor flag ────────────────────────
+        # If ?is_vendor=true is passed → return ONLY partners flagged as vendors
+        # Otherwise → return partners with supplier_rank > 0 (Odoo's native vendor flag)
+        only_vendors = str(kw.get('is_vendor', '')).lower() in ('1', 'true', 'yes')
+        if only_vendors:
+            domain.append(('is_vendor', '=', True))
+        else:
+            domain.append(('supplier_rank', '>', 0))
+
+        # ── Optional: name search ────────────────────────────────────────────
+        search = (kw.get('search') or '').strip()
+        if search:
+            domain.append(('name', 'ilike', search))
+
+        # ✅ Use the domain we just built (the previous version ignored it)
+        records = request.env['res.partner'].sudo().search(domain)
+
         data = []
         for rec in records:
             try:
@@ -1599,16 +1670,6 @@ class VendorController(http.Controller):
             except Exception:
                 continue
         return http_response(data)
-
-    @http.route('/api/v1/partners/vendors/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_vendor(self, rec_id, **kw):
-        rec = request.env['res.partner'].sudo().browse(rec_id)
-        if not rec.exists():
-            return http_response({'error': 'not found'}, 404)
-        try:
-            return http_response(self._vendor_dict(rec))
-        except Exception as e:
-            return http_response({'error': str(e)}, 500)
 
     @http.route('/api/v1/partners/vendors/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
     def update_vendor(self, rec_id, **kw):
@@ -1620,6 +1681,8 @@ class VendorController(http.Controller):
             vals = {f: body[f] for f in self._WRITABLE if f in body}
             if 'is_company' in body:
                 vals['is_company'] = bool(body['is_company'])
+            if 'is_vendor' in vals:
+                vals['is_vendor'] = bool(vals['is_vendor'])
             if vals:
                 rec.write(vals)
             return http_response(self._vendor_dict(rec))
@@ -1635,6 +1698,7 @@ class VendorController(http.Controller):
             vals = {
                 'supplier_rank': 1,
                 'is_company': bool(body.get('is_company', True)),
+                'is_vendor': bool(body.get('is_vendor', False)),
             }
             vals.update({f: body[f] for f in self._WRITABLE if body.get(f)})
             rec = request.env['res.partner'].sudo().create(vals)
@@ -1816,11 +1880,14 @@ class DashboardController(http.Controller):
 
         today = date.today()
         in_30 = today + timedelta(days=30)
-        expiring_count = env['stock.lot'].sudo().search_count([
-            ('expiration_date', '!=', False),
-            ('expiration_date', '>=', str(today)),
-            ('expiration_date', '<=', str(in_30)),
-        ])
+        try:
+            expiring_count = env['stock.lot'].sudo().search_count([
+                ('expiration_date', '!=', False),
+                ('expiration_date', '>=', str(today)),
+                ('expiration_date', '<=', str(in_30)),
+            ])
+        except Exception:
+            expiring_count = 0
 
         today_start = odoo_fields.Datetime.to_string(
             odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1879,11 +1946,14 @@ class DashboardController(http.Controller):
                 continue
 
         # ── expiring soon: lots expiring in next 30 days ─────────────────────
-        lots = env['stock.lot'].sudo().search([
-            ('expiration_date', '!=', False),
-            ('expiration_date', '>=', str(today)),
-            ('expiration_date', '<=', str(in_30)),
-        ], limit=20, order='expiration_date asc')
+        try:
+            lots = env['stock.lot'].sudo().search([
+                ('expiration_date', '!=', False),
+                ('expiration_date', '>=', str(today)),
+                ('expiration_date', '<=', str(in_30)),
+            ], limit=20, order='expiration_date asc')
+        except Exception:
+            lots = env['stock.lot'].sudo().browse([])
         expiring = []
         for lot in lots:
             try:

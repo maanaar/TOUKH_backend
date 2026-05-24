@@ -24,3 +24,18 @@ class SaycareService(models.Model):
     _sql_constraints = [
         ('code_uniq', 'unique(code)', 'Service code must be unique.'),
     ]
+class ProductTemplate(models.Model):
+    _inherit = 'product.template'
+
+    uom_large = fields.Char(string='الوحدة الكبرى')
+    uom_medium = fields.Char(string='الوحدة المتوسطة')
+    uom_largee = fields.Many2one(
+        'uom.uom',
+        string='الوحدة الكبرى',
+    )
+
+    uom_mediumm = fields.Many2one(
+        'uom.uom',
+        string='الوحدة المتوسطة',
+    )
+
