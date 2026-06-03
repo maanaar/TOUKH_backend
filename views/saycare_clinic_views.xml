@@ -219,20 +219,18 @@
         <separator/>
         <filter string="نقدي"         name="cash"         domain="[('financial_class','=','cash')]"/>
         <filter string="تأمين صحى"    name="insurance"    domain="[('financial_class','=','insurance')]"/>
-        <filter string="نفقة الدولة"  name="state"        domain="[('financial_class','=','state')]"/>
+        <filter string="نفقة الدولة"  name="state_class"  domain="[('financial_class','=','state')]"/>
         <filter string="تكافل وكرامة" name="takaful"      domain="[('financial_class','=','takaful')]"/>
         <filter string="تعاقدات"      name="contract"     domain="[('financial_class','=','contract')]"/>
         <filter string="مشورة"        name="consultation" domain="[('financial_class','=','consultation')]"/>
         <separator/>
-        <filter string="اليوم"   name="today"   domain="[('admission_date','&gt;=', (context_today()).strftime('%Y-%m-%d 00:00:00'))]"/>
-        <filter string="مكتملة"  name="done"    domain="[('state','=','done')]"/>
+        <filter string="مكتملة"  name="done"      domain="[('state','=','done')]"/>
         <filter string="ملغاة"   name="cancelled" domain="[('state','=','cancelled')]"/>
-        <group expand="0" string="تجميع حسب">
-          <filter string="الوجهة المالية" name="group_financial" context="{'group_by': 'financial_class'}"/>
-          <filter string="العيادة"         name="group_specialty" context="{'group_by': 'specialty_id'}"/>
-          <filter string="الطبيب"          name="group_doctor"    context="{'group_by': 'doctor_id'}"/>
-          <filter string="التاريخ"         name="group_date"      context="{'group_by': 'admission_date:day'}"/>
-        </group>
+        <separator/>
+        <filter string="تجميع: الوجهة المالية" name="group_financial" context="{'group_by': 'financial_class'}"/>
+        <filter string="تجميع: العيادة"         name="group_specialty" context="{'group_by': 'specialty_id'}"/>
+        <filter string="تجميع: الطبيب"          name="group_doctor"    context="{'group_by': 'doctor_id'}"/>
+        <filter string="تجميع: التاريخ"         name="group_date"      context="{'group_by': 'admission_date:day'}"/>
       </search>
     </field>
   </record>
@@ -241,7 +239,7 @@
     <field name="name">سجل الزيارات</field>
     <field name="res_model">saycare.visit</field>
     <field name="view_mode">list,form</field>
-    <field name="context">{'search_default_today': 1}</field>
+    <field name="context">{}</field>
     <field name="help" type="html">
       <p class="o_view_nocontent_smiling_face">لا توجد زيارات مسجلة</p>
     </field>
