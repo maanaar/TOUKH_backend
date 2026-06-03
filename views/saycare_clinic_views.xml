@@ -149,28 +149,21 @@
        saycare.visit  (Visit Journal)
   ═══════════════════════════════════════════════════════════════════ -->
 
-  <record id="view_saycare_visit_tree" model="ir.ui.view">
-    <field name="name">saycare.visit.tree</field>
+  <record id="view_saycare_visit_list" model="ir.ui.view">
+    <field name="name">saycare.visit.list</field>
     <field name="model">saycare.visit</field>
     <field name="arch" type="xml">
-      <list string="سجل الزيارات" decoration-success="state == 'done'"
-            decoration-warning="state == 'in_progress'"
-            decoration-muted="state == 'cancelled'">
+      <list string="سجل الزيارات"
+            decoration-success="state == 'done'"
+            decoration-warning="state == 'in_progress'">
         <field name="name"/>
         <field name="admission_date"/>
         <field name="patient_id"/>
         <field name="specialty_id"/>
         <field name="doctor_id"/>
         <field name="visit_type"/>
-        <field name="financial_class" widget="badge"
-               decoration-info="financial_class == 'cash'"
-               decoration-success="financial_class == 'state' or financial_class == 'takaful'"
-               decoration-warning="financial_class == 'insurance' or financial_class == 'contract'"
-               decoration-secondary="financial_class == 'consultation'"/>
-        <field name="state" widget="badge"
-               decoration-success="state == 'done'"
-               decoration-warning="state == 'in_progress'"
-               decoration-muted="state == 'cancelled'"/>
+        <field name="financial_class"/>
+        <field name="state"/>
       </list>
     </field>
   </record>
@@ -231,7 +224,7 @@
         <filter string="تعاقدات"      name="contract"     domain="[('financial_class','=','contract')]"/>
         <filter string="مشورة"        name="consultation" domain="[('financial_class','=','consultation')]"/>
         <separator/>
-        <filter string="اليوم"   name="today"   domain="[('admission_date','&gt;=', datetime.datetime.now().strftime('%Y-%m-%d 00:00:00'))]"/>
+        <filter string="اليوم"   name="today"   domain="[('admission_date','&gt;=', (context_today()).strftime('%Y-%m-%d 00:00:00'))]"/>
         <filter string="مكتملة"  name="done"    domain="[('state','=','done')]"/>
         <filter string="ملغاة"   name="cancelled" domain="[('state','=','cancelled')]"/>
         <group expand="0" string="تجميع حسب">
