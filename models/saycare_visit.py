@@ -26,11 +26,11 @@ class SaycareVisit(models.Model):
     ], string='Status', default='waiting', index=True)
 
     visit_type = fields.Selection([
-        ('outpatient',   'عيادات خارجية'),
+        ('outpatient',   'كشف'),
         ('inpatient',    'داخلي'),
         ('emergency',    'طوارئ'),
-        ('consultation', 'مشورة'),
-    ], string='Visit Type', default='outpatient')
+        ('consultation', 'استشارة'),
+    ], string='نوع الزيارة', default='outpatient')
 
     specialty_id = fields.Many2one('saycare.specialty', string='Specialty')
     doctor_id    = fields.Many2one('hr.employee', string='Doctor',
@@ -43,9 +43,9 @@ class SaycareVisit(models.Model):
         ('state',        'نفقة الدولة'),
         ('consultation', 'مشورة'),
         ('takaful',      'تكافل وكرامة'),
-        ('insurance',    'تأمين صحي'),
+        ('insurance',    'تأمين صحى'),
         ('contract',     'تعاقدات'),
-    ], string='Financial Class')
+    ], string='الوجهة المالية')
 
     chief_complaint = fields.Char(string='Chief Complaint')
     triage_notes    = fields.Text(string='Triage Notes')

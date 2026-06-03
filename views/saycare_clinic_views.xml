@@ -48,7 +48,7 @@
 
           <notebook>
             <page string="الخدمات" name="services">
-              <field name="service_ids" context="{'default_specialty_id': active_id}">
+              <field name="service_ids" context="{'default_specialty_id': id}">
                 <list editable="bottom">
                   <field name="name"/>
                   <field name="code"/>
@@ -146,12 +146,127 @@
   </record>
 
   <!-- ═══════════════════════════════════════════════════════════════
+       saycare.visit  (Visit Journal)
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="view_saycare_visit_tree" model="ir.ui.view">
+    <field name="name">saycare.visit.tree</field>
+    <field name="model">saycare.visit</field>
+    <field name="arch" type="xml">
+      <list string="سجل الزيارات" decoration-success="state == 'done'"
+            decoration-warning="state == 'in_progress'"
+            decoration-muted="state == 'cancelled'">
+        <field name="name"/>
+        <field name="admission_date"/>
+        <field name="patient_id"/>
+        <field name="specialty_id"/>
+        <field name="doctor_id"/>
+        <field name="visit_type"/>
+        <field name="financial_class" widget="badge"
+               decoration-info="financial_class == 'cash'"
+               decoration-success="financial_class == 'state' or financial_class == 'takaful'"
+               decoration-warning="financial_class == 'insurance' or financial_class == 'contract'"
+               decoration-secondary="financial_class == 'consultation'"/>
+        <field name="state" widget="badge"
+               decoration-success="state == 'done'"
+               decoration-warning="state == 'in_progress'"
+               decoration-muted="state == 'cancelled'"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_saycare_visit_form" model="ir.ui.view">
+    <field name="name">saycare.visit.form</field>
+    <field name="model">saycare.visit</field>
+    <field name="arch" type="xml">
+      <form string="الزيارة">
+        <header>
+          <field name="state" widget="statusbar"
+                 statusbar_visible="waiting,doctor_queue,in_progress,done"/>
+        </header>
+        <sheet>
+          <div class="oe_title">
+            <h1><field name="name" readonly="1"/></h1>
+          </div>
+          <group>
+            <group string="بيانات الزيارة">
+              <field name="patient_id"/>
+              <field name="admission_date"/>
+              <field name="discharge_date"/>
+              <field name="visit_type"/>
+            </group>
+            <group string="الوجهة المالية والعيادة">
+              <field name="financial_class"/>
+              <field name="specialty_id"/>
+              <field name="doctor_id"
+                     domain="[('medical_role','=','doctor')]"/>
+              <field name="nurse_id"
+                     domain="[('medical_role','=','nurse')]"/>
+            </group>
+          </group>
+          <group string="الشكوى والملاحظات">
+            <field name="chief_complaint" nolabel="1"
+                   placeholder="الشكوى الرئيسية…"/>
+            <field name="notes" nolabel="1" placeholder="ملاحظات…"/>
+          </group>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="view_saycare_visit_search" model="ir.ui.view">
+    <field name="name">saycare.visit.search</field>
+    <field name="model">saycare.visit</field>
+    <field name="arch" type="xml">
+      <search string="الزيارات">
+        <field name="patient_id"/>
+        <field name="name"/>
+        <field name="specialty_id"/>
+        <field name="doctor_id"/>
+        <separator/>
+        <filter string="نقدي"         name="cash"         domain="[('financial_class','=','cash')]"/>
+        <filter string="تأمين صحى"    name="insurance"    domain="[('financial_class','=','insurance')]"/>
+        <filter string="نفقة الدولة"  name="state"        domain="[('financial_class','=','state')]"/>
+        <filter string="تكافل وكرامة" name="takaful"      domain="[('financial_class','=','takaful')]"/>
+        <filter string="تعاقدات"      name="contract"     domain="[('financial_class','=','contract')]"/>
+        <filter string="مشورة"        name="consultation" domain="[('financial_class','=','consultation')]"/>
+        <separator/>
+        <filter string="اليوم"   name="today"   domain="[('admission_date','&gt;=', datetime.datetime.now().strftime('%Y-%m-%d 00:00:00'))]"/>
+        <filter string="مكتملة"  name="done"    domain="[('state','=','done')]"/>
+        <filter string="ملغاة"   name="cancelled" domain="[('state','=','cancelled')]"/>
+        <group expand="0" string="تجميع حسب">
+          <filter string="الوجهة المالية" name="group_financial" context="{'group_by': 'financial_class'}"/>
+          <filter string="العيادة"         name="group_specialty" context="{'group_by': 'specialty_id'}"/>
+          <filter string="الطبيب"          name="group_doctor"    context="{'group_by': 'doctor_id'}"/>
+          <filter string="التاريخ"         name="group_date"      context="{'group_by': 'admission_date:day'}"/>
+        </group>
+      </search>
+    </field>
+  </record>
+
+  <record id="action_saycare_visit_journal" model="ir.actions.act_window">
+    <field name="name">سجل الزيارات</field>
+    <field name="res_model">saycare.visit</field>
+    <field name="view_mode">list,form</field>
+    <field name="context">{'search_default_today': 1}</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiling_face">لا توجد زيارات مسجلة</p>
+    </field>
+  </record>
+
+  <!-- ═══════════════════════════════════════════════════════════════
        Top-level menu  →  SayCare HIS
   ═══════════════════════════════════════════════════════════════════ -->
 
   <menuitem id="menu_saycare_root"
             name="SayCare HIS"
             sequence="50"/>
+
+  <menuitem id="menu_saycare_visit_journal"
+            name="سجل الزيارات"
+            parent="menu_saycare_root"
+            action="action_saycare_visit_journal"
+            sequence="10"/>
 
   <menuitem id="menu_saycare_config"
             name="الإعدادات"

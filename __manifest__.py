@@ -26,6 +26,7 @@
         'purchase',
         'uom',
         'hr',
+        'account',
         'employee_purchase_requisition',
     ],
     'data': [

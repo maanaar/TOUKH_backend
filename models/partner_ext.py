@@ -54,9 +54,9 @@ class ResPartnerPatient(models.Model):
         ('state',         'نفقة الدولة'),
         ('consultation',  'مشورة'),
         ('takaful',       'تكافل وكرامة'),
-        ('insurance',     'تأمين صحي'),
+        ('insurance',     'تأمين صحى'),
         ('contract',      'تعاقدات'),
-    ], string='Financial Class', default='cash')
+    ], string='الوجهة المالية', default='cash')
 
     insurance_company = fields.Char(string='Insurance Company')
     contract_entity   = fields.Char(string='Contract Entity')
