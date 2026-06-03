@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       saycare.specialty  (Clinic)
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="view_saycare_specialty_tree" model="ir.ui.view">
+    <field name="name">saycare.specialty.tree</field>
+    <field name="model">saycare.specialty</field>
+    <field name="arch" type="xml">
+      <list string="العيادات">
+        <field name="name"/>
+        <field name="code"/>
+        <field name="room_number"/>
+        <field name="categ_id"/>
+        <field name="active"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_saycare_specialty_form" model="ir.ui.view">
+    <field name="name">saycare.specialty.form</field>
+    <field name="model">saycare.specialty</field>
+    <field name="arch" type="xml">
+      <form string="العيادة">
+        <sheet>
+          <div class="oe_title">
+            <label for="name"/>
+            <h1><field name="name" placeholder="اسم العيادة"/></h1>
+          </div>
+
+          <group>
+            <group string="معلومات أساسية">
+              <field name="code"/>
+              <field name="room_number"/>
+              <field name="active"/>
+              <field name="color" widget="color_picker"/>
+            </group>
+            <group string="الإعدادات">
+              <field name="categ_id"
+                     domain="[]"
+                     options="{'no_create_edit': False}"
+                     help="فئة المنتجات الخاصة بهذه العيادة (للمستلزمات والمخزون)"/>
+              <field name="description"/>
+            </group>
+          </group>
+
+          <notebook>
+            <page string="الخدمات" name="services">
+              <field name="service_ids" context="{'default_specialty_id': active_id}">
+                <list editable="bottom">
+                  <field name="name"/>
+                  <field name="code"/>
+                  <field name="visit_type"/>
+                  <field name="price"/>
+                  <field name="insurance_price"/>
+                  <field name="active"/>
+                </list>
+              </field>
+            </page>
+
+            <page string="الأطباء" name="doctors">
+              <field name="doctor_ids" readonly="1">
+                <list>
+                  <field name="name"/>
+                  <field name="job_title"/>
+                  <field name="license_number"/>
+                  <field name="work_email"/>
+                  <field name="work_phone"/>
+                </list>
+              </field>
+            </page>
+          </notebook>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_saycare_specialty" model="ir.actions.act_window">
+    <field name="name">العيادات</field>
+    <field name="res_model">saycare.specialty</field>
+    <field name="view_mode">list,form</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiling_face">أنشئ عيادة جديدة</p>
+    </field>
+  </record>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       saycare.service  (Service Catalog)
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="view_saycare_service_tree" model="ir.ui.view">
+    <field name="name">saycare.service.tree</field>
+    <field name="model">saycare.service</field>
+    <field name="arch" type="xml">
+      <list string="الخدمات الطبية">
+        <field name="specialty_id"/>
+        <field name="name"/>
+        <field name="code"/>
+        <field name="visit_type"/>
+        <field name="price"/>
+        <field name="insurance_price"/>
+        <field name="active"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_saycare_service_form" model="ir.ui.view">
+    <field name="name">saycare.service.form</field>
+    <field name="model">saycare.service</field>
+    <field name="arch" type="xml">
+      <form string="الخدمة الطبية">
+        <sheet>
+          <div class="oe_title">
+            <label for="name"/>
+            <h1><field name="name" placeholder="اسم الخدمة"/></h1>
+          </div>
+          <group>
+            <group string="التصنيف">
+              <field name="code"/>
+              <field name="specialty_id"/>
+              <field name="visit_type"/>
+              <field name="active"/>
+            </group>
+            <group string="التسعير">
+              <field name="price"/>
+              <field name="insurance_price"/>
+            </group>
+          </group>
+          <group string="ملاحظات">
+            <field name="notes" nolabel="1"/>
+          </group>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_saycare_service" model="ir.actions.act_window">
+    <field name="name">الخدمات الطبية</field>
+    <field name="res_model">saycare.service</field>
+    <field name="view_mode">list,form</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiling_face">أضف خدمة طبية جديدة</p>
+    </field>
+  </record>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       Top-level menu  →  SayCare HIS
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <menuitem id="menu_saycare_root"
+            name="SayCare HIS"
+            sequence="50"/>
+
+  <menuitem id="menu_saycare_config"
+            name="الإعدادات"
+            parent="menu_saycare_root"
+            sequence="90"/>
+
+  <menuitem id="menu_saycare_specialty"
+            name="العيادات"
+            parent="menu_saycare_config"
+            action="action_saycare_specialty"
+            sequence="10"/>
+
+  <menuitem id="menu_saycare_service"
+            name="الخدمات الطبية"
+            parent="menu_saycare_config"
+            action="action_saycare_service"
+            sequence="20"/>
+
+</odoo>

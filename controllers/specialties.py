@@ -10,7 +10,16 @@ class SpecialtyController(http.Controller):
     @http.route('/saycare/api/specialties', type='http', auth='user', methods=['GET'], csrf=False)
     def get_all(self, **kw):
         records = request.env['saycare.specialty'].sudo().search([('active', '=', True)])
-        return _json([{'id': r.id, 'name': r.name, 'code': r.code or ''} for r in records])
+        return _json([{
+            'id':          r.id,
+            'name':        r.name,
+            'code':        r.code or '',
+            'description': r.description or '',
+            'room_number': r.room_number or '',
+            'categ_id':    r.categ_id.id if r.categ_id else None,
+            'categ_name':  r.categ_id.name if r.categ_id else '',
+            'doctor_ids':  [{'id': d.id, 'name': d.name} for d in r.doctor_ids],
+        } for r in records])
 
     @http.route('/saycare/api/specialties', type='http', auth='user', methods=['POST'], csrf=False)
     def create(self, **kw):
