@@ -39,7 +39,7 @@
         <field name="model">product.category</field>
         <field name="inherit_id" ref="product.product_category_list_view"/>
         <field name="arch" type="xml">
-            <field name="name" position="after">
+            <field name="display_name" position="after">
                 <field name="categ_type"/>
             </field>
         </field>
