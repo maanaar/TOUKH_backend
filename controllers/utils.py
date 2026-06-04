@@ -19,7 +19,7 @@ def _patient_dict(p):
         'second_name':       p.second_name or '',
         'third_name':        p.third_name or '',
         'last_name':         p.last_name or '',
-        'mrn':               pgetattr(patient, 'mrn', '') or '',
+        'mrn':               getattr(p, 'mrn', '') or '',
         'patient_type':      p.patient_type or 'normal',
         'id_type':           p.id_type or 'national_id',
         'id_number':         p.id_number or '',

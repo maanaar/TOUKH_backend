@@ -125,6 +125,7 @@ class PatientController(http.Controller):
         except Exception as e:
             import logging
             logging.getLogger(__name__).error('Patient create/write failed: %s', e, exc_info=True)
+            request.env.cr.rollback()
             # Fallback: create with minimal safe fields if custom fields are missing
             try:
                 safe_vals = {
