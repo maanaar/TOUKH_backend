@@ -80,7 +80,7 @@ class AppointmentController(http.Controller):
         rec = request.env['saycare.appointment'].sudo().create(vals)
         return _json(_appt_dict(rec), 201)
 
-    @http.route('/saycare/api/appointments/<int:appt_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    @http.route('/saycare/api/appointments/<int:appt_id>', type='http', auth='user', methods=['PUT', 'PATCH'], csrf=False)
     def update(self, appt_id, **kw):
         a = request.env['saycare.appointment'].sudo().browse(appt_id)
         if not a.exists():
@@ -89,6 +89,13 @@ class AppointmentController(http.Controller):
             body = json.loads(request.httprequest.data or '{}')
         except json.JSONDecodeError:
             return _json({'error': 'invalid JSON'}, 400)
+        # PATCH with {state} triggers state transition
+        if 'state' in body:
+            new_state = body['state']
+            if new_state in APPT_VALID_TRANSITIONS.get(a.state, []):
+                a.write({'state': new_state})
+            return _json({'ok': True, 'state': a.state})
+
         allowed = ['doctor_id', 'specialty_id', 'date', 'start_time',
                    'end_time', 'visit_type', 'notes']
         vals = {k: body[k] for k in allowed if k in body}

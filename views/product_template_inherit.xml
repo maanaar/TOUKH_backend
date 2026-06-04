@@ -5,6 +5,9 @@
         <field name="model">product.template</field>
         <field name="inherit_id" ref="product.product_template_form_view"/>
         <field name="arch" type="xml">
+            <field name="categ_id" position="after">
+                <field name="categ_type" readonly="1"/>
+            </field>
             <field name="uom_id" position="after">
                 <field name="uom_mediumm"/>
                 <field name="uom_largee"/>
@@ -17,24 +20,16 @@
         <field name="model">product.category</field>
         <field name="inherit_id" ref="product.product_category_form_view"/>
         <field name="arch" type="xml">
-            <field name="name" position="after">
-                <field name="categ_type"/>
-            </field>
+            <group name="first" position="after">
+                <group name="saycare_categ">
+                    <field name="categ_type"/>
+                </group>
+            </group>
         </field>
     </record>
 
-    <record id="product_category_account_form_categ_type" model="ir.ui.view">
-        <field name="name">product.category.account.form.categ.type</field>
-        <field name="model">product.category</field>
-        <field name="inherit_id" ref="account.view_category_property_form"/>
-        <field name="arch" type="xml">
-            <field name="name" position="after">
-                <field name="categ_type"/>
-            </field>
-        </field>
-    </record>
 
-    <record id="product_category_list_categ_type" model="ir.ui.view">
+<record id="product_category_list_categ_type" model="ir.ui.view">
         <field name="name">product.category.list.categ.type</field>
         <field name="model">product.category</field>
         <field name="inherit_id" ref="product.product_category_list_view"/>

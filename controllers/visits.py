@@ -42,6 +42,16 @@ def _visit_dict(v, full=False):
         'specialty_id':    v.specialty_id.id if v.specialty_id else None,
         'specialty_name':  v.specialty_id.name if v.specialty_id else '',
         'notes':           v.notes or '',
+        'services': [{
+            'id':              s.id,
+            'name':            s.name,
+            'price':           s.price,
+            'insurance_price': s.insurance_price,
+            'visit_type':      s.visit_type or '',
+        } for s in v.service_ids],
+        'total_price':     v.total_price,
+        'insurance_share': v.insurance_share,
+        'patient_share':   v.patient_share,
     }
     if full:
         d['patient']           = _patient_dict(v.patient_id) if v.patient_id else {}
@@ -104,6 +114,9 @@ class VisitController(http.Controller):
             'doctor_id':       body.get('doctor_id'),
             'notes':           body.get('notes', ''),
         }
+        service_ids = body.get('service_ids', [])
+        if service_ids:
+            vals['service_ids'] = [(6, 0, service_ids)]
         visit = request.env['saycare.visit'].sudo().create(vals)
         if body.get('appointment_id'):
             appt = request.env['saycare.appointment'].sudo().browse(body['appointment_id'])
@@ -140,5 +153,50 @@ class VisitController(http.Controller):
         if new_state == 'done':
             vals['discharge_date'] = DT.now()
         v.write(vals)
-        return _json({'ok': True, 'state': v.state,
-                      'discharge_date': str(v.discharge_date) if v.discharge_date else None})
+
+        invoice_id = None
+        if new_state == 'done' and v.service_ids and v.patient_id:
+            invoice_id = _create_visit_invoice(v)
+
+        return _json({
+            'ok': True,
+            'state': v.state,
+            'discharge_date': str(v.discharge_date) if v.discharge_date else None,
+            'invoice_id': invoice_id,
+        })
+
+
+def _create_visit_invoice(visit):
+    env = visit.env
+    AccountMove = env['account.move'].sudo()
+    journal = env['account.journal'].sudo().search([
+        ('type', '=', 'sale'),
+        ('company_id', '=', visit.patient_id.company_id.id or env.company.id),
+    ], limit=1)
+    if not journal:
+        return None
+
+    lines = []
+    for svc in visit.service_ids:
+        # find or create a product for this service
+        product = env['product.product'].sudo().search([
+            ('name', '=', svc.name), ('type', '=', 'service'),
+        ], limit=1)
+        lines.append((0, 0, {
+            'name':         svc.name,
+            'quantity':     1,
+            'price_unit':   svc.price,
+            'product_id':   product.id if product else False,
+        }))
+
+    if not lines:
+        return None
+
+    move = AccountMove.create({
+        'move_type':      'out_invoice',
+        'partner_id':     visit.patient_id.id,
+        'journal_id':     journal.id,
+        'invoice_line_ids': lines,
+        'narration':      f'زيارة {visit.name} — {visit.financial_class or ""}',
+    })
+    return move.id

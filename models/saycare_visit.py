@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields
+from odoo import models, fields, api
 
 
 class SaycareVisit(models.Model):
@@ -45,6 +45,8 @@ class SaycareVisit(models.Model):
         ('takaful',      'تكافل وكرامة'),
         ('insurance',    'تأمين صحى'),
         ('contract',     'تعاقدات'),
+        ('moh',          'وزارة الصحة'),
+        ('staff',        'عاملين'),
     ], string='الوجهة المالية')
 
     chief_complaint = fields.Char(string='Chief Complaint')
@@ -62,6 +64,23 @@ class SaycareVisit(models.Model):
                                            string='Rad Orders')
 
     notes = fields.Text(string='Notes')
+
+    service_ids = fields.Many2many(
+        'saycare.service', 'saycare_visit_service_rel',
+        'visit_id', 'service_id',
+        string='Services',
+    )
+
+    total_price     = fields.Float(string='Total Price',     compute='_compute_totals', store=True)
+    insurance_share = fields.Float(string='Insurance Share', compute='_compute_totals', store=True)
+    patient_share   = fields.Float(string='Patient Share',   compute='_compute_totals', store=True)
+
+    @api.depends('service_ids')
+    def _compute_totals(self):
+        for rec in self:
+            rec.total_price     = sum(rec.service_ids.mapped('price'))
+            rec.insurance_share = sum(rec.service_ids.mapped('insurance_price'))
+            rec.patient_share   = max(0.0, rec.total_price - rec.insurance_share)
 
     def create(self, vals_list):
         for vals in (vals_list if isinstance(vals_list, list) else [vals_list]):

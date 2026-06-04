@@ -28,14 +28,9 @@ class ProductCategory(models.Model):
     _inherit = 'product.category'
 
     categ_type = fields.Selection([
-        ('services',    'خدمات'),
-        ('procedures',  'إجراءات'),
-        ('medication',  'أدوية'),
-        ('consumable',  'مستلزمات طبية'),
-        ('lab',         'تحاليل مخبرية'),
-        ('radiology',   'أشعة'),
-        ('other',       'أخرى'),
-    ], string='Category Type', default='other')
+        ('services',   'خدمات'),
+        ('procedures', 'إجراءات'),
+    ], string='Category Type')
 
 
 class ProductTemplate(models.Model):
@@ -51,5 +46,12 @@ class ProductTemplate(models.Model):
     uom_mediumm = fields.Many2one(
         'uom.uom',
         string='الوحدة المتوسطة',
+    )
+
+    categ_type = fields.Selection(
+        related='categ_id.categ_type',
+        string='Category Type',
+        readonly=True,
+        store=False,
     )
 

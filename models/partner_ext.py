@@ -11,11 +11,21 @@ class ResPartnerPatient(models.Model):
 
     # ── Patient type (mutually exclusive) ─────────────────────────────────────
     patient_type = fields.Selection([
-        ('normal',    'مريض عادي'),
+        ('normal',    'مصري'),
         ('foreigner', 'أجنبي'),
         ('unknown',   'مجهول الهوية'),
         ('baby',      'طفل'),
-    ], string='Patient Type', default='normal')
+    ], string='Nationality', default='normal')
+
+    age_group = fields.Selection([
+        ('adult', 'بالغ'),
+        ('child', 'طفل'),
+    ], string='Age Group', compute='_compute_age_group', store=True)
+
+    @api.depends('patient_type')
+    def _compute_age_group(self):
+        for rec in self:
+            rec.age_group = 'child' if rec.patient_type == 'baby' else 'adult'
 
     # ── Medical Record Number ─────────────────────────────────────────────────
     mrn = fields.Char(string='MRN', copy=False, index=True)
@@ -50,12 +60,14 @@ class ResPartnerPatient(models.Model):
 
     # ── Financial class ───────────────────────────────────────────────────────
     financial_class = fields.Selection([
-        ('cash',          'نقدي'),
-        ('state',         'نفقة الدولة'),
-        ('consultation',  'مشورة'),
-        ('takaful',       'تكافل وكرامة'),
-        ('insurance',     'تأمين صحى'),
-        ('contract',      'تعاقدات'),
+        ('cash',         'نقدي'),
+        ('state',        'نفقة الدولة'),
+        ('consultation', 'مشورة'),
+        ('takaful',      'تكافل وكرامة'),
+        ('insurance',    'تأمين صحى'),
+        ('contract',     'تعاقدات'),
+        ('moh',          'وزارة الصحة'),
+        ('staff',        'عاملين'),
     ], string='الوجهة المالية', default='cash')
 
     insurance_company = fields.Char(string='Insurance Company')

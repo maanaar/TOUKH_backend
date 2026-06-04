@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!-- Show financial_class on invoice/journal entry form after partner -->
+  <record id="account_move_form_financial_class" model="ir.ui.view">
+    <field name="name">account.move.form.financial.class</field>
+    <field name="model">account.move</field>
+    <field name="inherit_id" ref="account.view_move_form"/>
+    <field name="arch" type="xml">
+      <field name="partner_id" position="after">
+        <field name="financial_class" readonly="1"
+               invisible="not partner_id"/>
+      </field>
+    </field>
+  </record>
+
+  <!-- Show financial_class in journal entries list -->
+  <record id="account_move_list_financial_class" model="ir.ui.view">
+    <field name="name">account.move.list.financial.class</field>
+    <field name="model">account.move</field>
+    <field name="inherit_id" ref="account.view_move_tree"/>
+    <field name="arch" type="xml">
+      <field name="partner_id" position="after">
+        <field name="financial_class" optional="show"/>
+      </field>
+    </field>
+  </record>
+
+  <!-- Journal config list -->
+  <record id="account_journal_list_financial_class" model="ir.ui.view">
+    <field name="name">account.journal.list.financial.class</field>
+    <field name="model">account.journal</field>
+    <field name="inherit_id" ref="account.view_account_journal_tree"/>
+    <field name="arch" type="xml">
+      <field name="name" position="after">
+        <field name="financial_class" optional="show"/>
+      </field>
+    </field>
+  </record>
+
+  <!-- Journal config form -->
+  <record id="account_journal_form_financial_class" model="ir.ui.view">
+    <field name="name">account.journal.form.financial.class</field>
+    <field name="model">account.journal</field>
+    <field name="inherit_id" ref="account.view_account_journal_form"/>
+    <field name="arch" type="xml">
+      <field name="type" position="after">
+        <field name="financial_class"/>
+      </field>
+    </field>
+  </record>
+
+</odoo>

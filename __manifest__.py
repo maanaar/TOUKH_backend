@@ -35,6 +35,7 @@
         'views/product_template_inherit.xml',
         'views/partner_inherit.xml',
         'views/saycare_clinic_views.xml',
+        'views/account_move_inherit.xml',
     ],
     'installable': True,
     'application': False,

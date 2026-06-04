@@ -1,13 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="res_partner_form_vendor_flag" model="ir.ui.view">
-        <field name="name">res.partner.form.vendor.flag</field>
-        <field name="model">res.partner</field>
-        <field name="inherit_id" ref="base.view_partner_form"/>
-        <field name="arch" type="xml">
-            <field name="function" position="after">
-                <field name="is_vendor" widget="boolean_toggle" string="مصنّع / مورد رئيسي"/>
-            </field>
-        </field>
-    </record>
+  <record id="res_partner_form_patient_fields" model="ir.ui.view">
+    <field name="name">res.partner.form.patient.fields</field>
+    <field name="model">res.partner</field>
+    <field name="inherit_id" ref="base.view_partner_form"/>
+    <field name="arch" type="xml">
+
+      <!-- Patient + Vendor toggles next to Job Position -->
+      <field name="function" position="after">
+        <field name="is_patient" widget="boolean_toggle" string="مريض"/>
+        <field name="is_vendor"  widget="boolean_toggle" string="مصنّع / مورد رئيسي"/>
+      </field>
+
+      <!-- Patient fields injected after the main address/contact group -->
+      <xpath expr="//sheet/group[1]" position="after">
+        <group string="بيانات المريض" name="patient_main_fields">
+          <group>
+            <field name="mrn"       string="Medical File"/>
+            <field name="dob"       string="Birth Date"/>
+            <field name="gender"    string="Gender"/>
+            <field name="id_type"   string="Identity Type"/>
+            <field name="id_number" string="National ID / Passport ID"/>
+          </group>
+          <group>
+            <field name="patient_type" string="Nationality"/>
+            <field name="age_group"    string="Age Group" readonly="1"/>
+          </group>
+        </group>
+      </xpath>
+
+      <!-- Full patient tab -->
+      <notebook position="inside">
+        <page string="بيانات المريض" name="patient_data">
+
+          <group string="الهوية">
+            <group>
+              <field name="mrn"       string="رقم الملف الطبي (MRN)" readonly="1"/>
+              <field name="id_type"   string="نوع الهوية"/>
+              <field name="id_number" string="رقم الهوية / جواز السفر"/>
+            </group>
+            <group>
+              <field name="patient_type" string="نوع المريض"/>
+              <field name="dob"          string="تاريخ الميلاد"/>
+              <field name="gender"       string="الجنس"/>
+            </group>
+          </group>
+
+          <group string="الاسم الرباعي">
+            <group>
+              <field name="first_name"  string="الاسم الأول"/>
+              <field name="second_name" string="الاسم الثاني"/>
+            </group>
+            <group>
+              <field name="third_name"  string="الاسم الثالث"/>
+              <field name="last_name"   string="اسم العائلة"/>
+            </group>
+          </group>
+
+          <group string="بيانات التواصل والعنوان">
+            <group>
+              <field name="home_phone"  string="هاتف المنزل"/>
+              <field name="occupation"  string="المهنة"/>
+            </group>
+            <group>
+              <field name="governorate" string="المحافظة"/>
+            </group>
+          </group>
+
+          <group string="الوجهة المالية">
+            <group>
+              <field name="financial_class" string="الوجهة المالية"/>
+              <field name="insurance_company" string="شركة التأمين"
+                     invisible="financial_class != 'insurance'"/>
+              <field name="contract_entity"   string="جهة التعاقد"
+                     invisible="financial_class != 'contract'"/>
+            </group>
+          </group>
+
+        </page>
+      </notebook>
+
+    </field>
+  </record>
 </odoo>

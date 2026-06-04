@@ -16,6 +16,23 @@ def _service_dict(s):
         'price':           s.price,
         'insurance_price': s.insurance_price,
         'notes':           s.notes or '',
+        'source':          'service',
+    }
+
+
+def _product_service_dict(p, specialty_id=None, specialty_name=''):
+    """Wrap a product.template that lives in a clinic's product category."""
+    return {
+        'id':              f'prod-{p.id}',
+        'name':            p.name or '',
+        'code':            p.default_code or '',
+        'specialty_id':    specialty_id,
+        'specialty_name':  specialty_name,
+        'visit_type':      '',
+        'price':           p.list_price,
+        'insurance_price': 0.0,
+        'notes':           '',
+        'source':          'product',
     }
 
 
@@ -23,13 +40,41 @@ class ServiceController(http.Controller):
 
     @http.route('/saycare/api/services', type='http', auth='user', methods=['GET'], csrf=False)
     def get_all(self, specialty_id='', visit_type='', **kw):
+        env = request.env
+
+        # ── 1. saycare.service records ────────────────────────────────────────
         domain = [('active', '=', True)]
         if specialty_id:
             domain.append(('specialty_id', '=', int(specialty_id)))
         if visit_type:
             domain.append(('visit_type', '=', visit_type))
-        records = request.env['saycare.service'].sudo().search(domain)
-        return _json([_service_dict(s) for s in records])
+        service_records = env['saycare.service'].sudo().search(domain)
+        results = [_service_dict(s) for s in service_records]
+
+        # ── 2. product.template from the specialty's linked product category ──
+        if specialty_id:
+            specialty = env['saycare.specialty'].sudo().browse(int(specialty_id))
+            if specialty.exists() and specialty.categ_id:
+                categ = specialty.categ_id
+                # Include the category and all its children
+                categ_ids = env['product.category'].sudo().search(
+                    [('id', 'child_of', categ.id)]
+                ).ids
+                products = env['product.template'].sudo().search([
+                    ('categ_id', 'in', categ_ids),
+                    ('active', '=', True),
+                    ('sale_ok', '=', True),
+                ])
+                existing_names = {r['name'] for r in results}
+                for p in products:
+                    if p.name not in existing_names:
+                        results.append(_product_service_dict(
+                            p,
+                            specialty_id=specialty.id,
+                            specialty_name=specialty.name,
+                        ))
+
+        return _json(results)
 
     @http.route('/saycare/api/services/<int:service_id>', type='http', auth='user', methods=['GET'], csrf=False)
     def get_one(self, service_id, **kw):

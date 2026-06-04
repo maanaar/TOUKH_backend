@@ -161,9 +161,9 @@
         <field name="patient_id"/>
         <field name="specialty_id"/>
         <field name="doctor_id"/>
-        <field name="visit_type"/>
-        <field name="financial_class"/>
-        <field name="state"/>
+        <field name="visit_type" optional="show"/>
+        <field name="financial_class" optional="show"/>
+        <field name="state" optional="show"/>
       </list>
     </field>
   </record>
@@ -202,6 +202,20 @@
                    placeholder="الشكوى الرئيسية…"/>
             <field name="notes" nolabel="1" placeholder="ملاحظات…"/>
           </group>
+
+          <group string="الخدمات والمدفوعات">
+            <group>
+              <field name="total_price"     string="إجمالي الخدمات"/>
+              <field name="insurance_share" string="حصة التأمين"/>
+              <field name="patient_share"   string="حصة المريض"/>
+            </group>
+          </group>
+
+          <notebook>
+            <page string="الخدمات المطلوبة" name="services">
+              <field name="service_ids" widget="many2many_tags"/>
+            </page>
+          </notebook>
         </sheet>
       </form>
     </field>
@@ -223,6 +237,8 @@
         <filter string="تكافل وكرامة" name="takaful"      domain="[('financial_class','=','takaful')]"/>
         <filter string="تعاقدات"      name="contract"     domain="[('financial_class','=','contract')]"/>
         <filter string="مشورة"        name="consultation" domain="[('financial_class','=','consultation')]"/>
+        <filter string="وزارة الصحة"  name="moh"          domain="[('financial_class','=','moh')]"/>
+        <filter string="عاملين"       name="staff"        domain="[('financial_class','=','staff')]"/>
         <separator/>
         <filter string="مكتملة"  name="done"      domain="[('state','=','done')]"/>
         <filter string="ملغاة"   name="cancelled" domain="[('state','=','cancelled')]"/>
