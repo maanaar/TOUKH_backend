@@ -63,7 +63,12 @@ class ServiceController(http.Controller):
 
         # ── 2. product.template from the specialty's linked product category ──
         if specialty_id:
-            specialty = env['saycare.specialty'].sudo().browse(int(specialty_id))
+            try:
+                spec_id = int(specialty_id)
+            except (ValueError, TypeError):
+                found = env['saycare.specialty'].sudo().search([('name', '=', specialty_id)], limit=1)
+                spec_id = found.id if found else 0
+            specialty = env['saycare.specialty'].sudo().browse(spec_id)
             if specialty.exists() and specialty.categ_id:
                 categ = specialty.categ_id
                 # Include the category and all its children
