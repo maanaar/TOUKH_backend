@@ -19,7 +19,7 @@ def _lab_dict(lo):
         'visit_id':          lo.visit_id.id if lo.visit_id else None,
         'patient_id':        lo.patient_id.id if lo.patient_id else None,
         'patient_name':      lo.patient_id.name if lo.patient_id else '',
-        'patient_mrn':       lo.patient_id.mrn if lo.patient_id else '',
+        'patient_mrn':       getattr(lo.patient_id, 'mrn', '') if lo.patient_id else '',
         'test_name':         lo.test_name or '',
         'test_code':         lo.test_code or '',
         'priority':          lo.priority or 'routine',

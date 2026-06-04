@@ -118,10 +118,10 @@ class PatientController(http.Controller):
         try:
             if existing:
                 existing.write(vals)
-                return _json({'id': existing.id, 'mrn': existing.mrn or '', 'name': existing.name}, 200)
+                return _json({'id': existing.id, 'mrn': getattr(existing, 'mrn', '') or '', 'name': existing.name}, 200)
 
             patient = request.env['res.partner'].sudo().create(vals)
-            return _json({'id': patient.id, 'mrn': patient.mrn or '', 'name': patient.name}, 201)
+            return _json({'id': patient.id, 'mrn': getattr(patient, 'mrn', '') or '', 'name': patient.name}, 201)
         except Exception as e:
             import logging
             logging.getLogger(__name__).error('Patient create/write failed: %s', e, exc_info=True)

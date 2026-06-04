@@ -34,7 +34,7 @@ def _visit_dict(v, full=False):
         'discharge_date':  str(v.discharge_date) if v.discharge_date else None,
         'patient_id':      v.patient_id.id if v.patient_id else None,
         'patient_name':    v.patient_id.name if v.patient_id else '',
-        'patient_mrn':     v.patient_id.mrn if v.patient_id else '',
+        'patient_mrn':     getattr(v.patient_id, 'mrn', '') if v.patient_id else '',
         'doctor_id':       v.doctor_id.id if v.doctor_id else None,
         'doctor_name':     v.doctor_id.name if v.doctor_id else '',
         'nurse_id':        v.nurse_id.id if v.nurse_id else None,

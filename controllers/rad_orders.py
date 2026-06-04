@@ -19,7 +19,7 @@ def _rad_dict(ro):
         'visit_id':            ro.visit_id.id if ro.visit_id else None,
         'patient_id':          ro.patient_id.id if ro.patient_id else None,
         'patient_name':        ro.patient_id.name if ro.patient_id else '',
-        'patient_mrn':         ro.patient_id.mrn if ro.patient_id else '',
+        'patient_mrn':         getattr(ro.patient_id, 'mrn', '') if ro.patient_id else '',
         'study_type':          ro.study_type or '',
         'body_part':           ro.body_part or '',
         'clinical_indication': ro.clinical_indication or '',

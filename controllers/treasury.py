@@ -57,7 +57,7 @@ class TreasuryController(http.Controller):
                 'time':              time_str,
                 'patient_id':        v.patient_id.id   if v.patient_id else None,
                 'patient_name':      v.patient_id.name if v.patient_id else '—',
-                'mrn':               v.patient_id.mrn  if v.patient_id else '',
+                'mrn':               getattr(v.patient_id, 'mrn', '') if v.patient_id else '',
                 'national_id':       v.patient_id.id_number if v.patient_id else '',
                 'mobile':            v.patient_id.phone if v.patient_id else '',
                 'clinic':            v.specialty_id.name if v.specialty_id else '',

@@ -18,7 +18,7 @@ def _appt_dict(a):
         'name':           a.name or '',
         'patient_id':     a.patient_id.id if a.patient_id else None,
         'patient_name':   a.patient_id.name if a.patient_id else '',
-        'patient_mrn':    a.patient_id.mrn if a.patient_id else '',
+        'patient_mrn':    getattr(a.patient_id, 'mrn', '') if a.patient_id else '',
         'doctor_id':      a.doctor_id.id if a.doctor_id else None,
         'doctor_name':    a.doctor_id.name if a.doctor_id else '',
         'specialty_id':   a.specialty_id.id if a.specialty_id else None,

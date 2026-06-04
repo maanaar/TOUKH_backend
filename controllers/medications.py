@@ -187,7 +187,7 @@ class PharmacyDirectOrderController(http.Controller):
             'patient': {
                 'id':     patient.id,
                 'name':   patient.name,
-                'mrn':    patient.mrn or '',
+                'mrn':    patientgetattr(patient, 'mrn', '') or '',
                 'mobile': patient.phone or '',
             },
             'orders': orders,
