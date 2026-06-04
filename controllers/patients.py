@@ -81,6 +81,22 @@ class PatientController(http.Controller):
             if country:
                 vals['country_id'] = country.id
 
+        # ── duplication guard: match by id_number or mrn ─────────────────────
+        id_number = body.get('id_number', '').strip()
+        mrn       = body.get('mrn', '').strip()
+        existing  = None
+        if id_number:
+            existing = request.env['res.partner'].sudo().search([
+                ('is_patient', '=', True), ('id_number', '=', id_number),
+            ], limit=1)
+        if not existing and mrn:
+            existing = request.env['res.partner'].sudo().search([
+                ('is_patient', '=', True), ('mrn', '=', mrn),
+            ], limit=1)
+        if existing:
+            existing.write(vals)
+            return _json({'id': existing.id, 'mrn': existing.mrn or '', 'name': existing.name}, 200)
+
         patient = request.env['res.partner'].sudo().create(vals)
         return _json({'id': patient.id, 'mrn': patient.mrn or '', 'name': patient.name}, 201)
 

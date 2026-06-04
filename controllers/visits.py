@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
-from odoo import http
+from odoo import http, fields
 from odoo.http import request
 from odoo.fields import Datetime as DT
 from .utils import _json, _patient_dict
@@ -117,6 +117,22 @@ class VisitController(http.Controller):
         service_ids = body.get('service_ids', [])
         if service_ids:
             vals['service_ids'] = [(6, 0, service_ids)]
+
+        # ── duplication guard: same patient + specialty + today, still open ──
+        from odoo.fields import Date as D
+        today = D.today()
+        dup = request.env['saycare.visit'].sudo().search([
+            ('patient_id',  '=', body['patient_id']),
+            ('specialty_id','=', body.get('specialty_id')),
+            ('state', 'not in', ['done', 'cancelled']),
+            ('admission_date', '>=', f'{today} 00:00:00'),
+            ('admission_date', '<=', f'{today} 23:59:59'),
+        ], limit=1)
+        if dup:
+            if service_ids:
+                dup.write({'service_ids': [(6, 0, service_ids)]})
+            return _json(_visit_dict(dup), 200)
+
         visit = request.env['saycare.visit'].sudo().create(vals)
         if body.get('appointment_id'):
             appt = request.env['saycare.appointment'].sudo().browse(body['appointment_id'])
@@ -166,19 +182,133 @@ class VisitController(http.Controller):
         })
 
 
+class ClinicBookingController(http.Controller):
+    """
+    POST /saycare/api/clinic-booking
+    One-shot: create (or find) patient → appointment → visit with services.
+    Returns { visit_id, appointment_id, total_price, patient_share, invoice_id }
+    """
+
+    @http.route('/saycare/api/clinic-booking', type='http', auth='user', methods=['POST'], csrf=False)
+    def create(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except json.JSONDecodeError:
+            return _json({'error': 'invalid JSON'}, 400)
+
+        env = request.env
+
+        # ── 1. resolve patient ────────────────────────────────────────────────
+        patient_id = body.get('patient_id')
+        if not patient_id:
+            id_number = body.get('id_number', '').strip()
+            patient = env['res.partner'].sudo().search(
+                [('id_number', '=', id_number), ('is_patient', '=', True)], limit=1
+            ) if id_number else env['res.partner']
+            if not patient:
+                if not body.get('patient_name'):
+                    return _json({'error': 'patient_id or patient_name required'}, 400)
+                patient = env['res.partner'].sudo().create({
+                    'name':           body['patient_name'],
+                    'id_number':      id_number,
+                    'phone':          body.get('mobile', ''),
+                    'is_patient':     True,
+                    'financial_class': body.get('financial_class', 'cash'),
+                })
+            patient_id = patient.id
+
+        # ── 2. service IDs (only saycare.service numeric IDs) ─────────────────
+        raw_service_ids = body.get('service_ids', [])
+        service_ids = [int(s) for s in raw_service_ids
+                       if str(s).isdigit() or (isinstance(s, int))]
+
+        # ── 3. create appointment ─────────────────────────────────────────────
+        specialty_id = body.get('specialty_id')
+        doctor_id    = body.get('doctor_id')
+        booking_date = body.get('booking_date', str(fields.Date.today()))
+        start_time   = body.get('start_time', 8.0)
+
+        appt_vals = {
+            'patient_id':  patient_id,
+            'date':        booking_date,
+            'start_time':  float(start_time),
+            'end_time':    float(start_time) + 0.25,
+            'visit_type':  'outpatient',
+            'state':       'confirmed',
+        }
+        if specialty_id:
+            appt_vals['specialty_id'] = int(specialty_id)
+        if doctor_id:
+            appt_vals['doctor_id'] = int(doctor_id)
+        appt = env['saycare.appointment'].sudo().create(appt_vals)
+
+        # ── 4. create visit with services ─────────────────────────────────────
+        visit_vals = {
+            'patient_id':      patient_id,
+            'visit_type':      'outpatient',
+            'financial_class': body.get('financial_class', 'cash'),
+            'chief_complaint': body.get('chief_complaint', ''),
+            'notes':           body.get('notes', ''),
+        }
+        if specialty_id:
+            visit_vals['specialty_id'] = int(specialty_id)
+        if doctor_id:
+            visit_vals['doctor_id'] = int(doctor_id)
+        if service_ids:
+            visit_vals['service_ids'] = [(6, 0, service_ids)]
+
+        visit = env['saycare.visit'].sudo().create(visit_vals)
+        appt.write({'visit_id': visit.id, 'state': 'arrived'})
+
+        # ── 5. create invoice immediately ─────────────────────────────────────
+        invoice_id     = None
+        invoice_name   = None
+        invoice_amount = visit.patient_share
+        if visit.service_ids:
+            invoice_id = _create_visit_invoice(visit)
+            if invoice_id:
+                inv = env['account.move'].sudo().browse(invoice_id)
+                invoice_name = inv.name or ''
+
+        return _json({
+            'visit_id':        visit.id,
+            'visit_name':      visit.name,
+            'appointment_id':  appt.id,
+            'patient_id':      patient_id,
+            'total_price':     visit.total_price,
+            'insurance_share': visit.insurance_share,
+            'patient_share':   visit.patient_share,
+            'invoice_id':      invoice_id,
+            'invoice_name':    invoice_name,
+            'invoice_amount':  invoice_amount,
+            'services':        [{'id': s.id, 'name': s.name, 'price': s.price,
+                                 'insurance_price': s.insurance_price}
+                                for s in visit.service_ids],
+        }, 201)
+
+
 def _create_visit_invoice(visit):
     env = visit.env
-    AccountMove = env['account.move'].sudo()
+
+    # ── duplication guard ───────────────────────────────────────────────────────
+    existing = env['account.move'].sudo().search([
+        ('move_type', '=', 'out_invoice'),
+        ('narration', 'like', visit.name),
+        ('partner_id', '=', visit.patient_id.id),
+    ], limit=1)
+    if existing:
+        return existing.id
+
+    company = env.company
     journal = env['account.journal'].sudo().search([
         ('type', '=', 'sale'),
-        ('company_id', '=', visit.patient_id.company_id.id or env.company.id),
+        ('company_id', '=', company.id),
     ], limit=1)
     if not journal:
         return None
 
     lines = []
     for svc in visit.service_ids:
-        # find or create a product for this service
         product = env['product.product'].sudo().search([
             ('name', '=', svc.name), ('type', '=', 'service'),
         ], limit=1)
@@ -187,16 +317,19 @@ def _create_visit_invoice(visit):
             'quantity':     1,
             'price_unit':   svc.price,
             'product_id':   product.id if product else False,
+            'display_type': 'product',
         }))
 
     if not lines:
         return None
 
-    move = AccountMove.create({
-        'move_type':      'out_invoice',
-        'partner_id':     visit.patient_id.id,
-        'journal_id':     journal.id,
-        'invoice_line_ids': lines,
-        'narration':      f'زيارة {visit.name} — {visit.financial_class or ""}',
+    move = env['account.move'].sudo().create({
+        'move_type':          'out_invoice',
+        'partner_id':         visit.patient_id.id,
+        'journal_id':         journal.id,
+        'currency_id':        company.currency_id.id,
+        'invoice_line_ids':   lines,
+        'narration':          f'زيارة {visit.name} — {visit.financial_class or ""}',
     })
+    move.action_post()
     return move.id

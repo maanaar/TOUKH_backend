@@ -16,4 +16,5 @@ from . import (
     appointments,
     services,
     dashboard,
+    invoices,
 )
