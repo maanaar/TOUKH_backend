@@ -72,6 +72,8 @@ class TreasuryController(http.Controller):
                 'payment_state':     payment_state,
                 'amount_total':      amount_total,
                 'amount_due':        amount_due,
+                'insurance_share':   v.insurance_share,
+                'patient_share':     v.patient_share,
             })
 
         # summary totals
