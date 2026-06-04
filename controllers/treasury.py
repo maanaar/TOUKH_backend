@@ -40,9 +40,9 @@ class TreasuryController(http.Controller):
 
         rows = []
         for v in visits:
-            inv = v.invoice_id
-            payment_state = inv.payment_state if inv else ''
-            amount_total  = inv.amount_total  if inv else 0.0
+            inv = getattr(v, 'invoice_id', None) or None
+            payment_state = inv.payment_state  if inv else ''
+            amount_total  = inv.amount_total   if inv else 0.0
             amount_due    = inv.amount_residual if inv else 0.0
 
             # pull time from admission_date
@@ -57,14 +57,14 @@ class TreasuryController(http.Controller):
                 'time':              time_str,
                 'patient_id':        v.patient_id.id   if v.patient_id else None,
                 'patient_name':      v.patient_id.name if v.patient_id else '—',
-                'mrn':               getattr(v.patient_id, 'mrn', '') if v.patient_id else '',
-                'national_id':       v.patient_id.id_number if v.patient_id else '',
+                'mrn':               getattr(v.patient_id, 'mrn',       '') if v.patient_id else '',
+                'national_id':       getattr(v.patient_id, 'id_number', '') if v.patient_id else '',
                 'mobile':            v.patient_id.phone if v.patient_id else '',
                 'clinic':            v.specialty_id.name if v.specialty_id else '',
                 'doctor':            v.doctor_id.name    if v.doctor_id   else '',
                 'visit_type':        VISIT_TYPE_AR.get(v.visit_type or '', v.visit_type or ''),
-                'financial_class':   v.financial_class or '',
-                'financial_label':   FINANCIAL_CLASS_AR.get(v.financial_class or '', v.financial_class or ''),
+                'financial_class':   getattr(v, 'financial_class', '') or '',
+                'financial_label':   FINANCIAL_CLASS_AR.get(getattr(v, 'financial_class', '') or '', ''),
                 'state':             v.state,
                 'invoice_id':        inv.id            if inv else None,
                 'invoice_name':      inv.name          if inv else '',
@@ -72,8 +72,8 @@ class TreasuryController(http.Controller):
                 'payment_state':     payment_state,
                 'amount_total':      amount_total,
                 'amount_due':        amount_due,
-                'insurance_share':   v.insurance_share,
-                'patient_share':     v.patient_share,
+                'insurance_share':   getattr(v, 'insurance_share', 0.0),
+                'patient_share':     getattr(v, 'patient_share',   0.0),
             })
 
         # summary totals
