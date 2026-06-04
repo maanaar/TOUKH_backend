@@ -49,30 +49,38 @@ class PatientController(http.Controller):
         if not full_name:
             return _json({'error': 'patient name is required'}, 400)
 
+        # Selection fields must be False (not '') when empty
+        def sel(key, default, valid):
+            v = body.get(key) or default
+            return v if v in valid else default
+
         vals = {
             'name':             full_name,
             'is_patient':       True,
-            'first_name':       body.get('first_name', ''),
-            'second_name':      body.get('second_name', ''),
-            'third_name':       body.get('third_name', ''),
-            'last_name':        body.get('last_name', ''),
-            'patient_type':     body.get('patient_type', 'normal'),
-            'id_type':          body.get('id_type', 'national_id'),
-            'id_number':        body.get('id_number', ''),
-            'phone':            body.get('phone', '') or body.get('mobile', ''),
-            'home_phone':       body.get('home_phone', ''),
-            'occupation':       body.get('occupation', '') or body.get('x_occupation', ''),
-            'governorate':      body.get('governorate', '') or body.get('x_governorate', ''),
-            'city':             body.get('city', ''),
-            'street':           body.get('street', ''),
-            'financial_class':  body.get('financial_class', 'cash'),
-            'insurance_company': body.get('insurance_company', ''),
-            'contract_entity':  body.get('contract_entity', ''),
+            'first_name':       body.get('first_name', '') or '',
+            'second_name':      body.get('second_name', '') or '',
+            'third_name':       body.get('third_name', '') or '',
+            'last_name':        body.get('last_name', '') or '',
+            'patient_type':     sel('patient_type', 'normal', ('normal', 'foreigner', 'unknown', 'baby')),
+            'id_type':          sel('id_type', 'national_id', ('national_id', 'passport')),
+            'id_number':        body.get('id_number', '') or '',
+            'phone':            body.get('phone', '') or body.get('mobile', '') or '',
+            'home_phone':       body.get('home_phone', '') or '',
+            'occupation':       body.get('occupation', '') or body.get('x_occupation', '') or '',
+            'governorate':      body.get('governorate', '') or body.get('x_governorate', '') or '',
+            'city':             body.get('city', '') or '',
+            'street':           body.get('street', '') or '',
+            'financial_class':  sel('financial_class', 'cash',
+                                    ('cash', 'state', 'consultation', 'takaful', 'insurance', 'contract', 'moh', 'staff')),
+            'insurance_company': body.get('insurance_company', '') or '',
+            'contract_entity':  body.get('contract_entity', '') or '',
         }
-        if body.get('dob'):
-            vals['dob'] = body['dob']
-        if body.get('gender'):
-            vals['gender'] = body['gender']
+        dob = body.get('dob')
+        if dob:
+            vals['dob'] = dob
+        gender = body.get('gender')
+        if gender in ('male', 'female'):
+            vals['gender'] = gender
         if body.get('nationality'):
             country = request.env['res.country'].sudo().search(
                 [('name', 'ilike', body['nationality'])], limit=1
@@ -92,12 +100,17 @@ class PatientController(http.Controller):
             existing = request.env['res.partner'].sudo().search([
                 ('is_patient', '=', True), ('mrn', '=', mrn),
             ], limit=1)
-        if existing:
-            existing.write(vals)
-            return _json({'id': existing.id, 'mrn': existing.mrn or '', 'name': existing.name}, 200)
+        try:
+            if existing:
+                existing.write(vals)
+                return _json({'id': existing.id, 'mrn': existing.mrn or '', 'name': existing.name}, 200)
 
-        patient = request.env['res.partner'].sudo().create(vals)
-        return _json({'id': patient.id, 'mrn': patient.mrn or '', 'name': patient.name}, 201)
+            patient = request.env['res.partner'].sudo().create(vals)
+            return _json({'id': patient.id, 'mrn': patient.mrn or '', 'name': patient.name}, 201)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error('Patient create/write failed: %s', e, exc_info=True)
+            return _json({'error': str(e)}, 500)
 
     @http.route('/saycare/api/patient/<int:patient_id>', type='http', auth='user', methods=['PUT'], csrf=False)
     def update(self, patient_id, **kw):
