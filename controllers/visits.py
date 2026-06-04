@@ -152,7 +152,14 @@ class VisitController(http.Controller):
             appt = request.env['saycare.appointment'].sudo().browse(body['appointment_id'])
             if appt.exists():
                 appt.write({'visit_id': visit.id, 'state': 'arrived'})
-        return _json(_visit_dict(visit), 201)
+
+        # ── Create & post invoice immediately so it appears in the journal ──────
+        invoice_id = _create_visit_invoice(visit)
+        if invoice_id:
+            visit.write({'invoice_id': invoice_id})
+        result = _visit_dict(visit)
+        result['invoice_id'] = invoice_id
+        return _json(result, 201)
 
     @http.route('/saycare/api/visit/<int:visit_id>', type='http', auth='user', methods=['GET'], csrf=False)
     def get_one(self, visit_id, **kw):
@@ -334,8 +341,32 @@ def _create_visit_invoice(visit):
             'display_type': 'product',
         }))
 
+    financial_label = {
+        'cash':         'نقدي',
+        'insurance':    'تأمين صحى',
+        'state':        'نفقة الدولة',
+        'takaful':      'تكافل وكرامة',
+        'consultation': 'مشورة',
+        'contract':     'تعاقدات',
+        'moh':          'وزارة الصحة',
+        'staff':        'عاملين',
+    }.get(visit.financial_class or '', visit.financial_class or '')
+
+    visit_type_label = {
+        'outpatient':   'كشف خارجي',
+        'inpatient':    'حجز داخلي',
+        'emergency':    'طوارئ',
+        'consultation': 'استشارة',
+    }.get(visit.visit_type or '', 'زيارة طبية')
+
+    # Always include at least one descriptive line
     if not lines:
-        return None
+        lines.append((0, 0, {
+            'name':         f'{visit_type_label} — {visit.specialty_id.name or ""} — {financial_label}',
+            'quantity':     1,
+            'price_unit':   0.0,
+            'display_type': 'product',
+        }))
 
     move = env['account.move'].sudo().create({
         'move_type':          'out_invoice',
@@ -343,7 +374,35 @@ def _create_visit_invoice(visit):
         'journal_id':         journal.id,
         'currency_id':        company.currency_id.id,
         'invoice_line_ids':   lines,
-        'narration':          f'زيارة {visit.name} — {visit.financial_class or ""}',
+        'narration':          f'زيارة {visit.name} — {visit_type_label} — {financial_label}',
     })
-    move.action_post()
+
+    # Only post (and create journal entries) when there is an actual amount
+    total = sum(line[2].get('price_unit', 0) * line[2].get('quantity', 1)
+                for line in lines if isinstance(line, tuple))
+    if total > 0:
+        try:
+            move.action_post()
+        except Exception:
+            return move.id
+
+        # ── Register payment to خزنة for cash / takaful ──────────────────────
+        if visit.financial_class in ('cash', 'takaful'):
+            cash_journal = env['account.journal'].sudo().search([
+                ('type', '=', 'cash'),
+                ('company_id', '=', company.id),
+            ], limit=1)
+            if cash_journal and move.amount_total > 0:
+                try:
+                    wizard = env['account.payment.register'].sudo().with_context(
+                        active_model='account.move',
+                        active_ids=[move.id],
+                    ).create({
+                        'amount':     move.amount_total,
+                        'journal_id': cash_journal.id,
+                    })
+                    wizard.action_create_payments()
+                except Exception:
+                    pass
+
     return move.id

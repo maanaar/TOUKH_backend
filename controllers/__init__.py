@@ -17,4 +17,5 @@ from . import (
     services,
     dashboard,
     invoices,
+    treasury,
 )

@@ -80,6 +80,8 @@ class SaycareVisit(models.Model):
     employee_id_no     = fields.Char(string='الرقم الوظيفي')
     department         = fields.Char(string='الإدارة / القسم')
 
+    invoice_id  = fields.Many2one('account.move', string='Invoice', ondelete='set null')
+
     service_ids = fields.Many2many(
         'saycare.service', 'saycare_visit_service_rel',
         'visit_id', 'service_id',

@@ -45,7 +45,17 @@ class ServiceController(http.Controller):
         # ── 1. saycare.service records ────────────────────────────────────────
         domain = [('active', '=', True)]
         if specialty_id:
-            domain.append(('specialty_id', '=', int(specialty_id)))
+            try:
+                domain.append(('specialty_id', '=', int(specialty_id)))
+            except (ValueError, TypeError):
+                # name string passed instead of ID — resolve it
+                spec = env['saycare.specialty'].sudo().search(
+                    [('name', '=', specialty_id)], limit=1
+                )
+                if spec:
+                    domain.append(('specialty_id', '=', spec.id))
+                else:
+                    return _json([])  # unknown specialty name, return empty
         if visit_type:
             domain.append(('visit_type', '=', visit_type))
         service_records = env['saycare.service'].sudo().search(domain)
