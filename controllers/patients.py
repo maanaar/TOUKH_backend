@@ -52,28 +52,28 @@ class PatientController(http.Controller):
         vals = {
             'name':              full_name,
             'is_patient':        True,
-            'first_name':        body.get('first_name', ''),
-            'second_name':       body.get('second_name', ''),
-            'third_name':        body.get('third_name', ''),
-            'last_name':         body.get('last_name', ''),
-            'mrn':               body.get('mrn', ''),
-            'patient_type':      body.get('patient_type', 'normal'),
-            'id_type':           body.get('id_type', 'national_id'),
-            'id_number':         body.get('id_number', ''),
+            'x_first_name':        body.get('first_name', ''),
+            'x_second_name':       body.get('second_name', ''),
+            'x_third_name':        body.get('third_name', ''),
+            'x_last_name':         body.get('last_name', ''),
+            'x_mrn':               body.get('mrn', ''),
+            'x_patient_type':      body.get('patient_type', 'normal'),
+            'x_id_type':           body.get('id_type', 'national_id'),
+            'x_id_number':         body.get('id_number', ''),
             'phone':             body.get('phone', '') or body.get('mobile', ''),
             'home_phone':        body.get('home_phone', ''),
-            'occupation':        body.get('occupation', ''),
-            'governorate':       body.get('governorate', ''),
+            'x_occupation':        body.get('x_occupation', ''),
+            'x_governorate':       body.get('x_governorate', ''),
             'city':              body.get('city', ''),
             'street':            body.get('street', ''),
-            'financial_class':   body.get('financial_class', 'cash'),
-            'insurance_company': body.get('insurance_company', ''),
-            'contract_entity':   body.get('contract_entity', ''),
+            'x_financial_class':   body.get('financial_class', 'cash'),
+            'x_insurance_company': body.get('insurance_company', ''),
+            'x_contract_entity':   body.get('contract_entity', ''),
         }
         if body.get('dob'):
-            vals['dob'] = body['dob']
+            vals['x_dob'] = body['dob']
         if body.get('gender'):
-            vals['gender'] = body['gender']
+            vals['x_gender'] = body['gender']
         if body.get('nationality'):
             country = request.env['res.country'].sudo().search(
                 [('name', 'ilike', body['nationality'])], limit=1
@@ -91,14 +91,14 @@ class PatientController(http.Controller):
             ], limit=1)
         if not existing and mrn:
             existing = request.env['res.partner'].sudo().search([
-                ('is_patient', '=', True), ('mrn', '=', mrn),
+                ('is_patient', '=', True), ('x_mrn', '=', mrn),
             ], limit=1)
         if existing:
             existing.write(vals)
-            return _json({'id': existing.id, 'mrn': existing.mrn or '', 'name': existing.name}, 200)
+            return _json({'id': existing.id, 'mrn': existing.x_mrn or '', 'name': existing.name}, 200)
 
         patient = request.env['res.partner'].sudo().create(vals)
-        return _json({'id': patient.id, 'mrn': patient.mrn or '', 'name': patient.name}, 201)
+        return _json({'id': patient.id, 'mrn': patient.x_mrn or '', 'name': patient.name}, 201)
 
     @http.route('/saycare/api/patient/<int:patient_id>', type='http', auth='user', methods=['PUT'], csrf=False)
     def update(self, patient_id, **kw):
