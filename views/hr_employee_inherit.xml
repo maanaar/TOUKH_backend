@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <record id="view_hr_employee_saycare_inherit" model="ir.ui.view">
+    <field name="name">hr.employee.saycare.inherit</field>
+    <field name="model">hr.employee</field>
+    <field name="inherit_id" ref="hr.view_employee_form"/>
+    <field name="arch" type="xml">
+      <page name="work_information">
+        <xpath expr="//page[@name='work_information']/*[1]" position="before">
+          <group string="SayCare HIS" name="saycare_group">
+            <field name="medical_role" string="الدور الطبي"/>
+            <field name="specialty_id"
+                   string="العيادة / التخصص"
+                   domain="[('active','=',True)]"/>
+            <field name="license_number" string="رقم الترخيص الطبي"/>
+          </group>
+        </xpath>
+      </page>
+    </field>
+  </record>
+
+</odoo>

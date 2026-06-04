@@ -65,6 +65,21 @@ class SaycareVisit(models.Model):
 
     notes = fields.Text(string='Notes')
 
+    # ── Financial detail fields ────────────────────────────────────────────────
+    decision_no        = fields.Char(string='رقم القرار')
+    expiry_date        = fields.Date(string='تاريخ الانتهاء')
+    available_balance  = fields.Float(string='الرصيد المتاح')
+    covered_services   = fields.Char(string='الخدمات المغطاة')
+    contract_entity    = fields.Char(string='جهة التعاقد')
+    co_pay_percent     = fields.Char(string='نسبة التحمل')
+    approval_required  = fields.Boolean(string='يتطلب موافقة', default=False)
+    admin_letter_no    = fields.Char(string='رقم الخطاب الإداري')
+    issuing_authority  = fields.Char(string='جهة الإصدار')
+    card_number        = fields.Char(string='رقم الكارت')
+    financial_notes    = fields.Text(string='ملاحظات مالية')
+    employee_id_no     = fields.Char(string='الرقم الوظيفي')
+    department         = fields.Char(string='الإدارة / القسم')
+
     service_ids = fields.Many2many(
         'saycare.service', 'saycare_visit_service_rel',
         'visit_id', 'service_id',

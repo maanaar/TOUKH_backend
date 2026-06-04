@@ -113,6 +113,20 @@ class VisitController(http.Controller):
             'specialty_id':    body.get('specialty_id'),
             'doctor_id':       body.get('doctor_id'),
             'notes':           body.get('notes', ''),
+            # financial details
+            'decision_no':       body.get('decision_no', ''),
+            'expiry_date':       body.get('expiry_date') or False,
+            'available_balance': float(body['available_balance']) if body.get('available_balance') else 0.0,
+            'covered_services':  body.get('covered_services', ''),
+            'contract_entity':   body.get('contract_entity', ''),
+            'co_pay_percent':    body.get('co_pay_percent', ''),
+            'approval_required': bool(body.get('approval_required', False)),
+            'admin_letter_no':   body.get('admin_letter_no', ''),
+            'issuing_authority': body.get('issuing_authority', ''),
+            'card_number':       body.get('card_number', ''),
+            'financial_notes':   body.get('financial_notes', ''),
+            'employee_id_no':    body.get('employee_id', ''),
+            'department':        body.get('department', ''),
         }
         service_ids = body.get('service_ids', [])
         if service_ids:
