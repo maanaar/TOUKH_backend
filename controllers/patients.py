@@ -49,37 +49,47 @@ class PatientController(http.Controller):
         if not full_name:
             return _json({'error': 'patient name is required'}, 400)
 
-        # Selection fields must be False (not '') when empty
         def sel(key, default, valid):
             v = body.get(key) or default
             return v if v in valid else default
 
+        pf = request.env['res.partner']._fields  # available fields
+
+        # Always-safe standard Odoo fields
         vals = {
-            'name':             full_name,
-            'is_patient':       True,
-            'first_name':       body.get('first_name', '') or '',
-            'second_name':      body.get('second_name', '') or '',
-            'third_name':       body.get('third_name', '') or '',
-            'last_name':        body.get('last_name', '') or '',
-            'patient_type':     sel('patient_type', 'normal', ('normal', 'foreigner', 'unknown', 'baby')),
-            'id_type':          sel('id_type', 'national_id', ('national_id', 'passport')),
-            'id_number':        body.get('id_number', '') or '',
-            'phone':            body.get('phone', '') or body.get('mobile', '') or '',
-            'home_phone':       body.get('home_phone', '') or '',
-            'occupation':       body.get('occupation', '') or body.get('x_occupation', '') or '',
-            'governorate':      body.get('governorate', '') or body.get('x_governorate', '') or '',
-            'city':             body.get('city', '') or '',
-            'street':           body.get('street', '') or '',
-            'financial_class':  sel('financial_class', 'cash',
-                                    ('cash', 'state', 'consultation', 'takaful', 'insurance', 'contract', 'moh', 'staff')),
-            'insurance_company': body.get('insurance_company', '') or '',
-            'contract_entity':  body.get('contract_entity', '') or '',
+            'name':   full_name,
+            'phone':  body.get('phone', '') or body.get('mobile', '') or '',
+            'city':   body.get('city', '') or '',
+            'street': body.get('street', '') or '',
         }
+
+        # Custom saycare fields — only add if they exist in this database
+        custom = {
+            'is_patient':        True,
+            'first_name':        body.get('first_name', '') or '',
+            'second_name':       body.get('second_name', '') or '',
+            'third_name':        body.get('third_name', '') or '',
+            'last_name':         body.get('last_name', '') or '',
+            'patient_type':      sel('patient_type', 'normal', ('normal', 'foreigner', 'unknown', 'baby')),
+            'id_type':           sel('id_type', 'national_id', ('national_id', 'passport')),
+            'id_number':         body.get('id_number', '') or '',
+            'home_phone':        body.get('home_phone', '') or '',
+            'occupation':        body.get('occupation', '') or '',
+            'governorate':       body.get('governorate', '') or '',
+            'financial_class':   sel('financial_class', 'cash',
+                                     ('cash', 'state', 'consultation', 'takaful', 'insurance', 'contract', 'moh', 'staff')),
+            'insurance_company': body.get('insurance_company', '') or '',
+            'contract_entity':   body.get('contract_entity', '') or '',
+        }
+        for k, v in custom.items():
+            if k in pf:
+                vals[k] = v
+
         dob = body.get('dob')
-        if dob:
+        if dob and 'dob' in pf:
             vals['dob'] = dob
         gender = body.get('gender')
-        if gender in ('male', 'female'):
+        if gender in ('male', 'female') and 'gender' in pf:
             vals['gender'] = gender
         if body.get('nationality'):
             country = request.env['res.country'].sudo().search(
@@ -92,14 +102,19 @@ class PatientController(http.Controller):
         id_number = body.get('id_number', '').strip()
         mrn       = body.get('mrn', '').strip()
         existing  = None
-        if id_number:
-            existing = request.env['res.partner'].sudo().search([
-                ('is_patient', '=', True), ('id_number', '=', id_number),
-            ], limit=1)
-        if not existing and mrn:
-            existing = request.env['res.partner'].sudo().search([
-                ('is_patient', '=', True), ('mrn', '=', mrn),
-            ], limit=1)
+        # Guard against missing custom fields (module not yet upgraded)
+        partner_fields = request.env['res.partner']._fields
+        try:
+            if id_number and 'id_number' in partner_fields:
+                existing = request.env['res.partner'].sudo().search([
+                    ('is_patient', '=', True), ('id_number', '=', id_number),
+                ], limit=1)
+            if not existing and mrn and 'mrn' in partner_fields:
+                existing = request.env['res.partner'].sudo().search([
+                    ('is_patient', '=', True), ('mrn', '=', mrn),
+                ], limit=1)
+        except Exception:
+            existing = None
         try:
             if existing:
                 existing.write(vals)
@@ -110,7 +125,18 @@ class PatientController(http.Controller):
         except Exception as e:
             import logging
             logging.getLogger(__name__).error('Patient create/write failed: %s', e, exc_info=True)
-            return _json({'error': str(e)}, 500)
+            # Fallback: create with minimal safe fields if custom fields are missing
+            try:
+                safe_vals = {
+                    'name':  full_name,
+                    'phone': body.get('phone', '') or body.get('mobile', ''),
+                    'city':  body.get('city', '') or '',
+                    'street': body.get('street', '') or '',
+                }
+                patient = request.env['res.partner'].sudo().create(safe_vals)
+                return _json({'id': patient.id, 'mrn': '', 'name': patient.name}, 201)
+            except Exception as e2:
+                return _json({'error': str(e2)}, 500)
 
     @http.route('/saycare/api/patient/<int:patient_id>', type='http', auth='user', methods=['PUT'], csrf=False)
     def update(self, patient_id, **kw):
