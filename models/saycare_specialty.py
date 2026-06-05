@@ -31,9 +31,41 @@ class SaycareSpecialty(models.Model):
         string='Services',
     )
 
+    product_count = fields.Integer(
+        string='عدد الخدمات',
+        compute='_compute_product_count',
+    )
+
     _sql_constraints = [
         ('name_uniq', 'unique(name)', 'Specialty name must be unique.'),
     ]
+
+    @api.depends('categ_id')
+    def _compute_product_count(self):
+        Product = self.env['product.template'].sudo()
+        for rec in self:
+            if rec.categ_id:
+                rec.product_count = Product.search_count([
+                    ('categ_id', 'child_of', rec.categ_id.id),
+                    ('active', '=', True),
+                ])
+            else:
+                rec.product_count = 0
+
+    def action_view_products(self):
+        self.ensure_one()
+        return {
+            'name': f'خدمات {self.name}',
+            'type': 'ir.actions.act_window',
+            'res_model': 'product.template',
+            'view_mode': 'list,form',
+            'domain': [('categ_id', 'child_of', self.categ_id.id)],
+            'context': {
+                'default_categ_id': self.categ_id.id,
+                'default_type': 'service',
+                'default_sale_ok': True,
+            },
+        }
 
     def _sync_services_from_categ(self):
         """Create saycare.service rows for every product in categ_id that
