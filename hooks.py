@@ -5,8 +5,14 @@ def post_init_hook(env):
 
 
 def post_migrate_hook(env, *args, **kwargs):
-    """Runs on every upgrade — strips يومية from journal names."""
+    """Runs on every upgrade — strips يومية from journal names and syncs clinic services."""
     _fix_journal_names(env)
+    _sync_all_specialty_services(env)
+
+
+def _sync_all_specialty_services(env):
+    specialties = env['saycare.specialty'].sudo().search([('categ_id', '!=', False)])
+    specialties._sync_services_from_categ()
 
 
 def uninstall_hook(env):

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields
+from odoo import models, fields, api
 
 
 class SaycareSpecialty(models.Model):
@@ -14,21 +14,18 @@ class SaycareSpecialty(models.Model):
     room_number   = fields.Char(string='Room / Location')
     color         = fields.Integer(string='Color Index', default=0)
 
-    # Link to product.category so inventory products for this clinic can be filtered
     categ_id      = fields.Many2one(
         'product.category',
         string='Product Category',
         help='Product category that holds this clinic\'s consumables/supplies',
     )
 
-    # Doctors assigned to this clinic
     doctor_ids    = fields.One2many(
         'hr.employee', 'specialty_id',
         string='Doctors',
         domain=[('medical_role', '=', 'doctor')],
     )
 
-    # Services offered by this clinic (reverse of saycare.service.specialty_id)
     service_ids   = fields.One2many(
         'saycare.service', 'specialty_id',
         string='Services',
@@ -37,6 +34,41 @@ class SaycareSpecialty(models.Model):
     _sql_constraints = [
         ('name_uniq', 'unique(name)', 'Specialty name must be unique.'),
     ]
+
+    def _sync_services_from_categ(self):
+        """Create saycare.service rows for every product in categ_id that
+        does not already have one under this specialty."""
+        Service = self.env['saycare.service'].sudo()
+        Categ   = self.env['product.category'].sudo()
+        Product = self.env['product.template'].sudo()
+        for specialty in self:
+            if not specialty.categ_id:
+                continue
+            categ_ids = Categ.search([('id', 'child_of', specialty.categ_id.id)]).ids
+            products  = Product.search([
+                ('categ_id', 'in', categ_ids),
+                ('active',   '=', True),
+            ])
+            existing_product_ids = specialty.service_ids.mapped('product_id').ids
+            for product in products:
+                if product.id not in existing_product_ids:
+                    Service.create({
+                        'name':         product.name,
+                        'price':        product.list_price,
+                        'code':         product.default_code or '',
+                        'specialty_id': specialty.id,
+                        'product_id':   product.id,
+                    })
+
+    def action_sync_services(self):
+        self._sync_services_from_categ()
+        return True
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'categ_id' in vals:
+            self._sync_services_from_categ()
+        return res
 
 
 class HrEmployeeMedical(models.Model):
