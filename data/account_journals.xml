@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Creates one sale journal per وجهة مالية option.
+        noupdate="1" → created once on install; Odoo never overwrites them on upgrade
+        so user edits (renaming, adding accounts) are preserved.
+    -->
+    <data noupdate="0">
+
+        <record id="journal_financial_cash" model="account.journal">
+            <field name="name">نقدي</field>
+            <field name="code">NQDI</field>
+            <field name="type">sale</field>
+            <field name="financial_class">cash</field>
+        </record>
+
+        <record id="journal_financial_insurance" model="account.journal">
+            <field name="name">تأمين صحى</field>
+            <field name="code">TMIN</field>
+            <field name="type">sale</field>
+            <field name="financial_class">insurance</field>
+        </record>
+
+        <record id="journal_financial_state" model="account.journal">
+            <field name="name">نفقة الدولة</field>
+            <field name="code">NFQA</field>
+            <field name="type">sale</field>
+            <field name="financial_class">state</field>
+        </record>
+
+        <record id="journal_financial_takaful" model="account.journal">
+            <field name="name">تكافل وكرامة</field>
+            <field name="code">TKFL</field>
+            <field name="type">sale</field>
+            <field name="financial_class">takaful</field>
+        </record>
+
+        <record id="journal_financial_consultation" model="account.journal">
+            <field name="name">مشورة</field>
+            <field name="code">MSHR</field>
+            <field name="type">sale</field>
+            <field name="financial_class">consultation</field>
+        </record>
+
+        <record id="journal_financial_contract" model="account.journal">
+            <field name="name">تعاقدات</field>
+            <field name="code">TAQD</field>
+            <field name="type">sale</field>
+            <field name="financial_class">contract</field>
+        </record>
+
+        <record id="journal_financial_moh" model="account.journal">
+            <field name="name">وزارة الصحة</field>
+            <field name="code">MWZR</field>
+            <field name="type">sale</field>
+            <field name="financial_class">moh</field>
+        </record>
+
+        <record id="journal_financial_staff" model="account.journal">
+            <field name="name">عاملين</field>
+            <field name="code">AMLN</field>
+            <field name="type">sale</field>
+            <field name="financial_class">staff</field>
+        </record>
+
+    </data>
+</odoo>

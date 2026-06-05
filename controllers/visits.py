@@ -153,10 +153,16 @@ class VisitController(http.Controller):
             if appt.exists():
                 appt.write({'visit_id': visit.id, 'state': 'arrived'})
 
-        # ── Create & post invoice immediately so it appears in the journal ──────
-        invoice_id = _create_visit_invoice(visit)
-        if invoice_id:
-            visit.write({'invoice_id': invoice_id})
+        # ── Create & post invoice — isolated in a savepoint so any failure
+        #    never rolls back the visit itself or returns 422
+        invoice_id = None
+        try:
+            with request.env.cr.savepoint():
+                invoice_id = _create_visit_invoice(visit)
+                if invoice_id:
+                    visit.write({'invoice_id': invoice_id})
+        except Exception:
+            pass
         result = _visit_dict(visit)
         result['invoice_id'] = invoice_id
         return _json(result, 201)
@@ -308,10 +314,35 @@ class ClinicBookingController(http.Controller):
         }, 201)
 
 
+FINANCIAL_LABELS = {
+    'cash':         'نقدي',
+    'insurance':    'تأمين صحى',
+    'state':        'نفقة الدولة',
+    'takaful':      'تكافل وكرامة',
+    'consultation': 'مشورة',
+    'contract':     'تعاقدات',
+    'moh':          'وزارة الصحة',
+    'staff':        'عاملين',
+}
+
+VISIT_TYPE_LABELS = {
+    'outpatient':   'كشف خارجي',
+    'inpatient':    'حجز داخلي',
+    'emergency':    'طوارئ',
+    'consultation': 'استشارة',
+}
+
+# Financial classes where the patient pays the full amount immediately (cash جورنال)
+IMMEDIATE_PAYMENT_CLASSES = ('cash', 'takaful')
+
+# Financial classes where insurance covers part of the cost
+INSURANCE_SPLIT_CLASSES = ('insurance', 'contract', 'moh', 'state', 'staff', 'consultation')
+
+
 def _create_visit_invoice(visit):
     env = visit.env
 
-    # ── duplication guard ───────────────────────────────────────────────────────
+    # ── duplication guard ─────────────────────────────────────────────────────
     existing = env['account.move'].sudo().search([
         ('move_type', '=', 'out_invoice'),
         ('narration', 'like', visit.name),
@@ -320,44 +351,72 @@ def _create_visit_invoice(visit):
     if existing:
         return existing.id
 
-    company = env.company
+    company    = env.company
+    fin_class  = visit.financial_class or 'cash'
+    is_cash    = fin_class == 'cash'
+
+    # ── Resolve the journal for this financial_class ──────────────────────────
+    # Only use the journal that is tagged with this exact وجهة مالية.
+    # If none exists → skip invoice creation entirely.
     journal = env['account.journal'].sudo().search([
-        ('type', '=', 'sale'),
+        ('financial_class', '=', fin_class),
         ('company_id', '=', company.id),
     ], limit=1)
     if not journal:
         return None
 
+    financial_label  = FINANCIAL_LABELS.get(fin_class, fin_class)
+    visit_type_label = VISIT_TYPE_LABELS.get(visit.visit_type or '', 'زيارة طبية')
+
+    # ── Build invoice lines ───────────────────────────────────────────────────
+    # نقدي: patient pays full price → insurance account (حساب التأمين) = 0
+    # Others: split patient_share and insurance_share into separate lines
     lines = []
     for svc in visit.service_ids:
         product = env['product.product'].sudo().search([
             ('name', '=', svc.name), ('type', '=', 'service'),
         ], limit=1)
-        lines.append((0, 0, {
-            'name':         svc.name,
-            'quantity':     1,
-            'price_unit':   svc.price,
-            'product_id':   product.id if product else False,
-            'display_type': 'product',
-        }))
 
-    financial_label = {
-        'cash':         'نقدي',
-        'insurance':    'تأمين صحى',
-        'state':        'نفقة الدولة',
-        'takaful':      'تكافل وكرامة',
-        'consultation': 'مشورة',
-        'contract':     'تعاقدات',
-        'moh':          'وزارة الصحة',
-        'staff':        'عاملين',
-    }.get(visit.financial_class or '', visit.financial_class or '')
+        if is_cash:
+            # Full price on one line; no insurance split → حساب التأمين = 0
+            lines.append((0, 0, {
+                'name':         svc.name,
+                'quantity':     1,
+                'price_unit':   svc.price,
+                'product_id':   product.id if product else False,
+                'display_type': 'product',
+            }))
+        else:
+            patient_share   = max(0.0, svc.price - svc.insurance_price)
+            insurance_share = svc.insurance_price or 0.0
 
-    visit_type_label = {
-        'outpatient':   'كشف خارجي',
-        'inpatient':    'حجز داخلي',
-        'emergency':    'طوارئ',
-        'consultation': 'استشارة',
-    }.get(visit.visit_type or '', 'زيارة طبية')
+            # Patient co-pay line
+            if patient_share > 0:
+                lines.append((0, 0, {
+                    'name':         f'{svc.name} — حصة المريض',
+                    'quantity':     1,
+                    'price_unit':   patient_share,
+                    'product_id':   product.id if product else False,
+                    'display_type': 'product',
+                }))
+            # Insurance coverage line (حساب التأمين)
+            if insurance_share > 0:
+                lines.append((0, 0, {
+                    'name':         f'{svc.name} — حصة التأمين ({financial_label})',
+                    'quantity':     1,
+                    'price_unit':   insurance_share,
+                    'product_id':   product.id if product else False,
+                    'display_type': 'product',
+                }))
+            # If both shares are 0, fall back to full price
+            if patient_share == 0 and insurance_share == 0:
+                lines.append((0, 0, {
+                    'name':         svc.name,
+                    'quantity':     1,
+                    'price_unit':   svc.price,
+                    'product_id':   product.id if product else False,
+                    'display_type': 'product',
+                }))
 
     # Always include at least one descriptive line
     if not lines:
@@ -369,39 +428,41 @@ def _create_visit_invoice(visit):
         }))
 
     move = env['account.move'].sudo().create({
-        'move_type':          'out_invoice',
-        'partner_id':         visit.patient_id.id,
-        'journal_id':         journal.id,
-        'currency_id':        company.currency_id.id,
-        'invoice_line_ids':   lines,
-        'narration':          f'زيارة {visit.name} — {visit_type_label} — {financial_label}',
+        'move_type':        'out_invoice',
+        'partner_id':       visit.patient_id.id,
+        'journal_id':       journal.id,
+        'currency_id':      company.currency_id.id,
+        'invoice_line_ids': lines,
+        'narration':        f'زيارة {visit.name} — {visit_type_label} — {financial_label}',
     })
 
-    # Only post (and create journal entries) when there is an actual amount
+    # Post invoice (creates journal entries) only when there is a real amount
     total = sum(line[2].get('price_unit', 0) * line[2].get('quantity', 1)
                 for line in lines if isinstance(line, tuple))
     if total > 0:
         try:
-            move.action_post()
+            with env.cr.savepoint():
+                move.action_post()
         except Exception:
             return move.id
 
-        # ── Register payment to خزنة for cash / takaful ──────────────────────
-        if visit.financial_class in ('cash', 'takaful'):
+        # ── Register immediate payment for cash / takaful → خزنة ─────────────
+        if fin_class in IMMEDIATE_PAYMENT_CLASSES:
             cash_journal = env['account.journal'].sudo().search([
                 ('type', '=', 'cash'),
                 ('company_id', '=', company.id),
             ], limit=1)
             if cash_journal and move.amount_total > 0:
                 try:
-                    wizard = env['account.payment.register'].sudo().with_context(
-                        active_model='account.move',
-                        active_ids=[move.id],
-                    ).create({
-                        'amount':     move.amount_total,
-                        'journal_id': cash_journal.id,
-                    })
-                    wizard.action_create_payments()
+                    with env.cr.savepoint():
+                        wizard = env['account.payment.register'].sudo().with_context(
+                            active_model='account.move',
+                            active_ids=[move.id],
+                        ).create({
+                            'amount':     move.amount_total,
+                            'journal_id': cash_journal.id,
+                        })
+                        wizard.action_create_payments()
                 except Exception:
                     pass
 

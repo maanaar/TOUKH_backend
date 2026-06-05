@@ -36,10 +36,35 @@ def _product_service_dict(p, specialty_id=None, specialty_name=''):
     }
 
 
+def _products_from_categ_keyword(env, keyword, existing_names=None):
+    """Return _product_service_dict list for products in categories whose
+    name contains *keyword* (case-insensitive).  Skips names already in
+    existing_names to avoid duplicates."""
+    if existing_names is None:
+        existing_names = set()
+    categs = env['product.category'].sudo().search([('name', 'ilike', keyword)])
+    if not categs:
+        return []
+    categ_ids = env['product.category'].sudo().search(
+        [('id', 'child_of', categs.ids)]
+    ).ids
+    products = env['product.template'].sudo().search([
+        ('categ_id', 'in', categ_ids),
+        ('active', '=', True),
+        ('sale_ok', '=', True),
+    ])
+    results = []
+    for p in products:
+        if p.name not in existing_names:
+            results.append(_product_service_dict(p))
+            existing_names.add(p.name)
+    return results
+
+
 class ServiceController(http.Controller):
 
     @http.route('/saycare/api/services', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, specialty_id='', visit_type='', **kw):
+    def get_all(self, specialty_id='', visit_type='', categ_keyword='', **kw):
         env = request.env
 
         # ── 1. saycare.service records ────────────────────────────────────────
@@ -48,20 +73,20 @@ class ServiceController(http.Controller):
             try:
                 domain.append(('specialty_id', '=', int(specialty_id)))
             except (ValueError, TypeError):
-                # name string passed instead of ID — resolve it
                 spec = env['saycare.specialty'].sudo().search(
                     [('name', '=', specialty_id)], limit=1
                 )
                 if spec:
                     domain.append(('specialty_id', '=', spec.id))
                 else:
-                    return _json([])  # unknown specialty name, return empty
+                    return _json([])
         if visit_type:
             domain.append(('visit_type', '=', visit_type))
         service_records = env['saycare.service'].sudo().search(domain)
         results = [_service_dict(s) for s in service_records]
+        existing_names = {r['name'] for r in results}
 
-        # ── 2. product.template from the specialty's linked product category ──
+        # ── 2. products from the specialty's linked product category ──────────
         if specialty_id:
             try:
                 spec_id = int(specialty_id)
@@ -70,17 +95,14 @@ class ServiceController(http.Controller):
                 spec_id = found.id if found else 0
             specialty = env['saycare.specialty'].sudo().browse(spec_id)
             if specialty.exists() and specialty.categ_id:
-                categ = specialty.categ_id
-                # Include the category and all its children
                 categ_ids = env['product.category'].sudo().search(
-                    [('id', 'child_of', categ.id)]
+                    [('id', 'child_of', specialty.categ_id.id)]
                 ).ids
                 products = env['product.template'].sudo().search([
                     ('categ_id', 'in', categ_ids),
                     ('active', '=', True),
                     ('sale_ok', '=', True),
                 ])
-                existing_names = {r['name'] for r in results}
                 for p in products:
                     if p.name not in existing_names:
                         results.append(_product_service_dict(
@@ -88,6 +110,12 @@ class ServiceController(http.Controller):
                             specialty_id=specialty.id,
                             specialty_name=specialty.name,
                         ))
+                        existing_names.add(p.name)
+
+        # ── 3. products from categories matching categ_keyword ─────────────────
+        # Used by lab (keyword='تحاليل'), rad (keyword='أشعة'), clinic (keyword='عيادة')
+        if categ_keyword:
+            results.extend(_products_from_categ_keyword(env, categ_keyword, existing_names))
 
         return _json(results)
 

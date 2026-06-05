@@ -178,6 +178,18 @@
                  statusbar_visible="waiting,doctor_queue,in_progress,done"/>
         </header>
         <sheet>
+          <!-- Smart button: open the journal entry for this visit -->
+          <div class="oe_button_box" name="button_box">
+            <button name="%(account.action_move_out_invoice_type)d"
+                    type="action"
+                    class="oe_stat_button"
+                    icon="fa-file-text-o"
+                    invisible="not invoice_id"
+                    context="{'search_default_id': invoice_id}">
+              <field name="invoice_id" widget="statinfo" string="فاتورة / قيد محاسبي"/>
+            </button>
+          </div>
+
           <div class="oe_title">
             <h1><field name="name" readonly="1"/></h1>
           </div>

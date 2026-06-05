@@ -37,8 +37,11 @@
         'views/saycare_clinic_views.xml',
         'views/hr_employee_inherit.xml',
         'views/account_move_inherit.xml',
+        'data/account_journals.xml',
     ],
     'installable': True,
     'application': False,
     'license': 'LGPL-3',
+    'post_init_hook':    'post_init_hook',
+    'post_migrate_hook': 'post_migrate_hook',
 }
