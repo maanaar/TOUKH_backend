@@ -50,12 +50,17 @@
             <page string="الخدمات" name="services">
               <field name="service_ids" context="{'default_specialty_id': id}">
                 <list editable="bottom">
+                  <field name="product_id"
+                         domain="[('categ_id', '=', parent.categ_id)]"
+                         context="{'default_categ_id': parent.categ_id, 'default_type': 'service', 'default_sale_ok': True}"
+                         optional="show"
+                         string="المنتج"/>
                   <field name="name"/>
-                  <field name="code"/>
+                  <field name="code" optional="hide"/>
                   <field name="visit_type"/>
                   <field name="price"/>
                   <field name="insurance_price"/>
-                  <field name="active"/>
+                  <field name="active" optional="hide"/>
                 </list>
               </field>
             </page>
