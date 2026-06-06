@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import time
 from datetime import date, timedelta
 from odoo import http, fields as odoo_fields
 from odoo.http import request, Response
@@ -350,10 +351,10 @@ class PickingController(http.Controller):
                 'product_id':               rec.product_id.id if rec.product_id else None,  # computed if single product
                 'move_ids_count':           len(rec.move_ids),
                 # ── links ─────────────────────────────────────────────────
-                'purchase_id':              rec.purchase_id.id if rec.purchase_id else None,
-                'purchase_name':            rec.purchase_id.name if rec.purchase_id else None,
-                'sale_id':                  rec.sale_id.id if rec.sale_id else None,
-                'sale_name':                rec.sale_id.name if rec.sale_id else None,
+                'purchase_id':              getattr(rec, 'purchase_id', False) and rec.purchase_id.id or None,
+                'purchase_name':            getattr(rec, 'purchase_id', False) and rec.purchase_id.name or None,
+                'sale_id':                  getattr(rec, 'sale_id', False) and rec.sale_id.id or None,
+                'sale_name':                getattr(rec, 'sale_id', False) and rec.sale_id.name or None,
                 'backorder_id':             rec.backorder_id.id if rec.backorder_id else None,
                 'backorder_name':           rec.backorder_id.name if rec.backorder_id else None,
                 # ── responsible ───────────────────────────────────────────
@@ -365,8 +366,7 @@ class PickingController(http.Controller):
                 'company_id':               rec.company_id.id if rec.company_id else None,
                 'company_name':             rec.company_id.name if rec.company_id else None,
                 # ── bool flags ────────────────────────────────────────────
-                'is_locked':                rec.is_locked,
-                'immediate_transfer':       getattr(rec, 'immediate_transfer', False),
+                'is_locked':                getattr(rec, 'is_locked', False),
             })
         return http_response(data)
 
@@ -380,8 +380,7 @@ class PickingController(http.Controller):
         for move in rec.move_ids:
             moves.append({
                 'id':                       move.id,
-                'name':                     move.name,
-                'reference':                move.reference or '',
+                'reference':                getattr(move, 'reference', '') or '',
                 'origin':                   move.origin or '',
                 'state':                    move.state,
                 'priority':                 move.priority,
@@ -395,8 +394,7 @@ class PickingController(http.Controller):
                 'quantity':                 move.quantity,           # done
                 'q_sant':                   getattr(move, 'q_sant', 0.0),
                 'qty_done':                 sum(ml.qty_done for ml in move.move_line_ids) if move.move_line_ids else move.quantity,
-                'reserved_availability':    move.reserved_availability,
-                'availability':             move.availability,
+                'availability':             getattr(move, 'availability', 0.0),
                 # ── uom ───────────────────────────────────────────────────
                 'product_uom':              move.product_uom.id if move.product_uom else None,
                 'product_uom_name':         move.product_uom.name if move.product_uom else None,
@@ -412,11 +410,11 @@ class PickingController(http.Controller):
                 'date':                     str(move.date) if move.date else None,
                 'date_deadline':            str(move.date_deadline) if move.date_deadline else None,
                 # ── financials ────────────────────────────────────────────
-                'price_unit':               move.price_unit,
-                'value':                    move.value,
+                'price_unit':               getattr(move, 'price_unit', 0.0),
+                'value':                    getattr(move, 'value', 0.0),
                 # ── links ─────────────────────────────────────────────────
-                'purchase_line_id':         move.purchase_line_id.id if move.purchase_line_id else None,
-                'sale_line_id':             move.sale_line_id.id if move.sale_line_id else None,
+                'purchase_line_id':         getattr(move, 'purchase_line_id', False) and move.purchase_line_id.id or None,
+                'sale_line_id':             getattr(move, 'sale_line_id', False) and move.sale_line_id.id or None,
                 'move_orig_ids':            move.move_orig_ids.ids,
                 'move_dest_ids':            move.move_dest_ids.ids,
                 # ── company ───────────────────────────────────────────────
@@ -459,10 +457,10 @@ class PickingController(http.Controller):
             'scheduled_date':           str(rec.scheduled_date) if rec.scheduled_date else None,
             'date_deadline':            str(rec.date_deadline) if rec.date_deadline else None,
             'date_done':                str(rec.date_done) if rec.date_done else None,
-            'purchase_id':              rec.purchase_id.id if rec.purchase_id else None,
-            'purchase_name':            rec.purchase_id.name if rec.purchase_id else None,
-            'sale_id':                  rec.sale_id.id if rec.sale_id else None,
-            'sale_name':                rec.sale_id.name if rec.sale_id else None,
+            'purchase_id':              getattr(rec, 'purchase_id', False) and rec.purchase_id.id or None,
+            'purchase_name':            getattr(rec, 'purchase_id', False) and rec.purchase_id.name or None,
+            'sale_id':                  getattr(rec, 'sale_id', False) and rec.sale_id.id or None,
+            'sale_name':                getattr(rec, 'sale_id', False) and rec.sale_id.name or None,
             'backorder_id':             rec.backorder_id.id if rec.backorder_id else None,
             'backorder_name':           rec.backorder_id.name if rec.backorder_id else None,
             'user_id':                  rec.user_id.id if rec.user_id else None,
@@ -471,8 +469,7 @@ class PickingController(http.Controller):
             'owner_name':               rec.owner_id.name if rec.owner_id else None,
             'company_id':               rec.company_id.id if rec.company_id else None,
             'company_name':             rec.company_id.name if rec.company_id else None,
-            'is_locked':                rec.is_locked,
-            'immediate_transfer':       rec.immediate_transfer,
+            'is_locked':                getattr(rec, 'is_locked', False),
             'moves':                    moves,
         }
         return http_response(data)
@@ -491,8 +488,7 @@ class MoveController(http.Controller):
         for rec in records:
             data.append({
                 'id':                       rec.id,
-                'name':                     rec.name,
-                'reference':                rec.reference or '',
+                'reference':                getattr(rec, 'reference', '') or '',
                 'origin':                   rec.origin or '',
                 'state':                    rec.state,
                 'priority':                 rec.priority,
@@ -504,8 +500,7 @@ class MoveController(http.Controller):
                 # ── qty ───────────────────────────────────────────────────
                 'product_uom_qty':          rec.product_uom_qty,
                 'quantity':                 rec.quantity,
-                'reserved_availability':    rec.reserved_availability,
-                'availability':             rec.availability,
+                'availability':             getattr(rec, 'availability', 0.0),
                 # ── uom ───────────────────────────────────────────────────
                 'product_uom':              rec.product_uom.id if rec.product_uom else None,
                 'product_uom_name':         rec.product_uom.name if rec.product_uom else None,
@@ -521,8 +516,8 @@ class MoveController(http.Controller):
                 'date':                     str(rec.date) if rec.date else None,
                 'date_deadline':            str(rec.date_deadline) if rec.date_deadline else None,
                 # ── financials ────────────────────────────────────────────
-                'price_unit':               rec.price_unit,
-                'value':                    rec.value,
+                'price_unit':               getattr(rec, 'price_unit', 0.0),
+                'value':                    getattr(rec, 'value', 0.0),
                 # ── links ─────────────────────────────────────────────────
                 'picking_id':               rec.picking_id.id if rec.picking_id else None,
                 'picking_name':             rec.picking_id.name if rec.picking_id else None,
@@ -1504,11 +1499,82 @@ class PickingValidateController(http.Controller):
             if rec.state == 'cancel':
                 return http_response({'error': 'picking is cancelled'}, 400)
 
+            # Confirm first if still in draft
+            if rec.state in ('draft', 'waiting', 'confirmed'):
+                rec.action_confirm()
+                rec.action_assign()
+
             body = json.loads(request.httprequest.data or '{}')
+
+            # Set done quantities to match demand for any move that has none
             if body.get('immediate_transfer', True):
                 for move in rec.move_ids:
                     if move.quantity == 0:
                         move.quantity = move.product_uom_qty
+
+            # Auto-generate lot/serial numbers for tracked products that have none.
+            # This prevents the "You need to supply a Lot/Serial number" UserError.
+            # Lot name includes picking_id + move_id + line_index to guarantee uniqueness.
+            ts = int(time.time())
+
+            def _unique_lot_name(prefix, product, move, idx=0):
+                """Return a lot name guaranteed not to exist yet for this product."""
+                base = f'{prefix}-{product.default_code or product.id}-{rec.id}-{move.id}-{idx}'
+                while request.env['stock.lot'].sudo().search_count([
+                    ('name', '=', base), ('product_id', '=', product.id),
+                    ('company_id', '=', move.company_id.id)
+                ]):
+                    base = f'{base}-{ts}'
+                return base
+
+            for move in rec.move_ids:
+                tracking = move.product_id.tracking
+                if tracking == 'none':
+                    continue
+                for li, ml in enumerate(move.move_line_ids):
+                    if ml.lot_id:
+                        continue
+                    if tracking == 'serial':
+                        # Serial: one lot per unit — split move_line if qty > 1
+                        qty = int(ml.quantity) or 1
+                        if qty <= 1:
+                            lot = request.env['stock.lot'].sudo().create({
+                                'name':       _unique_lot_name('SN', move.product_id, move, li),
+                                'product_id': move.product_id.id,
+                                'company_id': move.company_id.id,
+                            })
+                            ml.sudo().write({'lot_id': lot.id})
+                        else:
+                            first = True
+                            for i in range(qty):
+                                lot = request.env['stock.lot'].sudo().create({
+                                    'name':       _unique_lot_name('SN', move.product_id, move, li * 1000 + i),
+                                    'product_id': move.product_id.id,
+                                    'company_id': move.company_id.id,
+                                })
+                                if first:
+                                    ml.sudo().write({'lot_id': lot.id, 'quantity': 1.0})
+                                    first = False
+                                else:
+                                    request.env['stock.move.line'].sudo().create({
+                                        'move_id':          move.id,
+                                        'product_id':       move.product_id.id,
+                                        'product_uom_id':   move.product_uom.id,
+                                        'location_id':      ml.location_id.id,
+                                        'location_dest_id': ml.location_dest_id.id,
+                                        'lot_id':           lot.id,
+                                        'quantity':         1.0,
+                                        'picking_id':       rec.id,
+                                        'company_id':       move.company_id.id,
+                                    })
+                    else:
+                        # Lot tracking: one lot per move_line
+                        lot = request.env['stock.lot'].sudo().create({
+                            'name':       _unique_lot_name('LOT', move.product_id, move, li),
+                            'product_id': move.product_id.id,
+                            'company_id': move.company_id.id,
+                        })
+                        ml.sudo().write({'lot_id': lot.id})
 
             # skip_backorder / skip_immediate prevent wizard popups in Odoo 17+
             res = rec.with_context(
@@ -1517,6 +1583,7 @@ class PickingValidateController(http.Controller):
                 skip_immediate=True,
                 picking_ids_not_to_backorder=rec.ids,
             ).button_validate()
+
             # If Odoo still returned a wizard action, force-validate directly
             if isinstance(res, dict) and res.get('res_model'):
                 rec._action_done()
