@@ -393,6 +393,8 @@ class PickingController(http.Controller):
                 # ── qty ───────────────────────────────────────────────────
                 'product_uom_qty':          move.product_uom_qty,   # demand
                 'quantity':                 move.quantity,           # done
+                'q_sant':                   getattr(move, 'q_sant', 0.0),
+                'qty_done':                 sum(ml.qty_done for ml in move.move_line_ids) if move.move_line_ids else move.quantity,
                 'reserved_availability':    move.reserved_availability,
                 'availability':             move.availability,
                 # ── uom ───────────────────────────────────────────────────
@@ -1452,6 +1454,39 @@ class PickingCreateController(http.Controller):
                 'move_ids_count':     len(rec.move_ids),
             }, 201)
 
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+class PickingConfirmController(http.Controller):
+
+    @http.route('/api/v1/stock/pickings/<int:rec_id>/confirm', type='http', auth='user', methods=['POST'], csrf=False)
+    def confirm_picking(self, rec_id, **kw):
+        try:
+            rec = request.env['stock.picking'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state not in ('draft', 'waiting', 'confirmed'):
+                return http_response({'error': f'cannot confirm in state: {rec.state}'}, 400)
+            rec.action_confirm()
+            return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/stock/pickings/<int:rec_id>/moves/<int:move_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update_move(self, rec_id, move_id, **kw):
+        try:
+            rec = request.env['stock.picking'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'picking not found'}, 404)
+            move = request.env['stock.move'].sudo().browse(move_id)
+            if not move.exists() or move.picking_id.id != rec_id:
+                return http_response({'error': 'move not found in this picking'}, 404)
+            body = json.loads(request.httprequest.data or '{}')
+            if 'q_sant' in body:
+                move.q_sant = float(body['q_sant'])
+            qty_done = sum(ml.qty_done for ml in move.move_line_ids) if move.move_line_ids else move.quantity
+            return http_response({'id': move.id, 'q_sant': move.q_sant, 'qty_done': qty_done})
         except Exception as e:
             return http_response({'error': str(e)}, 500)
 

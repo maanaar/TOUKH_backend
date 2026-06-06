@@ -25,3 +25,5 @@ access_saycare_patient_surgery_user,saycare.patient.surgery user,model_saycare_p
 access_saycare_patient_surgery_admin,saycare.patient.surgery admin,model_saycare_patient_surgery,base.group_system,1,1,1,1
 access_saycare_patient_medication_user,saycare.patient.medication user,model_saycare_patient_medication,,1,1,1,0
 access_saycare_patient_medication_admin,saycare.patient.medication admin,model_saycare_patient_medication,base.group_system,1,1,1,1
+access_saycare_usage_type_user,saycare.usage.type user,model_saycare_usage_type,,1,1,1,0
+access_saycare_usage_type_admin,saycare.usage.type admin,model_saycare_usage_type,base.group_system,1,1,1,1

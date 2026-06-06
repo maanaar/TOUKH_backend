@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       product.template — medicine tabs
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="product_template_form_medicine_tabs" model="ir.ui.view">
+    <field name="name">product.template.form.medicine.tabs</field>
+    <field name="model">product.template</field>
+    <field name="inherit_id" ref="product.product_template_form_view"/>
+    <field name="arch" type="xml">
+
+      <!-- ── Tab: التصنيف ── -->
+      <notebook position="inside">
+
+        <page string="التصنيف" name="sc_classification">
+          <group>
+            <group string="التصنيف">
+              <field name="group_id"   string="المجموعة"/>
+              <field name="usage_type_ids" widget="many2many_tags" string="نوع الاستخدام"/>
+            </group>
+          </group>
+        </page>
+
+        <!-- ── Tab: الأسعار ── -->
+        <page string="الأسعار الجبرية" name="sc_prices">
+          <group>
+            <group string="السعر الجبرى">
+              <field name="forced_price_currency_id" invisible="1"/>
+              <field name="forced_price"
+                     widget="monetary"
+                     options="{'currency_field': 'forced_price_currency_id'}"
+                     string="السعر الجبرى"/>
+            </group>
+          </group>
+        </page>
+
+        <!-- ── Tab: المخزون والتخزين ── -->
+        <page string="المخزون والتخزين" name="sc_storage">
+          <group>
+            <group string="التخزين">
+              <field name="needs_refrigeration"/>
+              <field name="storage_temp"
+                     invisible="not needs_refrigeration"
+                     string="درجة الحرارة (°C)"/>
+            </group>
+          </group>
+          <div class="alert alert-info o_form_label_factor" role="alert"
+               invisible="not needs_refrigeration">
+            <i class="fa fa-snowflake-o me-1"/>
+            ملاحظة: يجب أن تكون درجة الحرارة من <strong>2</strong> إلى <strong>8</strong> درجة مئوية
+          </div>
+        </page>
+
+        <!-- ── Tab: بيانات الدواء ── -->
+        <page string="بيانات الدواء" name="sc_drug_data">
+          <group>
+            <group string="متشابهات">
+              <field name="similarity_type" widget="badge"/>
+            </group>
+            <group string="طريقة الإعطاء">
+              <field name="secondary_route" string="طريقة الإعطاء الثانوية"/>
+            </group>
+          </group>
+        </page>
+
+      </notebook>
+    </field>
+  </record>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       product.template — uom_small after uom_id
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="product_template_form_medicine_uom_small" model="ir.ui.view">
+    <field name="name">product.template.form.medicine.uom.small</field>
+    <field name="model">product.template</field>
+    <field name="inherit_id" ref="product.product_template_form_view"/>
+    <field name="arch" type="xml">
+      <field name="uom_id" position="after">
+        <field name="uom_small" string="الوحدة الصغرى"/>
+      </field>
+    </field>
+  </record>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       product.category — is_medicines + smart button
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="product_category_form_medicine" model="ir.ui.view">
+    <field name="name">product.category.form.medicine</field>
+    <field name="model">product.category</field>
+    <field name="inherit_id" ref="product.product_category_form_view"/>
+    <field name="arch" type="xml">
+
+      <!-- Smart button box -->
+      <xpath expr="//form/sheet" position="before">
+        <div class="oe_button_box" name="button_box">
+          <button name="action_view_pharmacy_products" type="object"
+                  class="oe_stat_button" icon="fa-pills"
+                  invisible="not is_medicines">
+            <field name="medicine_product_count" widget="statinfo" string="الأصناف"/>
+          </button>
+        </div>
+      </xpath>
+
+      <!-- is_medicines checkbox inside the form -->
+      <xpath expr="//form/sheet" position="inside">
+        <group string="الصيدلية">
+          <field name="is_medicines" string="أدوية (صيدلية)"/>
+        </group>
+      </xpath>
+
+    </field>
+  </record>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       stock.picking — Q Sant column
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="stock_picking_form_q_sant" model="ir.ui.view">
+    <field name="name">stock.picking.form.q.sant</field>
+    <field name="model">stock.picking</field>
+    <field name="inherit_id" ref="stock.view_picking_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//field[@name='move_ids']//field[@name='product_uom_qty']" position="after">
+        <field name="q_sant" string="Q Sant" optional="show"/>
+      </xpath>
+    </field>
+  </record>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       saycare.usage.type — list + form
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="view_saycare_usage_type_list" model="ir.ui.view">
+    <field name="name">saycare.usage.type.list</field>
+    <field name="model">saycare.usage.type</field>
+    <field name="arch" type="xml">
+      <list string="أنواع الاستخدام" editable="bottom">
+        <field name="name"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="action_saycare_usage_type" model="ir.actions.act_window">
+    <field name="name">أنواع الاستخدام</field>
+    <field name="res_model">saycare.usage.type</field>
+    <field name="view_mode">list</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiling_face">أضف نوع استخدام جديداً</p>
+    </field>
+  </record>
+
+  <menuitem id="menu_saycare_usage_type"
+            name="أنواع الاستخدام"
+            parent="saycare_odoo_19.menu_saycare_config"
+            action="action_saycare_usage_type"
+            sequence="30"/>
+
+</odoo>

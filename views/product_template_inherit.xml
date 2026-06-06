@@ -9,6 +9,7 @@
                 <field name="uom_mediumm"/>
                 <field name="uom_largee"/>
             </field>
+            <!-- uom_small added by saycare_medicine_views.xml -->
         </field>
     </record>
 

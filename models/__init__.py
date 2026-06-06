@@ -13,4 +13,5 @@ from . import (
     saycare_patient_history,
     account_journal_ext,
     account_move_ext,
+    saycare_medicine,
 )
