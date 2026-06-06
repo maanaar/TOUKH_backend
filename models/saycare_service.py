@@ -60,6 +60,7 @@ class ProductTemplate(models.Model):
     uom_mediumm = fields.Many2one('uom.uom', string='الوحدة المتوسطة')
 
     categ_type = fields.Selection(
+        selection=[('services', 'خدمات'), ('procedures', 'إجراءات')],
         related='categ_id.categ_type',
         string='Category Type',
         readonly=True,
