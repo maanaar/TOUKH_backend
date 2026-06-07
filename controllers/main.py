@@ -2267,25 +2267,21 @@ class CrRequisitionCreateController(http.Controller):
                 qty = float(line.get('qty', line.get('quantity', 1)))
                 line_val = {
                     'product_id': product.id,
-                    'qty':        qty,
+                    'quantity':   qty,
                 }
-
-                if line.get('uom_id'):
-                    uom = request.env['uom.uom'].sudo().browse(int(line['uom_id']))
-                    if uom.exists():
-                        line_val['uom_id'] = uom.id
 
                 if line.get('partner_id'):
                     partner = request.env['res.partner'].sudo().browse(int(line['partner_id']))
                     if partner.exists():
-                        line_val['partner_id'] = partner.id
+                        line_val['vendor_ids'] = [(4, partner.id)]
 
-                if line.get('requisition_type'):
-                    line_val['requisition_type'] = line['requisition_type']
+                if line.get('request_action') or line.get('requisition_type'):
+                    val = line.get('request_action') or line.get('requisition_type')
+                    line_val['request_action'] = val
 
                 line_vals_list.append((0, 0, line_val))
 
-            vals['requisition_line_ids'] = line_vals_list
+            vals['requisition_lines'] = line_vals_list
             rec = request.env['material.purchase.requisition'].sudo().create(vals)
 
             return http_response({
@@ -2304,6 +2300,19 @@ class CrRequisitionCreateController(http.Controller):
 
 class CrRequisitionActionController(http.Controller):
 
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/confirm', type='http', auth='user', methods=['POST'], csrf=False)
+    def confirm(self, rec_id, **kw):
+        """Move draft (new) → waiting_department_approval — called when user clicks إرسال للمراجعة."""
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state == 'new':
+                rec.action_confirm()
+            return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
     @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/approve', type='http', auth='user', methods=['POST'], csrf=False)
     def approve(self, rec_id, **kw):
         try:
@@ -2311,16 +2320,11 @@ class CrRequisitionActionController(http.Controller):
             if not rec.exists():
                 return http_response({'error': 'not found'}, 404)
 
-            if rec.state in ('new', 'waiting_department_approval'):
-                if hasattr(rec, 'action_department_approval'):
-                    rec.action_department_approval()
-                else:
-                    rec.write({'state': 'waiting_ir_approval'})
-            elif rec.state == 'waiting_ir_approval':
-                if hasattr(rec, 'action_ir_approval'):
-                    rec.action_ir_approval()
-                else:
-                    rec.write({'state': 'approved'})
+            if rec.state == 'waiting_department_approval':
+                rec.action_dept_approve()
+            elif rec.state == 'new':
+                rec.action_confirm()
+                rec.action_dept_approve()
             else:
                 return http_response({'error': f'cannot approve in state: {rec.state}'}, 400)
 

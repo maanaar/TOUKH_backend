@@ -40,6 +40,22 @@ class EmployeeController(http.Controller):
             })
         return http_response(data)
 
+    @http.route('/api/v1/hr/current-employee', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_current(self, **kw):
+        emp = request.env['hr.employee'].sudo().search(
+            [('user_id', '=', request.env.user.id), ('active', '=', True)], limit=1
+        )
+        if not emp:
+            return http_response({'error': 'no employee linked to current user'}, 404)
+        return http_response({
+            'id':              emp.id,
+            'name':            emp.name,
+            'department_id':   emp.department_id.id if emp.department_id else None,
+            'department_name': emp.department_id.name if emp.department_id else None,
+            'job_title':       emp.job_title or '',
+            'user_id':         emp.user_id.id if emp.user_id else None,
+        })
+
     @http.route('/api/v1/hr/employees', type='http', auth='user', methods=['POST'], csrf=False)
     def create_one(self, **kw):
         try:
