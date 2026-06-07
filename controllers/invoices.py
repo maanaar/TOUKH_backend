@@ -109,51 +109,24 @@ class InvoiceController(http.Controller):
         if not cash_journal:
             return _json({'error': 'no cash/bank journal found'}, 400)
 
-        st_line = request.env['account.bank.statement.line'].sudo().create({
-            'journal_id':  cash_journal.id,
-            'date':        fields.Date.today(),
-            'payment_ref': f'{inv.name or ""} — {amount:.2f} {currency}',
-            'amount':      amount,
-            'partner_id':  inv.partner_id.id if inv.partner_id else False,
-        })
-
-        # Replace the auto-created suspense/outstanding line with an AR line.
-        # This mirrors what the bank rec widget does: rewrite the move lines so
-        # the counterpart is directly on the receivable account (no misc entry).
+        # Use the invoice's AR account directly as the counterpart (skips the
+        # suspense account) — this is the built-in escape hatch in create().
+        # Result: cash debit + AR credit, no suspense entry, no misc operations.
         ar_account = receivable_line[0].account_id
-        cash_account = cash_journal.default_account_id
-        partner_id = inv.partner_id.id if inv.partner_id else False
 
-        st_line.move_id.with_context(
-            force_delete=True,
-            skip_readonly_check=True,
-        ).write({
-            'narration': narration,
-            'line_ids': [
-                (5, 0, 0),
-                (0, 0, {
-                    'sequence': 0,
-                    'name': inv.name or '',
-                    'account_id': cash_account.id,
-                    'partner_id': partner_id,
-                    'debit': amount,
-                    'credit': 0.0,
-                }),
-                (0, 0, {
-                    'sequence': 1,
-                    'name': inv.name or '',
-                    'account_id': ar_account.id,
-                    'partner_id': partner_id,
-                    'debit': 0.0,
-                    'credit': amount,
-                }),
-            ],
+        st_line = request.env['account.bank.statement.line'].sudo().create({
+            'journal_id':             cash_journal.id,
+            'date':                   fields.Date.today(),
+            'payment_ref':            f'{inv.name or ""} — {amount:.2f} {currency}',
+            'amount':                 amount,
+            'partner_id':             inv.partner_id.id if inv.partner_id else False,
+            'narration':              narration,
+            'counterpart_account_id': ar_account.id,
         })
+        # move is auto-posted by statement line create()
 
-        if st_line.move_id.state != 'posted':
-            st_line.move_id.action_post()
-
-        # Reconcile the AR credit line with the invoice's AR debit line
+        # Reconcile the AR credit on the statement move with the AR debit on
+        # the invoice so the invoice is marked as paid
         payment_ar_line = st_line.move_id.line_ids.filtered(
             lambda l: l.account_id == ar_account
         )
