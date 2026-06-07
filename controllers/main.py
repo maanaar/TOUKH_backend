@@ -1430,7 +1430,6 @@ class PickingCreateController(http.Controller):
 
             vals['move_ids'] = move_vals_list
             rec = request.env['stock.picking'].sudo().create(vals)
-            rec.action_confirm()
 
             return http_response({
                 'id':                 rec.id,
