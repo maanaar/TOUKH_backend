@@ -97,25 +97,21 @@ class InvoiceController(http.Controller):
             f'{lines_text}'
         )
 
-        cash_journal = request.env['account.journal'].sudo().search([
-            ('type', '=', 'cash'),
-            ('company_id', '=', inv.company_id.id),
-        ], limit=1)
-        if not cash_journal:
-            cash_journal = request.env['account.journal'].sudo().search([
+        # Use the invoice's own journal so the payment line appears in the
+        # correct journal's bank statement (e.g. نفقة الدولة, نقدي, etc.)
+        pay_journal = inv.journal_id
+        if not pay_journal or pay_journal.type not in ('bank', 'cash'):
+            pay_journal = request.env['account.journal'].sudo().search([
                 ('type', 'in', ['bank', 'cash']),
                 ('company_id', '=', inv.company_id.id),
             ], limit=1)
-        if not cash_journal:
-            return _json({'error': 'no cash/bank journal found'}, 400)
+        if not pay_journal:
+            return _json({'error': 'no bank/cash journal found for this invoice'}, 400)
 
-        # Use the invoice's AR account directly as the counterpart (skips the
-        # suspense account) — this is the built-in escape hatch in create().
-        # Result: cash debit + AR credit, no suspense entry, no misc operations.
         ar_account = receivable_line[0].account_id
 
         st_line = request.env['account.bank.statement.line'].sudo().create({
-            'journal_id':             cash_journal.id,
+            'journal_id':             pay_journal.id,
             'date':                   fields.Date.today(),
             'payment_ref':            f'{inv.name or ""} — {amount:.2f} {currency}',
             'amount':                 amount,
@@ -123,16 +119,14 @@ class InvoiceController(http.Controller):
             'narration':              narration,
             'counterpart_account_id': ar_account.id,
         })
-        # move is auto-posted by statement line create()
+        # move is auto-posted by statement line create(); line appears in
+        # pay_journal's bank statement view immediately
 
-        # Reconcile the AR credit on the statement move with the AR debit on
-        # the invoice so the invoice is marked as paid
+        # Reconcile AR credit (statement) with AR debit (invoice) → marks invoice paid
         payment_ar_line = st_line.move_id.line_ids.filtered(
             lambda l: l.account_id == ar_account
         )
-        request.env['account.move.line'].sudo().with_context(
-            no_exchange_difference=True,
-        )._reconcile_plan([payment_ar_line | receivable_line[0]])
+        (payment_ar_line | receivable_line[0]).reconcile()
 
         inv.invalidate_recordset()
         return _json({
