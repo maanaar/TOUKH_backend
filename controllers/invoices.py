@@ -61,86 +61,33 @@ class InvoiceController(http.Controller):
         if not inv.exists():
             return _json({'error': 'invoice not found'}, 404)
 
-        # confirm first if still draft
         if inv.state == 'draft':
             inv.action_post()
 
-        # Guard: already paid or in-payment — prevents duplicate bank statement lines
-        if inv.payment_state in ('paid', 'in_payment'):
-            return _json({'error': 'invoice already paid'}, 400)
-
-        # Guard: must have an open receivable line before creating anything
-        receivable_line = inv.line_ids.filtered(
-            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
-        )
-        if not receivable_line:
-            return _json({'error': 'no open receivable line found on invoice'}, 400)
-
         amount = float(body.get('amount', inv.amount_residual))
-        if amount <= 0:
-            return _json({'error': 'amount must be greater than zero'}, 400)
-
         currency = inv.currency_id.name or 'EGP'
 
-        # Build narration with full service breakdown
-        service_lines = inv.invoice_line_ids.filtered(
-            lambda l: l.display_type in ('product', False, '')
-        )
-        lines_text = '\n'.join(
-            f'• {l.name}: {l.price_unit:.2f} × {l.quantity:.0f} = {l.price_total:.2f} {currency}'
-            for l in service_lines
-        )
-        narration = (
-            f'فاتورة: {inv.name or ""}\n'
-            f'الإجمالي: {inv.amount_total:.2f} {currency}\n'
-            f'المبلغ المدفوع: {amount:.2f} {currency}\n'
-            f'{lines_text}'
-        )
-
-        # Use the invoice's own journal so the line appears in the correct
-        # journal's bank statement view (e.g. نفقة الدولة, نقدي, etc.)
-        pay_journal = inv.journal_id
-        if not pay_journal or pay_journal.type not in ('bank', 'cash'):
+        # Use the invoice's own journal (نفقة الدولة, نقدي, etc.)
+        # so the line appears under the correct journal in bank matching
+        pay_journal = inv.journal_id if inv.journal_id.type in ('bank', 'cash') else None
+        if not pay_journal:
             pay_journal = request.env['account.journal'].sudo().search([
-                ('type', 'in', ['bank', 'cash']),
-                ('company_id', '=', inv.company_id.id),
+                ('type', '=', 'cash'), ('company_id', '=', inv.company_id.id),
             ], limit=1)
         if not pay_journal:
-            return _json({'error': 'no bank/cash journal found for this invoice'}, 400)
+            pay_journal = request.env['account.journal'].sudo().search([
+                ('type', 'in', ['bank', 'cash']), ('company_id', '=', inv.company_id.id),
+            ], limit=1)
+        if not pay_journal:
+            return _json({'error': 'no cash/bank journal found'}, 400)
 
-        ar_account = receivable_line[0].account_id
-
-        # Create the bank statement line — auto-posted by Odoo, appears in
-        # bank matching immediately under pay_journal
-        st_line = request.env['account.bank.statement.line'].sudo().create({
+        request.env['account.bank.statement.line'].sudo().create({
             'journal_id':  pay_journal.id,
             'date':        fields.Date.today(),
             'payment_ref': f'{inv.name or ""} — {amount:.2f} {currency}',
             'amount':      amount,
             'partner_id':  inv.partner_id.id if inv.partner_id else False,
-            'narration':   narration,
         })
-
-        # Reconcile: replace the auto-created suspense line with the AR line
-        # so the invoice is marked paid and no misc operations remain
-        try:
-            with request.env.cr.savepoint():
-                suspense_line = st_line.move_id.line_ids.filtered(
-                    lambda l: l.account_id == pay_journal.suspense_account_id
-                )
-                if suspense_line:
-                    suspense_line.with_context(
-                        force_delete=True,
-                        skip_readonly_check=True,
-                        skip_account_move_synchronization=True,
-                    ).write({
-                        'account_id': ar_account.id,
-                    })
-                    st_line.move_id.line_ids.filtered(
-                        lambda l: l.account_id == ar_account
-                    ).reconcile()
-        except Exception:
-            pass  # line already visible in bank matching; reconcile failed silently
 
         inv.invalidate_recordset()
         return _json({
