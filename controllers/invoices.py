@@ -81,9 +81,7 @@ class InvoiceController(http.Controller):
         if not cash_journal:
             return _json({'error': 'no cash/bank journal found'}, 400)
 
-        # Create bank statement line — adds to the cash journal balance.
-        # No reconciliation; the entry appears in Bank Matching for manual review.
-        request.env['account.bank.statement.line'].sudo().create({
+        st_line = request.env['account.bank.statement.line'].sudo().create({
             'journal_id':  cash_journal.id,
             'date':        fields.Date.today(),
             'payment_ref': f'{inv.name or ""} — الرصيد: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
@@ -91,6 +89,14 @@ class InvoiceController(http.Controller):
             'partner_id':  inv.partner_id.id if inv.partner_id else False,
             'narration':   f'رقم الفاتورة: {inv.name or ""}\nالرصيد قبل الدفع: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
         })
+
+        # Reconcile with the invoice receivable line to update journal balance
+        # and eliminate the suspense/misc entry
+        receivable_line = inv.line_ids.filtered(
+            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+        )
+        if receivable_line:
+            st_line.reconcile([{'id': receivable_line[0].id}])
 
         inv.invalidate_recordset()
         return _json({
