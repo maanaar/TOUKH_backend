@@ -67,46 +67,29 @@ class InvoiceController(http.Controller):
 
         amount = float(body.get('amount', inv.amount_residual))
 
-        # Prefer cash journal — cash entries are reconciled and don't appear in Bank Matching
-        journal = request.env['account.journal'].sudo().search([
+        # Use cash journal → creates a bank statement line that appears in
+        # Bank Matching with the invoice linked (reconciled).
+        cash_journal = request.env['account.journal'].sudo().search([
             ('type', '=', 'cash'),
             ('company_id', '=', inv.company_id.id),
         ], limit=1)
-        if not journal:
-            journal = request.env['account.journal'].sudo().search([
+        if not cash_journal:
+            cash_journal = request.env['account.journal'].sudo().search([
                 ('type', 'in', ['bank', 'cash']),
                 ('company_id', '=', inv.company_id.id),
             ], limit=1)
-        if not journal:
+        if not cash_journal:
             return _json({'error': 'no cash/bank journal found'}, 400)
 
-        # Create payment directly and reconcile with the invoice so it never
-        # appears as an unreconciled entry in Odoo's "Bank Matching" widget.
-        payment = request.env['account.payment'].sudo().create({
-            'payment_type':  'inbound',
-            'partner_type':  'customer',
-            'partner_id':    inv.partner_id.id if inv.partner_id else False,
-            'amount':        amount,
-            'journal_id':    journal.id,
-            'date':          fields.Date.today(),
-            'ref':           inv.name or '',
+        # Create bank statement line — adds to the cash journal balance.
+        # No reconciliation; the entry appears in Bank Matching for manual review.
+        request.env['account.bank.statement.line'].sudo().create({
+            'journal_id':  cash_journal.id,
+            'date':        fields.Date.today(),
+            'payment_ref': inv.name or '',
+            'amount':      amount,
+            'partner_id':  inv.partner_id.id if inv.partner_id else False,
         })
-        payment.action_post()
-
-        # Reconcile payment's receivable line with the invoice's receivable line
-        receivable_account = (
-            inv.partner_id.property_account_receivable_id
-            if inv.partner_id
-            else request.env['account.account'].sudo().search(
-                [('account_type', '=', 'asset_receivable')], limit=1
-            )
-        )
-        if receivable_account:
-            lines_to_reconcile = (inv.line_ids | payment.move_id.line_ids).filtered(
-                lambda l: l.account_id == receivable_account and not l.reconciled
-            )
-            if lines_to_reconcile:
-                lines_to_reconcile.reconcile()
 
         inv.invalidate_recordset()
         return _json({
