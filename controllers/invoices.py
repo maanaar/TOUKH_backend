@@ -65,22 +65,37 @@ class InvoiceController(http.Controller):
         if inv.state == 'draft':
             inv.action_post()
 
-        # Guard: already fully paid
-        if inv.payment_state == 'paid':
+        # Guard: already paid or in-payment — prevents duplicate bank statement lines
+        if inv.payment_state in ('paid', 'in_payment'):
             return _json({'error': 'invoice already paid'}, 400)
 
-        amount = float(body.get('amount', inv.amount_residual))
-
-        # Guard: zero or negative amount would create a dangling suspense entry
-        if amount <= 0:
-            return _json({'error': 'amount must be greater than zero'}, 400)
-
-        # Guard: must have an open receivable line to reconcile against
+        # Guard: must have an open receivable line before creating anything
         receivable_line = inv.line_ids.filtered(
             lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
         )
         if not receivable_line:
             return _json({'error': 'no open receivable line found on invoice'}, 400)
+
+        amount = float(body.get('amount', inv.amount_residual))
+        if amount <= 0:
+            return _json({'error': 'amount must be greater than zero'}, 400)
+
+        currency = inv.currency_id.name or 'EGP'
+
+        # Build narration with full service breakdown
+        service_lines = inv.invoice_line_ids.filtered(
+            lambda l: l.display_type in ('product', False, '')
+        )
+        lines_text = '\n'.join(
+            f'• {l.name}: {l.price_unit:.2f} × {l.quantity:.0f} = {l.price_total:.2f} {currency}'
+            for l in service_lines
+        )
+        narration = (
+            f'فاتورة: {inv.name or ""}\n'
+            f'الإجمالي: {inv.amount_total:.2f} {currency}\n'
+            f'المبلغ المدفوع: {amount:.2f} {currency}\n'
+            f'{lines_text}'
+        )
 
         cash_journal = request.env['account.journal'].sudo().search([
             ('type', '=', 'cash'),
@@ -94,7 +109,7 @@ class InvoiceController(http.Controller):
         if not cash_journal:
             return _json({'error': 'no cash/bank journal found'}, 400)
 
-        # Find or create an open bank statement for this journal to group the line
+        # Find or create an open bank statement for this journal
         statement = request.env['account.bank.statement'].sudo().search([
             ('journal_id', '=', cash_journal.id),
             ('state', '!=', 'confirm'),
@@ -109,16 +124,17 @@ class InvoiceController(http.Controller):
             'statement_id': statement.id,
             'journal_id':   cash_journal.id,
             'date':         fields.Date.today(),
-            'payment_ref':  f'{inv.name or ""} — {amount} {inv.currency_id.name or "EGP"}',
+            'payment_ref':  f'{inv.name or ""} — {amount:.2f} {currency}',
             'amount':       amount,
             'partner_id':   inv.partner_id.id if inv.partner_id else False,
+            'narration':    narration,
         })
 
-        # Post the underlying journal entry so it affects the journal balance
+        # Post the journal entry so it hits the journal balance
         if st_line.move_id and st_line.move_id.state != 'posted':
             st_line.move_id.action_post()
 
-        # Reconcile immediately — clears suspense entry, updates balance, marks invoice paid
+        # Reconcile immediately — clears suspense entry, marks invoice paid
         st_line.reconcile([{'id': receivable_line[0].id}])
 
         inv.invalidate_recordset()
