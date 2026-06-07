@@ -109,33 +109,57 @@ class InvoiceController(http.Controller):
         if not cash_journal:
             return _json({'error': 'no cash/bank journal found'}, 400)
 
-        # Find or create an open bank statement for this journal
-        statement = request.env['account.bank.statement'].sudo().search([
-            ('journal_id', '=', cash_journal.id),
-            ('state', '!=', 'confirm'),
-        ], order='id desc', limit=1)
-        if not statement:
-            statement = request.env['account.bank.statement'].sudo().create({
-                'journal_id': cash_journal.id,
-                'name': str(fields.Date.today()),
-            })
-
         st_line = request.env['account.bank.statement.line'].sudo().create({
-            'statement_id': statement.id,
-            'journal_id':   cash_journal.id,
-            'date':         fields.Date.today(),
-            'payment_ref':  f'{inv.name or ""} — {amount:.2f} {currency}',
-            'amount':       amount,
-            'partner_id':   inv.partner_id.id if inv.partner_id else False,
-            'narration':    narration,
+            'journal_id':  cash_journal.id,
+            'date':        fields.Date.today(),
+            'payment_ref': f'{inv.name or ""} — {amount:.2f} {currency}',
+            'amount':      amount,
+            'partner_id':  inv.partner_id.id if inv.partner_id else False,
         })
 
-        # Post the journal entry so it hits the journal balance
-        if st_line.move_id and st_line.move_id.state != 'posted':
+        # Replace the auto-created suspense/outstanding line with an AR line.
+        # This mirrors what the bank rec widget does: rewrite the move lines so
+        # the counterpart is directly on the receivable account (no misc entry).
+        ar_account = receivable_line[0].account_id
+        cash_account = cash_journal.default_account_id
+        partner_id = inv.partner_id.id if inv.partner_id else False
+
+        st_line.move_id.with_context(
+            force_delete=True,
+            skip_readonly_check=True,
+        ).write({
+            'narration': narration,
+            'line_ids': [
+                (5, 0, 0),
+                (0, 0, {
+                    'sequence': 0,
+                    'name': inv.name or '',
+                    'account_id': cash_account.id,
+                    'partner_id': partner_id,
+                    'debit': amount,
+                    'credit': 0.0,
+                }),
+                (0, 0, {
+                    'sequence': 1,
+                    'name': inv.name or '',
+                    'account_id': ar_account.id,
+                    'partner_id': partner_id,
+                    'debit': 0.0,
+                    'credit': amount,
+                }),
+            ],
+        })
+
+        if st_line.move_id.state != 'posted':
             st_line.move_id.action_post()
 
-        # Reconcile immediately — clears suspense entry, marks invoice paid
-        st_line.reconcile([{'id': receivable_line[0].id}])
+        # Reconcile the AR credit line with the invoice's AR debit line
+        payment_ar_line = st_line.move_id.line_ids.filtered(
+            lambda l: l.account_id == ar_account
+        )
+        request.env['account.move.line'].sudo().with_context(
+            no_exchange_difference=True,
+        )._reconcile_plan([payment_ar_line | receivable_line[0]])
 
         inv.invalidate_recordset()
         return _json({
