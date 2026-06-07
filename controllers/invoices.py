@@ -81,7 +81,19 @@ class InvoiceController(http.Controller):
         if not cash_journal:
             return _json({'error': 'no cash/bank journal found'}, 400)
 
+        # Find or create an open bank statement for this journal to group the line
+        statement = request.env['account.bank.statement'].sudo().search([
+            ('journal_id', '=', cash_journal.id),
+            ('state', '!=', 'confirm'),
+        ], order='id desc', limit=1)
+        if not statement:
+            statement = request.env['account.bank.statement'].sudo().create({
+                'journal_id': cash_journal.id,
+                'name': str(fields.Date.today()),
+            })
+
         st_line = request.env['account.bank.statement.line'].sudo().create({
+            'statement_id': statement.id,
             'journal_id':  cash_journal.id,
             'date':        fields.Date.today(),
             'payment_ref': f'{inv.name or ""} — الرصيد: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
