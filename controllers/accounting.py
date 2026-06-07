@@ -131,6 +131,7 @@ class AccountingDashboardController(http.Controller):
             'narration':  body.get('narration', ''),
             'line_ids':   line_vals,
         })
+        move.action_post()
         return _json(_move_dict(move), 201)
 
     # ── post (confirm) journal entry ──────────────────────────────────────────

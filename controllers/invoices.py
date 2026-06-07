@@ -65,13 +65,18 @@ class InvoiceController(http.Controller):
         if inv.state == 'draft':
             inv.action_post()
 
-        amount        = float(body.get('amount', inv.amount_residual))
-        payment_method = body.get('payment_method', 'cash')  # cash | bank | other
+        amount = float(body.get('amount', inv.amount_residual))
 
+        # Prefer cash journal — bank journals open "Bank Matching" in Odoo UI
         journal = request.env['account.journal'].sudo().search([
-            ('type', 'in', ['cash', 'bank']),
+            ('type', '=', 'cash'),
             ('company_id', '=', inv.company_id.id),
         ], limit=1)
+        if not journal:
+            journal = request.env['account.journal'].sudo().search([
+                ('type', '=', 'bank'),
+                ('company_id', '=', inv.company_id.id),
+            ], limit=1)
         if not journal:
             return _json({'error': 'no cash/bank journal found'}, 400)
 
