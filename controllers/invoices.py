@@ -86,9 +86,10 @@ class InvoiceController(http.Controller):
         request.env['account.bank.statement.line'].sudo().create({
             'journal_id':  cash_journal.id,
             'date':        fields.Date.today(),
-            'payment_ref': inv.name or '',
+            'payment_ref': f'{inv.name or ""} — الرصيد: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
             'amount':      amount,
             'partner_id':  inv.partner_id.id if inv.partner_id else False,
+            'narration':   f'رقم الفاتورة: {inv.name or ""}\nالرصيد قبل الدفع: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
         })
 
         inv.invalidate_recordset()
