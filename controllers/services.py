@@ -91,6 +91,18 @@ class ServiceController(http.Controller):
             results = [_service_dict(s) for s in service_records]
             existing_names = {r['name'] for r in results}
 
+        # ── 1b. global saycare.service records (no specialty) ─────────────────
+        # Always include services with no specialty_id when fetching for a specific specialty
+        if specialty_id:
+            global_svcs = env['saycare.service'].sudo().search([
+                ('active', '=', True),
+                ('specialty_id', '=', False),
+            ])
+            for s in global_svcs:
+                if s.name not in existing_names:
+                    results.append(_service_dict(s))
+                    existing_names.add(s.name)
+
         # ── 2. products from the specialty's linked product category ──────────
         if specialty_id:
             try:

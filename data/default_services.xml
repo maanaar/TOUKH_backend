@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="0">
+
+    <!-- Product category for global clinic consultation fees -->
+    <record id="product_categ_clinic_fees" model="product.category">
+      <field name="name">خدمات عيادة عامة</field>
+    </record>
+
+    <!-- Products (manageable from Odoo Products list) -->
+    <record id="product_kashf_consultant" model="product.template">
+      <field name="name">كشف طبيب استشاري</field>
+      <field name="type">service</field>
+      <field name="sale_ok">True</field>
+      <field name="purchase_ok">False</field>
+      <field name="list_price">0.0</field>
+      <field name="categ_id" ref="product_categ_clinic_fees"/>
+      <field name="default_code">KASHF-CONS</field>
+    </record>
+
+    <record id="product_kashf_specialist" model="product.template">
+      <field name="name">كشف طبيب أخصائي</field>
+      <field name="type">service</field>
+      <field name="sale_ok">True</field>
+      <field name="purchase_ok">False</field>
+      <field name="list_price">0.0</field>
+      <field name="categ_id" ref="product_categ_clinic_fees"/>
+      <field name="default_code">KASHF-SPEC</field>
+    </record>
+
+    <!-- saycare.service records linked to those products (gives them numeric IDs
+         so they can be attached to visits/invoices via the React reception form) -->
+    <record id="service_kashf_consultant" model="saycare.service">
+      <field name="name">كشف طبيب استشاري</field>
+      <field name="code">KASHF-CONS</field>
+      <field name="product_id" ref="product_kashf_consultant"/>
+      <field name="price">0.0</field>
+      <field name="insurance_price">0.0</field>
+      <field name="active">True</field>
+    </record>
+
+    <record id="service_kashf_specialist" model="saycare.service">
+      <field name="name">كشف طبيب أخصائي</field>
+      <field name="code">KASHF-SPEC</field>
+      <field name="product_id" ref="product_kashf_specialist"/>
+      <field name="price">0.0</field>
+      <field name="insurance_price">0.0</field>
+      <field name="active">True</field>
+    </record>
+
+  </data>
+</odoo>

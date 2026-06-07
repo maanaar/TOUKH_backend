@@ -34,6 +34,12 @@ class EmployeeController(http.Controller):
                 'work_phone':      rec.work_phone or '',
                 'user_id':         rec.user_id.id if rec.user_id else None,
                 'user_name':       rec.user_id.name if rec.user_id else None,
+                'user_login':      rec.user_id.login if rec.user_id else None,
+                'user_active':     rec.user_id.active if rec.user_id else None,
+                'medical_role':    rec.medical_role or '',
+                'doctor_grade':    rec.doctor_grade or '',
+                'specialty_id':    rec.specialty_id.id if rec.specialty_id else None,
+                'specialty_name':  rec.specialty_id.name if rec.specialty_id else '',
                 'company_id':      rec.company_id.id if rec.company_id else None,
                 'company_name':    rec.company_id.name if rec.company_id else None,
                 'image_url':       '/web/image/hr.employee/%d/image_1920' % rec.id if rec.image_1920 else '',
@@ -56,6 +62,76 @@ class EmployeeController(http.Controller):
             'user_id':         emp.user_id.id if emp.user_id else None,
         })
 
+    @http.route('/api/v1/hr/employees/<int:employee_id>/create-user', type='http', auth='user', methods=['POST'], csrf=False)
+    def create_employee_user(self, employee_id, **kw):
+        emp = request.env['hr.employee'].sudo().browse(employee_id)
+        if not emp.exists():
+            return http_response({'error': 'employee not found'}, 404)
+        if emp.user_id:
+            return http_response({
+                'error': 'employee already has a user account',
+                'user_id': emp.user_id.id,
+                'user_login': emp.user_id.login,
+            }, 409)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except Exception:
+            return http_response({'error': 'invalid JSON'}, 400)
+        email    = (body.get('email') or '').strip().lower()
+        password = body.get('password', '')
+        if not email:
+            return http_response({'error': 'email is required'}, 400)
+        if not password:
+            return http_response({'error': 'password is required'}, 400)
+        existing = request.env['res.users'].sudo().search([('login', '=', email)], limit=1)
+        if existing:
+            return http_response({'error': 'a user with this email already exists'}, 409)
+        env  = request.env
+        user = env['res.users'].sudo().with_context(no_reset_password=True).create({
+            'name':  emp.name,
+            'login': email,
+            'email': email,
+        })
+        user.sudo().write({'password': password})
+        emp.sudo().write({'user_id': user.id})
+        return http_response({
+            'ok':          True,
+            'user_id':     user.id,
+            'user_login':  user.login,
+            'user_name':   user.name,
+            'user_active': user.active,
+        }, 201)
+
+    @http.route('/api/v1/hr/employees/<int:employee_id>/user', type='http', auth='user', methods=['PATCH'], csrf=False)
+    def update_employee_user(self, employee_id, **kw):
+        emp = request.env['hr.employee'].sudo().browse(employee_id)
+        if not emp.exists() or not emp.user_id:
+            return http_response({'error': 'employee or linked user not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except Exception:
+            return http_response({'error': 'invalid JSON'}, 400)
+        user = emp.user_id.sudo()
+        if body.get('password'):
+            user.write({'password': body['password']})
+        if 'active' in body:
+            user.write({'active': bool(body['active'])})
+        return http_response({
+            'ok':          True,
+            'user_id':     emp.user_id.id,
+            'user_active': emp.user_id.active,
+        })
+
+    @http.route('/api/v1/hr/employees/<int:employee_id>/user', type='http', auth='user', methods=['DELETE'], csrf=False)
+    def delete_employee_user(self, employee_id, **kw):
+        emp = request.env['hr.employee'].sudo().browse(employee_id)
+        if not emp.exists() or not emp.user_id:
+            return http_response({'error': 'employee or linked user not found'}, 404)
+        user = emp.user_id.sudo()
+        emp.sudo().write({'user_id': False})
+        user.write({'active': False})
+        return http_response({'ok': True})
+
     @http.route('/api/v1/hr/employees', type='http', auth='user', methods=['POST'], csrf=False)
     def create_one(self, **kw):
         try:
@@ -66,6 +142,9 @@ class EmployeeController(http.Controller):
         name = (body.get('name') or '').strip()
         if not name:
             return http_response({'error': 'name is required'}, 400)
+
+        VALID_ROLES  = ('doctor', 'nurse', 'receptionist', 'pharmacist', 'lab_tech', 'rad_tech')
+        VALID_GRADES = ('consultant', 'specialist')
 
         vals = {'name': name}
         if body.get('job_id'):
@@ -78,6 +157,12 @@ class EmployeeController(http.Controller):
             vals['work_email'] = str(body['work_email'])
         if body.get('work_phone'):
             vals['work_phone'] = str(body['work_phone'])
+        if body.get('medical_role') in VALID_ROLES:
+            vals['medical_role'] = body['medical_role']
+        if body.get('doctor_grade') in VALID_GRADES:
+            vals['doctor_grade'] = body['doctor_grade']
+        if body.get('specialty_id'):
+            vals['specialty_id'] = int(body['specialty_id'])
 
         rec = request.env['hr.employee'].sudo().create(vals)
         return http_response({
@@ -90,6 +175,14 @@ class EmployeeController(http.Controller):
             'department_name': rec.department_id.name if rec.department_id else None,
             'work_email':      rec.work_email or '',
             'work_phone':      rec.work_phone or '',
+            'medical_role':    rec.medical_role or '',
+            'doctor_grade':    rec.doctor_grade or '',
+            'specialty_id':    rec.specialty_id.id if rec.specialty_id else None,
+            'specialty_name':  rec.specialty_id.name if rec.specialty_id else '',
+            'user_id':         None,
+            'user_name':       None,
+            'user_login':      None,
+            'user_active':     None,
             'active':          True,
         })
 

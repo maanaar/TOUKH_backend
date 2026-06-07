@@ -24,6 +24,7 @@ def _doctor_summary(e):
         'name':           e.name or '',
         'specialty_id':   e.specialty_id.id if e.specialty_id else None,
         'specialty_name': e.specialty_id.name if e.specialty_id else '',
+        'doctor_grade':   e.doctor_grade or '',
         'license_number': e.license_number or '',
         'job_title':      e.job_title or '',
         'work_email':     e.work_email or '',

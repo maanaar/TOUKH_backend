@@ -39,6 +39,7 @@
         'views/account_move_inherit.xml',
         'views/saycare_medicine_views.xml',
         'data/account_journals.xml',
+        'data/default_services.xml',
     ],
     'installable': True,
     'application': False,

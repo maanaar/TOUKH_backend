@@ -11,6 +11,8 @@
         <group string="بيانات طبية" name="saycare_medical">
           <group>
             <field name="medical_role"   string="الدور الطبي"/>
+            <field name="doctor_grade"   string="درجة الطبيب"
+                   invisible="medical_role != 'doctor'"/>
             <field name="specialty_id"   string="العيادة / التخصص"
                    domain="[('active','=',True)]"/>
             <field name="license_number" string="رقم الترخيص الطبي"/>

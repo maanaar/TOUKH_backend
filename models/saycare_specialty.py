@@ -115,5 +115,10 @@ class HrEmployeeMedical(models.Model):
         ('rad_tech',      'أشعة'),
     ], string='Medical Role')
 
+    doctor_grade = fields.Selection([
+        ('consultant', 'استشاري'),
+        ('specialist', 'أخصائي'),
+    ], string='درجة الطبيب')
+
     specialty_id    = fields.Many2one('saycare.specialty', string='Specialty')
     license_number  = fields.Char(string='Medical License No.')
