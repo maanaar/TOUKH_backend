@@ -90,8 +90,11 @@ class InvoiceController(http.Controller):
             'narration':   f'رقم الفاتورة: {inv.name or ""}\nالرصيد قبل الدفع: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
         })
 
-        # Reconcile with the invoice receivable line to update journal balance
-        # and eliminate the suspense/misc entry
+        # Post the underlying journal entry so it affects the journal balance
+        if st_line.move_id and st_line.move_id.state != 'posted':
+            st_line.move_id.action_post()
+
+        # Reconcile with the invoice receivable line to eliminate suspense entry
         receivable_line = inv.line_ids.filtered(
             lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
         )
