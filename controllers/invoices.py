@@ -65,10 +65,23 @@ class InvoiceController(http.Controller):
         if inv.state == 'draft':
             inv.action_post()
 
+        # Guard: already fully paid
+        if inv.payment_state == 'paid':
+            return _json({'error': 'invoice already paid'}, 400)
+
         amount = float(body.get('amount', inv.amount_residual))
 
-        # Use cash journal → creates a bank statement line that appears in
-        # Bank Matching with the invoice linked (reconciled).
+        # Guard: zero or negative amount would create a dangling suspense entry
+        if amount <= 0:
+            return _json({'error': 'amount must be greater than zero'}, 400)
+
+        # Guard: must have an open receivable line to reconcile against
+        receivable_line = inv.line_ids.filtered(
+            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+        )
+        if not receivable_line:
+            return _json({'error': 'no open receivable line found on invoice'}, 400)
+
         cash_journal = request.env['account.journal'].sudo().search([
             ('type', '=', 'cash'),
             ('company_id', '=', inv.company_id.id),
@@ -94,24 +107,19 @@ class InvoiceController(http.Controller):
 
         st_line = request.env['account.bank.statement.line'].sudo().create({
             'statement_id': statement.id,
-            'journal_id':  cash_journal.id,
-            'date':        fields.Date.today(),
-            'payment_ref': f'{inv.name or ""} — الرصيد: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
-            'amount':      amount,
-            'partner_id':  inv.partner_id.id if inv.partner_id else False,
-            'narration':   f'رقم الفاتورة: {inv.name or ""}\nالرصيد قبل الدفع: {inv.amount_residual} {inv.currency_id.name if inv.currency_id else "EGP"}',
+            'journal_id':   cash_journal.id,
+            'date':         fields.Date.today(),
+            'payment_ref':  f'{inv.name or ""} — {amount} {inv.currency_id.name or "EGP"}',
+            'amount':       amount,
+            'partner_id':   inv.partner_id.id if inv.partner_id else False,
         })
 
         # Post the underlying journal entry so it affects the journal balance
         if st_line.move_id and st_line.move_id.state != 'posted':
             st_line.move_id.action_post()
 
-        # Reconcile with the invoice receivable line to eliminate suspense entry
-        receivable_line = inv.line_ids.filtered(
-            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
-        )
-        if receivable_line:
-            st_line.reconcile([{'id': receivable_line[0].id}])
+        # Reconcile immediately — clears suspense entry, updates balance, marks invoice paid
+        st_line.reconcile([{'id': receivable_line[0].id}])
 
         inv.invalidate_recordset()
         return _json({
