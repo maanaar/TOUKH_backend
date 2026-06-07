@@ -1069,16 +1069,11 @@ class RequisitionCreateController(http.Controller):
                     'requisition_type': req_type,
                 }
 
-                # partner required for purchase_order
-                if req_type == 'purchase_order':
-                    if not line.get('partner_id'):
-                        return http_response(
-                            {'error': f'lines[{i}]: partner_id is required when requisition_type is purchase_order'}, 400
-                        )
+                # partner optional — attach if provided
+                if line.get('partner_id'):
                     partner = request.env['res.partner'].sudo().browse(int(line['partner_id']))
-                    if not partner.exists():
-                        return http_response({'error': f'lines[{i}]: partner_id not found'}, 400)
-                    line_val['partner_id'] = partner.id
+                    if partner.exists():
+                        line_val['partner_id'] = partner.id
 
                 line_vals_list.append((0, 0, line_val))
 

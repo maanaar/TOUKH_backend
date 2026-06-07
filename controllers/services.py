@@ -68,23 +68,28 @@ class ServiceController(http.Controller):
         env = request.env
 
         # ── 1. saycare.service records ────────────────────────────────────────
-        domain = [('active', '=', True)]
-        if specialty_id:
-            try:
-                domain.append(('specialty_id', '=', int(specialty_id)))
-            except (ValueError, TypeError):
-                spec = env['saycare.specialty'].sudo().search(
-                    [('name', '=', specialty_id)], limit=1
-                )
-                if spec:
-                    domain.append(('specialty_id', '=', spec.id))
-                else:
-                    return _json([])
-        if visit_type:
-            domain.append(('visit_type', '=', visit_type))
-        service_records = env['saycare.service'].sudo().search(domain)
-        results = [_service_dict(s) for s in service_records]
-        existing_names = {r['name'] for r in results}
+        # Skip generic service records when categ_keyword is the only filter
+        # (lab/rad use categ_keyword without specialty_id — only category products wanted)
+        results = []
+        existing_names = set()
+        if not (categ_keyword and not specialty_id):
+            domain = [('active', '=', True)]
+            if specialty_id:
+                try:
+                    domain.append(('specialty_id', '=', int(specialty_id)))
+                except (ValueError, TypeError):
+                    spec = env['saycare.specialty'].sudo().search(
+                        [('name', '=', specialty_id)], limit=1
+                    )
+                    if spec:
+                        domain.append(('specialty_id', '=', spec.id))
+                    else:
+                        return _json([])
+            if visit_type:
+                domain.append(('visit_type', '=', visit_type))
+            service_records = env['saycare.service'].sudo().search(domain)
+            results = [_service_dict(s) for s in service_records]
+            existing_names = {r['name'] for r in results}
 
         # ── 2. products from the specialty's linked product category ──────────
         if specialty_id:
