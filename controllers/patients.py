@@ -80,6 +80,7 @@ class PatientController(http.Controller):
                                      ('cash', 'state', 'consultation', 'takaful', 'insurance', 'contract', 'moh', 'staff')),
             'insurance_company': body.get('insurance_company', '') or '',
             'contract_entity':   body.get('contract_entity', '') or '',
+            'blood_type':        sel('blood_type', False, ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
         }
         for k, v in custom.items():
             if k in pf:
@@ -155,6 +156,7 @@ class PatientController(http.Controller):
             'phone', 'home_phone', 'occupation',
             'governorate', 'city', 'street', 'dob', 'gender',
             'financial_class', 'insurance_company', 'contract_entity',
+            'blood_type',
         ]
         vals = {k: body[k] for k in allowed if k in body}
         name_parts = [

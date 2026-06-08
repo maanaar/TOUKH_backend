@@ -25,6 +25,7 @@ def _patient_dict(p):
         'id_number':         p.id_number or '',
         'dob':               str(p.dob) if p.dob else None,
         'gender':            p.gender or '',
+        'blood_type':        p.blood_type or '',
         'mobile':            p.phone or '',
         'home_phone':        p.home_phone or '',
         'phone':             p.phone or '',

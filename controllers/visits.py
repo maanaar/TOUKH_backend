@@ -174,6 +174,45 @@ class VisitController(http.Controller):
             return _json({'error': 'visit not found'}, 404)
         return _json(_visit_dict(v, full=True))
 
+    @http.route('/saycare/api/visit/<int:visit_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update_services(self, visit_id, **kw):
+        """Update service_ids on an existing visit and regenerate its invoice."""
+        v = request.env['saycare.visit'].sudo().browse(visit_id)
+        if not v.exists():
+            return _json({'error': 'visit not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except json.JSONDecodeError:
+            return _json({'error': 'invalid JSON'}, 400)
+
+        service_ids = body.get('service_ids', [])
+        v.write({'service_ids': [(6, 0, service_ids)]})
+
+        # Cancel + delete old invoice so a fresh one can be created
+        old_inv = v.invoice_id
+        if old_inv and old_inv.exists():
+            try:
+                with request.env.cr.savepoint():
+                    if old_inv.state == 'posted':
+                        old_inv.button_cancel()
+                    old_inv.unlink()
+                    v.write({'invoice_id': False})
+            except Exception:
+                pass
+
+        invoice_id = None
+        try:
+            with request.env.cr.savepoint():
+                invoice_id = _create_visit_invoice(v)
+                if invoice_id:
+                    v.write({'invoice_id': invoice_id})
+        except Exception:
+            pass
+
+        result = _visit_dict(v)
+        result['invoice_id'] = invoice_id
+        return _json(result, 200)
+
     @http.route('/saycare/api/visit/<int:visit_id>/state', type='http', auth='user', methods=['POST'], csrf=False)
     def change_state(self, visit_id, **kw):
         v = request.env['saycare.visit'].sudo().browse(visit_id)
@@ -436,15 +475,12 @@ def _create_visit_invoice(visit):
         'narration':        f'زيارة {visit.name} — {visit_type_label} — {financial_label}',
     })
 
-    # Post invoice (creates journal entries) only when there is a real amount
-    total = sum(line[2].get('price_unit', 0) * line[2].get('quantity', 1)
-                for line in lines if isinstance(line, tuple))
-    if total > 0:
-        try:
-            with env.cr.savepoint():
-                move.action_post()
-        except Exception:
-            return move.id
+    # Post invoice unconditionally (zero-amount invoices are valid in Odoo)
+    try:
+        with env.cr.savepoint():
+            move.action_post()
+    except Exception:
+        return move.id  # return draft id if posting fails — caller can retry
 
         # ── Register immediate payment for cash / takaful → خزنة ─────────────
         if fin_class in IMMEDIATE_PAYMENT_CLASSES:
