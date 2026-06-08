@@ -49,6 +49,7 @@ def _visit_dict(v, full=False):
             'insurance_price': s.insurance_price,
             'visit_type':      s.visit_type or '',
         } for s in v.service_ids],
+        'invoice_id':      v.invoice_id.id if v.invoice_id else None,
         'total_price':     v.total_price,
         'insurance_share': v.insurance_share,
         'patient_share':   v.patient_share,
@@ -173,6 +174,31 @@ class VisitController(http.Controller):
         if not v.exists():
             return _json({'error': 'visit not found'}, 404)
         return _json(_visit_dict(v, full=True))
+
+    @http.route('/saycare/api/visit/<int:visit_id>/ensure_invoice', type='http', auth='user', methods=['POST'], csrf=False)
+    def ensure_invoice(self, visit_id, **kw):
+        """Get or create an invoice for this visit. Returns invoice_id (may be None if no journal found)."""
+        v = request.env['saycare.visit'].sudo().browse(visit_id)
+        if not v.exists():
+            return _json({'error': 'visit not found'}, 404)
+
+        invoice_id = v.invoice_id.id if (v.invoice_id and v.invoice_id.exists()) else None
+
+        if not invoice_id:
+            try:
+                with request.env.cr.savepoint():
+                    invoice_id = _create_visit_invoice(v)
+                    if invoice_id:
+                        v.write({'invoice_id': invoice_id})
+            except Exception:
+                pass
+
+        return _json({
+            'invoice_id':      invoice_id,
+            'financial_class': v.financial_class or 'cash',
+            'patient_mrn':     getattr(v.patient_id, 'mrn', '') if v.patient_id else '',
+            'patient_name':    v.patient_id.name if v.patient_id else '',
+        })
 
     @http.route('/saycare/api/visit/<int:visit_id>', type='http', auth='user', methods=['PUT'], csrf=False)
     def update_services(self, visit_id, **kw):
@@ -481,25 +507,5 @@ def _create_visit_invoice(visit):
             move.action_post()
     except Exception:
         return move.id  # return draft id if posting fails — caller can retry
-
-        # ── Register immediate payment for cash / takaful → خزنة ─────────────
-        if fin_class in IMMEDIATE_PAYMENT_CLASSES:
-            cash_journal = env['account.journal'].sudo().search([
-                ('type', '=', 'cash'),
-                ('company_id', '=', company.id),
-            ], limit=1)
-            if cash_journal and move.amount_total > 0:
-                try:
-                    with env.cr.savepoint():
-                        wizard = env['account.payment.register'].sudo().with_context(
-                            active_model='account.move',
-                            active_ids=[move.id],
-                        ).create({
-                            'amount':     move.amount_total,
-                            'journal_id': cash_journal.id,
-                        })
-                        wizard.action_create_payments()
-                except Exception:
-                    pass
 
     return move.id
