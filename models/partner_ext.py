@@ -57,14 +57,19 @@ class ResPartnerPatient(models.Model):
 
     # ── Address ───────────────────────────────────────────────────────────────
     governorate = fields.Char(string='Governorate')
-
-    # ── Medical ───────────────────────────────────────────────────────────────
     # blood_type = fields.Selection([
     #     ('A+', 'A+'), ('A-', 'A-'),
     #     ('B+', 'B+'), ('B-', 'B-'),
     #     ('AB+', 'AB+'), ('AB-', 'AB-'),
     #     ('O+', 'O+'), ('O-', 'O-'),
     # ], string='Blood Type')
+    # ── Medical ───────────────────────────────────────────────────────────────
+    x_blood_type = fields.Selection([
+        ('A+', 'A+'), ('A-', 'A-'),
+        ('B+', 'B+'), ('B-', 'B-'),
+        ('AB+', 'AB+'), ('AB-', 'AB-'),
+        ('O+', 'O+'), ('O-', 'O-'),
+    ], string='Blood Type')
 
     # ── Financial class ───────────────────────────────────────────────────────
     financial_class = fields.Selection([
