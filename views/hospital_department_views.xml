@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_hospital_department_list" model="ir.ui.view">
+        <field name="name">hospital.inpatient.department.list</field>
+        <field name="model">hospital.inpatient.department</field>
+        <field name="arch" type="xml">
+            <list string="الأقسام الداخلية">
+                <field name="code"/>
+                <field name="name_ar"/>
+                <field name="name_en"/>
+                <field name="main_specialty"/>
+                <field name="ward_type"/>
+<!--                <field name="manager_id"/>-->
+                <field name="head_nurse_id"/>
+                <field name="floor_count"/>
+                <field name="bed_count"/>
+                <field name="active" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_hospital_department_form" model="ir.ui.view">
+        <field name="name">hospital.inpatient.department.form</field>
+        <field name="model">hospital.inpatient.department</field>
+        <field name="arch" type="xml">
+            <form string="القسم الداخلي">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="name_ar"/>
+                            <field name="name_en"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="main_specialty"/>
+                            <field name="ward_type"/>
+                            <field name="floor_count"/>
+                            <field name="head_nurse_id"/>
+                            <field name="notes"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_hospital_department" model="ir.actions.act_window">
+        <field name="name">الأقسام الداخلية</field>
+        <field name="res_model">hospital.inpatient.department</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

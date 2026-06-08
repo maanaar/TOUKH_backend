@@ -19,4 +19,5 @@ from . import (
     invoices,
     treasury,
     accounting,
+    inpatient,
 )
