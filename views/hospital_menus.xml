@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- تُضاف هذه القوائم داخل: SayCare HIS / الإعدادات، بعد "الخدمات الطبية" (sequence 20) -->
+    <!-- ملاحظة: "saycare" = الاسم التقني (اسم مجلد) موديول SayCare. غيّره إن كان مختلفًا. -->
+
+    <menuitem id="menu_hospital_department" name="القسم"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_hospital_department" sequence="30"/>
+
+    <menuitem id="menu_hospital_floor" name="الدور"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_hospital_floor" sequence="40"/>
+
+    <menuitem id="menu_hospital_room" name="الغرفة"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_hospital_room" sequence="50"/>
+
+    <menuitem id="menu_hospital_grade" name="الادارة والاقامة"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_hospital_grade" sequence="60"/>
+
+    <menuitem id="menu_hospital_bed" name="السراير"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_hospital_bed" sequence="70"/>
+</odoo>
