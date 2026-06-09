@@ -67,6 +67,8 @@ class ProductTemplate(models.Model):
         store=False,
     )
 
+    basket_table_id = fields.One2many('basket.model','prod_id')
+
     def _auto_create_clinic_service(self):
         """If this product's category matches any specialty's categ_id,
         create a saycare.service for it (if one doesn't already exist)."""
@@ -114,3 +116,19 @@ class ProductTemplate(models.Model):
                         services.write(update)
         return res
 
+class BasketModel(models.Model):
+    _name = 'basket.model'
+
+    serial_no = fields.Integer(string="Serial No.")
+    prod_id = fields.Many2one('product.template',string="Product")
+    uom_id = fields.Many2one('uom.uom',string="UOM")
+    barcode = fields.Char(string="Barcode")
+    planned_qty = fields.Float(string="Planned QTY")
+    price = fields.Float(string="Price")
+    total_price = fields.Float(string="Total Price",compute="compute_total_price",store=True)
+
+
+    @api.depends('planned_qty', 'price')
+    def compute_total_price(self):
+        for rec in self:
+            rec.total_price = rec.planned_qty * rec.price

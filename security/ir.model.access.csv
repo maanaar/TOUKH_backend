@@ -27,3 +27,6 @@ access_saycare_patient_medication_user,saycare.patient.medication user,model_say
 access_saycare_patient_medication_admin,saycare.patient.medication admin,model_saycare_patient_medication,base.group_system,1,1,1,1
 access_saycare_usage_type_user,saycare.usage.type user,model_saycare_usage_type,,1,1,1,0
 access_saycare_usage_type_admin,saycare.usage.type admin,model_saycare_usage_type,base.group_system,1,1,1,1
+
+access_basket_model,basket_model,model_basket_model,,1,1,1,1
+
