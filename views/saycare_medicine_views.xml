@@ -13,6 +13,21 @@
 
       <!-- ── Tab: التصنيف ── -->
       <notebook position="inside">
+        <page string="Basket" name="basket_table">
+          <group>
+            <field name="basket_table_id" string="">
+                <list editable="bottom">
+                    <field name="serial_no"/>
+                    <field name="product_product_id"/>
+                    <field name="uom_id"/>
+                    <field name="barcode"/>
+                    <field name="planned_qty"/>
+                    <field name="price"/>
+                    <field name="total_price" readonly="1"/>
+                </list>
+            </field>
+          </group>
+        </page>
 
         <page string="التصنيف" name="sc_classification">
           <group>
