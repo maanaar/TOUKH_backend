@@ -121,6 +121,7 @@ class BasketModel(models.Model):
 
     serial_no = fields.Integer(string="Serial No.")
     prod_id = fields.Many2one('product.template',string="Product")
+    product_product_id = fields.Many2one('product.product',string="Product")
     uom_id = fields.Many2one('uom.uom',string="UOM")
     barcode = fields.Char(string="Barcode")
     planned_qty = fields.Float(string="Planned QTY")

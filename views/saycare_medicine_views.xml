@@ -18,7 +18,7 @@
             <field name="basket_table_id" string="">
                 <list editable="bottom">
                     <field name="serial_no"/>
-                    <field name="prod_id"/>
+                    <field name="product_product_id"/>
                     <field name="uom_id"/>
                     <field name="barcode"/>
                     <field name="planned_qty"/>
