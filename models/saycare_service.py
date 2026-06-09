@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, api
+from odoo import models, fields
 
 
 class SaycareService(models.Model):
@@ -30,18 +30,6 @@ class SaycareService(models.Model):
         ('code_uniq', 'unique(code)', 'Service code must be unique.'),
     ]
 
-    @api.onchange('product_id')
-    def _onchange_product_id(self):
-        if not self.product_id:
-            return
-        self.name  = self.product_id.name
-        self.price = self.product_id.list_price
-        if self.product_id.default_code:
-            self.code = self.product_id.default_code
-        # Assign specialty's category to the product if not already set
-        if self.specialty_id and self.specialty_id.categ_id:
-            if not self.product_id.categ_id or self.product_id.categ_id != self.specialty_id.categ_id:
-                self.product_id.categ_id = self.specialty_id.categ_id
 class ProductCategory(models.Model):
     _inherit = 'product.category'
 
@@ -67,50 +55,5 @@ class ProductTemplate(models.Model):
         store=False,
     )
 
-    def _auto_create_clinic_service(self):
-        """If this product's category matches any specialty's categ_id,
-        create a saycare.service for it (if one doesn't already exist)."""
-        Service   = self.env['saycare.service'].sudo()
-        Specialty = self.env['saycare.specialty'].sudo()
-        for product in self:
-            if not product.categ_id:
-                continue
-            specialties = Specialty.search([('categ_id', '=', product.categ_id.id)])
-            for specialty in specialties:
-                already = Service.search([
-                    ('product_id', '=', product.id),
-                    ('specialty_id', '=', specialty.id),
-                ], limit=1)
-                if not already:
-                    Service.create({
-                        'name':         product.name,
-                        'price':        product.list_price,
-                        'code':         product.default_code or '',
-                        'specialty_id': specialty.id,
-                        'product_id':   product.id,
-                    })
 
-    @api.model_create_multi
-    def create(self, vals_list):
-        records = super().create(vals_list)
-        records._auto_create_clinic_service()
-        return records
-
-    def write(self, vals):
-        res = super().write(vals)
-        if 'categ_id' in vals or 'name' in vals or 'list_price' in vals:
-            self._auto_create_clinic_service()
-            # Sync name/price changes to existing service records
-            if 'name' in vals or 'list_price' in vals:
-                Service = self.env['saycare.service'].sudo()
-                for product in self:
-                    services = Service.search([('product_id', '=', product.id)])
-                    update = {}
-                    if 'name' in vals:
-                        update['name'] = product.name
-                    if 'list_price' in vals:
-                        update['price'] = product.list_price
-                    if update:
-                        services.write(update)
-        return res
 

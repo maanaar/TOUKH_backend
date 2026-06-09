@@ -60,6 +60,17 @@
             </group>
           </group>
 
+          <group string="أسعار الكشف">
+            <group string="استشاري">
+              <field name="consultant_price" string="سعر الكشف"/>
+              <field name="consultant_insurance_price" string="حصة التأمين"/>
+            </group>
+            <group string="أخصائي">
+              <field name="specialist_price" string="سعر الكشف"/>
+              <field name="specialist_insurance_price" string="حصة التأمين"/>
+            </group>
+          </group>
+
           <notebook>
             <page string="الخدمات" name="services">
               <field name="service_ids" context="{'default_specialty_id': id}">

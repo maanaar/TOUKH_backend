@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 import json
+import logging
 from odoo import http, fields
 from odoo.http import request
 from odoo.fields import Datetime as DT
 from .utils import _json, _patient_dict
+
+_logger = logging.getLogger(__name__)
 
 VALID_TRANSITIONS = {
     'waiting':      ['triage', 'doctor_queue', 'cancelled'],
@@ -143,9 +146,28 @@ class VisitController(http.Controller):
             ('admission_date', '>=', f'{today} 00:00:00'),
             ('admission_date', '<=', f'{today} 23:59:59'),
         ], limit=1)
+        _logger.info('VISIT CREATE skip_invoice=%s specialty=%s patient=%s dup=%s',
+                     body.get('skip_invoice'), body.get('specialty_id'),
+                     body.get('patient_id'), dup.id if dup else None)
+
         if dup:
             if service_ids:
                 dup.write({'service_ids': [(6, 0, service_ids)]})
+            # If this is a secondary clinic (skip_invoice), remove any old invoice
+            if body.get('skip_invoice'):
+                old_inv = dup.invoice_id
+                if old_inv and old_inv.exists():
+                    try:
+                        with request.env.cr.savepoint():
+                            if old_inv.state == 'posted':
+                                old_inv.button_cancel()
+                            old_inv.unlink()
+                            dup.write({'invoice_id': False})
+                    except Exception:
+                        pass
+                result = _visit_dict(dup)
+                result['invoice_id'] = None
+                return _json(result, 200)
             return _json(_visit_dict(dup), 200)
 
         visit = request.env['saycare.visit'].sudo().create(vals)
@@ -154,16 +176,15 @@ class VisitController(http.Controller):
             if appt.exists():
                 appt.write({'visit_id': visit.id, 'state': 'arrived'})
 
-        # ── Create & post invoice — isolated in a savepoint so any failure
-        #    never rolls back the visit itself or returns 422
         invoice_id = None
-        try:
-            with request.env.cr.savepoint():
-                invoice_id = _create_visit_invoice(visit)
-                if invoice_id:
-                    visit.write({'invoice_id': invoice_id})
-        except Exception:
-            pass
+        if not body.get('skip_invoice'):
+            try:
+                with request.env.cr.savepoint():
+                    invoice_id = _create_visit_invoice(visit)
+                    if invoice_id:
+                        visit.write({'invoice_id': invoice_id})
+            except Exception:
+                pass
         result = _visit_dict(visit)
         result['invoice_id'] = invoice_id
         return _json(result, 201)
@@ -211,10 +232,14 @@ class VisitController(http.Controller):
         except json.JSONDecodeError:
             return _json({'error': 'invalid JSON'}, 400)
 
-        service_ids = body.get('service_ids', [])
+        service_ids   = body.get('service_ids', [])
+        skip_invoice  = bool(body.get('skip_invoice'))
+        _logger.info('VISIT UPDATE id=%s skip_invoice=%s', visit_id, skip_invoice)
         v.write({'service_ids': [(6, 0, service_ids)]})
 
-        # Cancel + delete old invoice so a fresh one can be created
+        # Cancel + delete old invoice.
+        # For skip_invoice visits: always remove the old invoice (it should not exist).
+        # For primary visits: remove so a fresh one can be created below.
         old_inv = v.invoice_id
         if old_inv and old_inv.exists():
             try:
@@ -222,18 +247,19 @@ class VisitController(http.Controller):
                     if old_inv.state == 'posted':
                         old_inv.button_cancel()
                     old_inv.unlink()
-                    v.write({'invoice_id': False})
             except Exception:
                 pass
+            v.write({'invoice_id': False})   # always clear the FK, even if unlink failed
 
         invoice_id = None
-        try:
-            with request.env.cr.savepoint():
-                invoice_id = _create_visit_invoice(v)
-                if invoice_id:
-                    v.write({'invoice_id': invoice_id})
-        except Exception:
-            pass
+        if not skip_invoice:
+            try:
+                with request.env.cr.savepoint():
+                    invoice_id = _create_visit_invoice(v)
+                    if invoice_id:
+                        v.write({'invoice_id': invoice_id})
+            except Exception:
+                pass
 
         result = _visit_dict(v)
         result['invoice_id'] = invoice_id

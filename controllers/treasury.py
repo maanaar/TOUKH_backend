@@ -36,7 +36,8 @@ class TreasuryController(http.Controller):
         visits = request.env['saycare.visit'].sudo().search([
             ('admission_date', '>=', f'{target} 00:00:00'),
             ('admission_date', '<=', f'{target} 23:59:59'),
-        ], order='admission_date asc')
+            ('invoice_id',     '!=', False),
+        ], order='admission_date desc')
 
         rows = []
         for v in visits:
@@ -45,16 +46,14 @@ class TreasuryController(http.Controller):
             amount_total  = inv.amount_total   if inv else 0.0
             amount_due    = inv.amount_residual if inv else 0.0
 
-            # When visit has no service_ids (e.g. procedures added via invoice lines),
-            # derive shares from the invoice total directly
+            # Invoice is authoritative for amounts — patient pays total minus insurance.
+            # The visit's computed patient_share may be partial (only direct service_ids,
+            # not extra lines added via addInvoiceLines), so always derive from invoice.
+            fin_class   = getattr(v, 'financial_class', 'cash') or 'cash'
             v_insurance = getattr(v, 'insurance_share', 0.0) or 0.0
-            v_patient   = getattr(v, 'patient_share',   0.0) or 0.0
-            if amount_total > 0 and v_insurance == 0 and v_patient == 0:
-                fin_class = getattr(v, 'financial_class', 'cash') or 'cash'
-                if fin_class == 'cash':
-                    v_patient = amount_total
-                else:
-                    v_patient = amount_total  # invoice already contains only patient share lines
+            if fin_class == 'cash':
+                v_insurance = 0.0
+            v_patient = max(0.0, amount_total - v_insurance)
 
             # pull time from admission_date
             admission_dt = v.admission_date
