@@ -65,6 +65,33 @@ class CategoryController(http.Controller):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  basket.model
+# ─────────────────────────────────────────────────────────────────────────────
+
+class BasketModel(http.Controller):
+
+    @http.route('/api/basket/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_one(self, rec_id, **kw):
+        rec = request.env['product.template'].sudo().browse(rec_id).basket_table_id.ids
+        if not rec.exists():
+            return http_response({'error': 'not found'}, 404)
+        ids = []
+        for re in rec:
+            data = {
+                'id': re.id,
+                'serial_no': re.serial_no,
+                'product_product_id': re.product_product_id.id if re.product_product_id else False,
+                'uom_id': re.uom_id.id if re.uom_id else False,
+                'barcode': re.barcode,
+                'planned_qty': re.planned_qty,
+                'price': re.price,
+                'total_price': re.total_price,
+            }
+            ids.append(data)
+        return http_response(ids)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  uom.uom
 # ─────────────────────────────────────────────────────────────────────────────
 
