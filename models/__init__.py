@@ -14,4 +14,9 @@ from . import (
     account_journal_ext,
     account_move_ext,
     saycare_medicine,
+    hospital_inpatient_department,
+    hospital_floor,
+    hospital_room,
+    hospital_accommodation_grade,
+    hospital_bed,
 )

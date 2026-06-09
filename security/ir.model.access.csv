@@ -27,6 +27,11 @@ access_saycare_patient_medication_user,saycare.patient.medication user,model_say
 access_saycare_patient_medication_admin,saycare.patient.medication admin,model_saycare_patient_medication,base.group_system,1,1,1,1
 access_saycare_usage_type_user,saycare.usage.type user,model_saycare_usage_type,,1,1,1,0
 access_saycare_usage_type_admin,saycare.usage.type admin,model_saycare_usage_type,base.group_system,1,1,1,1
+access_hospital_department,hospital.inpatient.department,model_hospital_inpatient_department,base.group_user,1,1,1,1
+access_hospital_floor,hospital.floor,model_hospital_floor,base.group_user,1,1,1,1
+access_hospital_room,hospital.room,model_hospital_room,base.group_user,1,1,1,1
+access_hospital_accommodation_grade,hospital.accommodation.grade,model_hospital_accommodation_grade,base.group_user,1,1,1,1
+access_hospital_bed,hospital.bed,model_hospital_bed,base.group_user,1,1,1,1
 
 access_basket_model,basket_model,model_basket_model,,1,1,1,1
 

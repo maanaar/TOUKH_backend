@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_hospital_bed_list" model="ir.ui.view">
+        <field name="name">hospital.bed.list</field>
+        <field name="model">hospital.bed</field>
+        <field name="arch" type="xml">
+            <list string="السراير"
+                  decoration-success="bed_status == 'available'"
+                  decoration-danger="bed_status == 'occupied'"
+                  decoration-warning="bed_status in ('cleaning','maintenance')"
+                  decoration-info="bed_status == 'reserved'">
+                <field name="code"/>
+                <field name="bed_no"/>
+                <field name="department_id"/>
+                <field name="floor_id"/>
+                <field name="room_id"/>
+                <field name="grade_id"/>
+                <field name="bed_status"/>
+                <field name="allowed_gender"/>
+                <field name="current_patient_id"/>
+                <field name="last_occupancy_date"/>
+                <field name="active" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_hospital_bed_form" model="ir.ui.view">
+        <field name="name">hospital.bed.form</field>
+        <field name="model">hospital.bed</field>
+        <field name="arch" type="xml">
+            <form string="السرير">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="bed_no"/>
+                            <field name="room_id"/>
+                            <field name="floor_id"/>
+                            <field name="department_id"/>
+                        </group>
+                        <group>
+                            <field name="grade_id"/>
+                            <field name="bed_status"/>
+                            <field name="allowed_gender"/>
+                            <field name="current_patient_id"/>
+                            <field name="last_occupancy_date"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+
+    <record id="action_hospital_bed" model="ir.actions.act_window">
+        <field name="name">السراير</field>
+        <field name="res_model">hospital.bed</field>
+        <field name="view_mode">list,form</field>
+
+    </record>
+</odoo>

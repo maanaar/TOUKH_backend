@@ -45,6 +45,17 @@ class TreasuryController(http.Controller):
             amount_total  = inv.amount_total   if inv else 0.0
             amount_due    = inv.amount_residual if inv else 0.0
 
+            # When visit has no service_ids (e.g. procedures added via invoice lines),
+            # derive shares from the invoice total directly
+            v_insurance = getattr(v, 'insurance_share', 0.0) or 0.0
+            v_patient   = getattr(v, 'patient_share',   0.0) or 0.0
+            if amount_total > 0 and v_insurance == 0 and v_patient == 0:
+                fin_class = getattr(v, 'financial_class', 'cash') or 'cash'
+                if fin_class == 'cash':
+                    v_patient = amount_total
+                else:
+                    v_patient = amount_total  # invoice already contains only patient share lines
+
             # pull time from admission_date
             admission_dt = v.admission_date
             time_str = ''
@@ -72,8 +83,8 @@ class TreasuryController(http.Controller):
                 'payment_state':     payment_state,
                 'amount_total':      amount_total,
                 'amount_due':        amount_due,
-                'insurance_share':   getattr(v, 'insurance_share', 0.0),
-                'patient_share':     getattr(v, 'patient_share',   0.0),
+                'insurance_share':   v_insurance,
+                'patient_share':     v_patient,
             })
 
         # summary totals
