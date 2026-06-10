@@ -64,20 +64,27 @@ def _products_from_categ_keyword(env, keyword, existing_names=None):
 def _basket_items(product):
     items = []
     for item in (product.basket_table_id or []):
-        sub_name = ''
+        sub_product = None
+        sub_name    = ''
         if item.product_product_id and item.product_product_id.exists():
-            sub_name = item.product_product_id.name or ''
+            sub_product = item.product_product_id
+            sub_name    = sub_product.name or ''
         elif item.prod_id and item.prod_id.exists():
-            sub_name = item.prod_id.name or ''
+            tmpl        = item.prod_id
+            sub_name    = tmpl.name or ''
+            variants    = tmpl.product_variant_ids
+            sub_product = variants[0] if variants else None
         items.append({
-            'id':          item.id,
-            'serial_no':   item.serial_no or 0,
-            'name':        sub_name,
-            'uom':         item.uom_id.name if item.uom_id else '',
-            'barcode':     item.barcode or '',
-            'planned_qty': item.planned_qty or 0,
-            'price':       item.price or 0,
-            'total_price': item.total_price or 0,
+            'id':                 item.id,
+            'serial_no':          item.serial_no or 0,
+            'name':               sub_name,
+            'uom':                item.uom_id.name if item.uom_id else '',
+            'uom_id':             item.uom_id.id   if item.uom_id else None,
+            'barcode':            item.barcode or '',
+            'planned_qty':        item.planned_qty or 0,
+            'price':              item.price or 0,
+            'total_price':        item.total_price or 0,
+            'product_product_id': sub_product.id if sub_product else None,
         })
     return items
 
