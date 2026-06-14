@@ -15,20 +15,24 @@ def _specialty_dict(r):
         'categ_id':    r.categ_id.id if r.categ_id else None,
         'categ_name':  r.categ_id.name if r.categ_id else '',
         'doctor_ids':  [_doctor_summary(d) for d in r.doctor_ids],
+        'consultant_price':           r.consultant_price or 0.0,
+        'consultant_insurance_price': r.consultant_insurance_price or 0.0,
+        'specialist_price':           r.specialist_price or 0.0,
+        'specialist_insurance_price': r.specialist_insurance_price or 0.0,
     }
 
 
 def _doctor_summary(e):
     return {
-        'id':             e.id,
-        'name':           e.name or '',
-        'specialty_id':   e.specialty_id.id if e.specialty_id else None,
-        'specialty_name': e.specialty_id.name if e.specialty_id else '',
-        'doctor_grade':   e.doctor_grade or '',
-        'license_number': e.license_number or '',
-        'job_title':      e.job_title or '',
-        'work_email':     e.work_email or '',
-        'work_phone':     e.work_phone or '',
+        'id':                   e.id,
+        'name':                 e.name or '',
+        'specialty_id':         e.specialty_id.id if e.specialty_id else None,
+        'specialty_name':       e.specialty_id.name if e.specialty_id else '',
+        'doctor_grade':         e.doctor_grade or '',
+        'license_number':       e.license_number or '',
+        'job_title':            e.job_title or '',
+        'work_email':           e.work_email or '',
+        'work_phone':           e.work_phone or '',
         'image_url':      '/web/image/hr.employee/%d/image_1920' % e.id if e.image_1920 else '',
     }
 

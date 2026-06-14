@@ -20,4 +20,5 @@ from . import (
     treasury,
     accounting,
     inpatient,
+    stock,
 )
