@@ -17,7 +17,7 @@ class ResPartnerPatient(models.Model):
         ('baby',      'طفل'),
     ], string='Nationality', default='normal')
 
-    age_group = fields.Selection([
+    x_age_group = fields.Selection([
         ('adult', 'بالغ'),
         ('child', 'طفل'),
     ], string='Age Group', compute='_compute_age_group', store=True)
@@ -25,7 +25,7 @@ class ResPartnerPatient(models.Model):
     @api.depends('patient_type')
     def _compute_age_group(self):
         for rec in self:
-            rec.age_group = 'child' if rec.patient_type == 'baby' else 'adult'
+            rec.x_age_group = 'child' if rec.patient_type == 'baby' else 'adult'
 
     # ── Medical Record Number ─────────────────────────────────────────────────
     mrn = fields.Char(string='MRN', copy=False, index=True)
