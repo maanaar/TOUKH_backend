@@ -1283,6 +1283,8 @@ class QuantController(http.Controller):
                 'product_id':           rec.product_id.id if rec.product_id else None,
                 'product_name':         rec.product_id.name if rec.product_id else None,
                 'product_default_code': rec.product_id.default_code or '' if rec.product_id else '',
+                'categ_id':             rec.product_id.categ_id.id if rec.product_id and rec.product_id.categ_id else None,
+                'categ_name':           rec.product_id.categ_id.name if rec.product_id and rec.product_id.categ_id else None,
                 'product_uom_id':       rec.product_uom_id.id if rec.product_uom_id else None,
                 'product_uom_name':     rec.product_uom_id.name if rec.product_uom_id else None,
                 'location_id':          rec.location_id.id if rec.location_id else None,
@@ -1502,8 +1504,57 @@ class PickingConfirmController(http.Controller):
             body = json.loads(request.httprequest.data or '{}')
             if 'q_sant' in body:
                 move.q_sant = float(body['q_sant'])
+            if 'qty_done' in body:
+                move.quantity = float(body['qty_done'])
             qty_done = sum(ml.qty_done for ml in move.move_line_ids) if move.move_line_ids else move.quantity
             return http_response({'id': move.id, 'q_sant': move.q_sant, 'qty_done': qty_done})
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/stock/pickings/<int:rec_id>/save-quantities', type='http', auth='user', methods=['POST'], csrf=False)
+    def save_quantities(self, rec_id, **kw):
+        """Save q_sant + qty_done for each move and mark picking as quantities_confirmed."""
+        try:
+            rec = request.env['stock.picking'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state == 'done':
+                return http_response({'error': 'picking is already done'}, 400)
+            if rec.state == 'cancel':
+                return http_response({'error': 'picking is cancelled'}, 400)
+
+            body = json.loads(request.httprequest.data or '{}')
+            moves_data = body.get('moves', [])
+
+            for entry in moves_data:
+                move_id = entry.get('move_id')
+                if not move_id:
+                    continue
+                move = request.env['stock.move'].sudo().browse(int(move_id))
+                if not move.exists() or move.picking_id.id != rec_id:
+                    continue
+                if 'q_sant' in entry:
+                    move.q_sant = float(entry['q_sant'])
+                if 'qty_done' in entry:
+                    move.quantity = float(entry['qty_done'])
+
+            rec.write({'state': 'quantities_confirmed'})
+
+            moves_out = []
+            for move in rec.move_ids:
+                moves_out.append({
+                    'id':              move.id,
+                    'q_sant':          getattr(move, 'q_sant', 0.0),
+                    'qty_done':        move.quantity,
+                    'product_uom_qty': move.product_uom_qty,
+                })
+
+            return http_response({
+                'id':    rec.id,
+                'name':  rec.name,
+                'state': rec.state,
+                'moves': moves_out,
+            })
         except Exception as e:
             return http_response({'error': str(e)}, 500)
 

@@ -18,20 +18,14 @@ class HospitalBed(models.Model):
         required=True,
         ondelete="restrict",
     )
-    # الدور والقسم يُملآن تلقائيًا من الغرفة
+    # الدور والقسم يتم اختيارهما يدويًا
     floor_id = fields.Many2one(
         "hospital.floor",
         string="الدور",
-        related="room_id.floor_id",
-        store=True,
-        readonly=True,
     )
     department_id = fields.Many2one(
         "hospital.inpatient.department",
         string="القسم",
-        related="room_id.department_id",
-        store=True,
-        readonly=True,
     )
 
     # الإقامة ترتبط بالسرير

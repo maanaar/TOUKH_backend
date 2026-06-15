@@ -13,11 +13,19 @@ class HospitalFloor(models.Model):
     floor_no = fields.Char("رقم الدور")
 
     # القسم التابع له
-    department_id = fields.Many2one(
+    # department_id = fields.Many2one(
+    #     "hospital.inpatient.department",
+    #     string="القسم التابع له",
+    #     required=True,
+    #     ondelete="restrict",
+    # )
+    department_ids = fields.Many2many(
         "hospital.inpatient.department",
-        string="القسم التابع له",
+        relation="hospital_floor_department_rel",
+        column1="floor_id",
+        column2="department_id",
+        string="الأقسام التابعة لها",
         required=True,
-        ondelete="restrict",
     )
 
     active = fields.Boolean("فعال", default=True)

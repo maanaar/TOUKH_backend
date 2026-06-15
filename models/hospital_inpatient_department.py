@@ -34,7 +34,7 @@ class HospitalInpatientDepartment(models.Model):
         required=True,
     )
 
-    floor_count = fields.Integer("عدد الأدوار")
+    floor_count = fields.Integer("عدد الأدوار", compute="_compute_counts")
     bed_count = fields.Integer("عدد السراير", compute="_compute_counts")
 
     manager_id = fields.Many2one("hr.employee", string="المسؤول")
@@ -50,7 +50,7 @@ class HospitalInpatientDepartment(models.Model):
     def _compute_counts(self):
         for rec in self:
             rec.floor_count = self.env["hospital.floor"].search_count(
-                [("department_id", "=", rec.id)]
+                [("department_ids", "=", rec.id)]
             )
             rec.bed_count = self.env["hospital.bed"].search_count(
                 [("department_id", "=", rec.id)]

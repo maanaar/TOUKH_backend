@@ -129,3 +129,16 @@ class StockMoveQSant(models.Model):
         default=0.0,
         help='Quantity sent (filled by sender after confirmation)',
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  stock.picking — extend native state with SayCare "معتمد" step
+#  Workflow: assigned → quantities_confirmed → done
+# ─────────────────────────────────────────────────────────────────────────────
+class StockPickingScState(models.Model):
+    _inherit = 'stock.picking'
+
+    state = fields.Selection(
+        selection_add=[('quantities_confirmed', 'Confirmed'), ('done',)],
+        ondelete={'quantities_confirmed': lambda recs: recs.write({'state': 'assigned'})},
+    )
