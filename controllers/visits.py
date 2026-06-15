@@ -31,6 +31,7 @@ def _visit_dict(v, full=False):
         'state':           v.state,
         'visit_type':      v.visit_type or '',
         'financial_class': v.financial_class or '',
+        'payment_method':  v.payment_method  or 'cash',
         'chief_complaint': v.chief_complaint or '',
         'triage_notes':    v.triage_notes or '',
         'admission_date':  str(v.admission_date) if v.admission_date else None,
@@ -113,6 +114,7 @@ class VisitController(http.Controller):
             'patient_id':      body['patient_id'],
             'visit_type':      body.get('visit_type', 'outpatient'),
             'financial_class': body.get('financial_class', ''),
+            'payment_method':  body.get('payment_method', 'cash'),
             'chief_complaint': body.get('chief_complaint', ''),
             'specialty_id':    body.get('specialty_id'),
             'doctor_id':       body.get('doctor_id'),
@@ -365,6 +367,7 @@ class ClinicBookingController(http.Controller):
             'patient_id':      patient_id,
             'visit_type':      'outpatient',
             'financial_class': body.get('financial_class', 'cash'),
+            'payment_method':  body.get('payment_method', 'cash'),
             'chief_complaint': body.get('chief_complaint', ''),
             'notes':           body.get('notes', ''),
         }

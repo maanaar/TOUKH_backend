@@ -30,6 +30,7 @@ def _appt_dict(a):
         'state':          a.state,
         'visit_id':       a.visit_id.id if a.visit_id else None,
         'visit_state':    a.visit_id.state if a.visit_id else None,
+        'payment_method': getattr(a.visit_id, 'payment_method', 'cash') or 'cash' if a.visit_id else 'cash',
         'notes':          a.notes or '',
     }
 

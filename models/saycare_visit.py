@@ -49,6 +49,11 @@ class SaycareVisit(models.Model):
         ('staff',        'عاملين'),
     ], string='الوجهة المالية')
 
+    payment_method = fields.Selection([
+        ('cash',     'نقدي'),
+        ('deferred', 'مميكن'),
+    ], string='طريقة الدفع', default='cash')
+
     chief_complaint = fields.Char(string='Chief Complaint')
     triage_notes    = fields.Text(string='Triage Notes')
 
