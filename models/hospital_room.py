@@ -71,8 +71,3 @@ class HospitalRoom(models.Model):
     active = fields.Boolean("فعال", default=True)
 
 
-    def _compute_bed_count(self):
-        for rec in self:
-            rec.bed_count = self.env["hospital.bed"].search_count(
-                [("room_id", "=", rec.id)]
-            )

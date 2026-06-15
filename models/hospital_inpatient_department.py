@@ -43,15 +43,3 @@ class HospitalInpatientDepartment(models.Model):
     active = fields.Boolean("فعال", default=True)
     notes = fields.Text("ملاحظات")
 
-    _sql_constraints = [
-        ("dept_code_uniq", "unique(code)", "كود القسم الداخلي يجب أن يكون فريدًا."),
-    ]
-
-    def _compute_counts(self):
-        for rec in self:
-            rec.floor_count = self.env["hospital.floor"].search_count(
-                [("department_ids", "=", rec.id)]
-            )
-            rec.bed_count = self.env["hospital.bed"].search_count(
-                [("department_id", "=", rec.id)]
-            )
