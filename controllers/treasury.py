@@ -75,6 +75,7 @@ class TreasuryController(http.Controller):
                 'visit_type':        VISIT_TYPE_AR.get(v.visit_type or '', v.visit_type or ''),
                 'financial_class':   getattr(v, 'financial_class', '') or '',
                 'financial_label':   FINANCIAL_CLASS_AR.get(getattr(v, 'financial_class', '') or '', ''),
+                'payment_method':    getattr(v, 'payment_method', 'cash') or 'cash',
                 'state':             v.state,
                 'invoice_id':        inv.id            if inv else None,
                 'invoice_name':      inv.name          if inv else '',
