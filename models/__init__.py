@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from . import (
     partner_ext,
+    pricelist_ext,
     saycare_specialty,
     saycare_service,
     saycare_visit,

@@ -6,6 +6,11 @@
     <field name="inherit_id" ref="base.view_partner_form"/>
     <field name="arch" type="xml">
 
+
+      <field name="category_id" position="after">
+        <field name="x_payment_type"/>
+      </field>
+
       <!-- Patient + Vendor toggles next to Job Position -->
       <field name="function" position="after">
         <field name="is_patient" widget="boolean_toggle" string="مريض"/>
