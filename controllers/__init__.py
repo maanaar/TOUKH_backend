@@ -21,4 +21,5 @@ from . import (
     accounting,
     inpatient,
     stock,
+    government_expense,
 )

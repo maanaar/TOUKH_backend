@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 import json
+import logging
 from odoo import http
 from odoo.http import request
 from .utils import _json
+
+_logger = logging.getLogger(__name__)
 
 
 class StockController(http.Controller):
@@ -87,23 +90,27 @@ class StockController(http.Controller):
                 continue
             uom_id = item.get('uom_id') or product.uom_id.id
             order_lines.append((0, 0, {
-                'product_id':     product.id,
+                'product_id':      product.id,
                 'product_uom_qty': qty,
-                'product_uom':    uom_id,
-                'price_unit':     product.lst_price,
-                'name':           item.get('name') or product.name,
+                'product_uom_id':  uom_id,
+                'price_unit':      product.lst_price,
+                'name':            item.get('name') or product.name,
             }))
 
         if not order_lines:
             return _json({'error': 'No valid items to dispatch'}, 400)
 
-        so = env['sale.order'].sudo().create({
-            'partner_id':  partner_id,
-            'warehouse_id': wh.id,
-            'origin':       f'Nurse Dispatch / Visit {visit_id}',
-            'order_line':   order_lines,
-        })
-        so.action_confirm()
+        try:
+            so = env['sale.order'].sudo().create({
+                'partner_id':   partner_id,
+                'warehouse_id': wh.id,
+                'origin':       f'Nurse Dispatch / Visit {visit_id}',
+                'order_line':   order_lines,
+            })
+            so.action_confirm()
+        except Exception as e:
+            _logger.exception('dispatch-consumables: sale.order creation failed')
+            return _json({'error': str(e)}, 500)
 
         picking = so.picking_ids[:1] if so.picking_ids else False
 
