@@ -179,6 +179,15 @@ class PatientController(http.Controller):
         return _json(_patient_dict(p))
 
 
+class InsuranceProviderController(http.Controller):
+
+    @http.route('/saycare/api/insurance-providers', type='http', auth='user', methods=['GET'], csrf=False)
+    def list_providers(self, provider_type='', **kw):
+        domain = [('provider_type', '=', provider_type)] if provider_type else []
+        records = request.env['insurance.company'].sudo().search(domain, order='name asc')
+        return _json({'providers': [{'id': r.id, 'name': r.name} for r in records]})
+
+
 class PatientVisitsController(http.Controller):
 
     @http.route('/saycare/api/patient/<int:patient_id>/visits', type='http', auth='user', methods=['GET'], csrf=False)

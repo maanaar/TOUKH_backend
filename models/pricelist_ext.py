@@ -5,8 +5,10 @@ class ProductPricelist(models.Model):
     _inherit = 'product.pricelist'
 
     x_payment_type = fields.Selection([
-        ('insurance', 'تامين صحي'),
-        ('companies', 'شركات'),
-        ('state',     'نفقة دوله'),
-        ('takaful',   'تكافل و كرامه'),
+        ('cash', 'نقدي'),
+        ('state', 'نفقة الدولة'),
+        ('insurance', 'تأمين صحى'),
+        ('takaful', 'تكافل وكرامة'),
+        ('contracts', 'تعاقدات'),
+        ('consult', 'مشورة'),
     ], string='Payment Type')
