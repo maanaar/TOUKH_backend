@@ -27,6 +27,8 @@
         'uom',
         'hr',
         'account',
+        'mail',
+        'medical_insurance',
         'employee_purchase_requisition',
     ],
     'data': [

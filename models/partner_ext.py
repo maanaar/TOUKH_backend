@@ -20,7 +20,7 @@ class ResPartnerPatient(models.Model):
     x_age_group = fields.Selection([
         ('adult', 'بالغ'),
         ('child', 'طفل'),
-    ], string='Age Group', compute='_compute_age_group', store=True)
+    ], string='Age Group', compute='_compute_age_group', store=False)
 
     @api.depends('patient_type')
     def _compute_age_group(self):
