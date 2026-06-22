@@ -216,11 +216,15 @@ class VisitController(http.Controller):
             except Exception:
                 pass
 
+        inv = request.env['account.move'].sudo().browse(invoice_id) if invoice_id else None
         return _json({
             'invoice_id':      invoice_id,
             'financial_class': v.financial_class or 'cash',
             'patient_mrn':     getattr(v.patient_id, 'mrn', '') if v.patient_id else '',
             'patient_name':    v.patient_id.name if v.patient_id else '',
+            'amount':          inv.amount_total if (inv and inv.exists()) else 0.0,
+            'invoice_state':   inv.state if (inv and inv.exists()) else '',
+            'payment_state':   inv.payment_state if (inv and inv.exists()) else '',
         })
 
     @http.route('/saycare/api/visit/<int:visit_id>', type='http', auth='user', methods=['PUT'], csrf=False)

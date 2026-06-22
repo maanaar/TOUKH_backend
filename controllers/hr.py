@@ -53,6 +53,14 @@ class EmployeeController(http.Controller):
         )
         if not emp:
             return http_response({'error': 'no employee linked to current user'}, 404)
+        # Load access from ir.config_parameter (device-independent)
+        param = request.env['ir.config_parameter'].sudo().get_param(
+            f'his.emp_access.{emp.id}', default=''
+        )
+        try:
+            access = json.loads(param) if param else None
+        except Exception:
+            access = None
         return http_response({
             'id':              emp.id,
             'name':            emp.name,
@@ -60,7 +68,23 @@ class EmployeeController(http.Controller):
             'department_name': emp.department_id.name if emp.department_id else None,
             'job_title':       emp.job_title or '',
             'user_id':         emp.user_id.id if emp.user_id else None,
+            'access':          access,
         })
+
+    @http.route('/api/v1/hr/employees/<int:employee_id>/access', type='http', auth='user', methods=['PUT'], csrf=False)
+    def set_employee_access(self, employee_id, **kw):
+        emp = request.env['hr.employee'].sudo().browse(employee_id)
+        if not emp.exists():
+            return http_response({'error': 'employee not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except Exception:
+            return http_response({'error': 'invalid JSON'}, 400)
+        access_json = json.dumps(body, ensure_ascii=False)
+        request.env['ir.config_parameter'].sudo().set_param(
+            f'his.emp_access.{employee_id}', access_json
+        )
+        return http_response({'ok': True})
 
     @http.route('/api/v1/hr/employees/<int:employee_id>/create-user', type='http', auth='user', methods=['POST'], csrf=False)
     def create_employee_user(self, employee_id, **kw):
@@ -111,7 +135,25 @@ class EmployeeController(http.Controller):
             body = json.loads(request.httprequest.data or '{}')
         except Exception:
             return http_response({'error': 'invalid JSON'}, 400)
-        user = emp.user_id.sudo()
+
+        target_user = emp.user_id
+        caller      = request.env.user  # authenticated user making the request
+
+        # Block password changes on Odoo admin (uid=2) or superuser (uid=1)
+        if body.get('password') and target_user.id in (1, 2):
+            return http_response({'error': 'لا يمكن تغيير كلمة مرور حساب النظام من هنا'}, 403)
+
+        # Block a non-admin caller from changing another user's password
+        caller_is_admin = caller._is_admin()
+        if body.get('password') and not caller_is_admin:
+            return http_response({'error': 'غير مصرح'}, 403)
+
+        # Block deactivating a higher-privileged account
+        if 'active' in body and not bool(body['active']):
+            if target_user.id in (1, 2) or (target_user._is_admin() and not caller_is_admin):
+                return http_response({'error': 'لا يمكن تعطيل هذا الحساب'}, 403)
+
+        user = target_user.sudo()
         if body.get('password'):
             user.write({'password': body['password']})
         if 'active' in body:
@@ -127,6 +169,8 @@ class EmployeeController(http.Controller):
         emp = request.env['hr.employee'].sudo().browse(employee_id)
         if not emp.exists() or not emp.user_id:
             return http_response({'error': 'employee or linked user not found'}, 404)
+        if emp.user_id.id in (1, 2):
+            return http_response({'error': 'لا يمكن حذف حساب النظام'}, 403)
         user = emp.user_id.sudo()
         emp.sudo().write({'user_id': False})
         user.write({'active': False})
