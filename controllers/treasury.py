@@ -109,15 +109,19 @@ class TreasuryController(http.Controller):
                 time_str = f'{admission_dt.hour:02d}:{admission_dt.minute:02d}'
 
             # ── check if invoice has been reversed (refunded) ─────────────────
-            is_reversed = (payment_state == 'reversed')
-            refund_reason = ''
-            if is_reversed:
+            # payment_state='reversed' only fires when Odoo auto-reconciles;
+            # when invoice was already paid we must check for a linked credit note.
+            rfn_move = None
+            if inv:
                 rfn_move = request.env['account.move'].sudo().search([
                     ('reversed_entry_id', '=', inv.id),
                     ('move_type', '=', 'out_refund'),
+                    ('state', '=', 'posted'),
                 ], limit=1)
-                if rfn_move:
-                    refund_reason = rfn_move.narration or ''
+            is_reversed = bool(rfn_move) or payment_state == 'reversed'
+            refund_reason = ''
+            if is_reversed:
+                refund_reason = (rfn_move.narration or '') if rfn_move else ''
                 amount_total = -amount_total  # display as negative
 
             rows.append({
