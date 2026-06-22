@@ -22,7 +22,7 @@ class QueueController(http.Controller):
         # Return active visits + today's completed visits so the kanban persists after refresh
         domain = [
             '|',
-            ('state', 'in', ['doctor_queue', 'in_progress']),
+            ('state', 'in', ['waiting', 'triage', 'doctor_queue', 'in_progress']),
             '&', ('state', '=', 'done'), ('admission_date', '>=', today_start),
         ]
         if specialty_id:
