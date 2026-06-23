@@ -56,6 +56,24 @@ class ProductTemplate(models.Model):
     )
 
     basket_table_id = fields.One2many('basket.model','prod_id')
+    basket_service_id = fields.Many2one('product.template',string='Service')
+
+    def get_service_basket(self):
+        for rec in self:
+            rec.basket_table_id = [(5, 0, 0)]
+            dats = []
+            if rec.basket_service_id:
+                for x in rec.basket_service_id.basket_table_id:
+                    dats.append((0, 0, {'serial_no': x.serial_no,
+                                        'product_product_id': x.product_product_id.id,
+                                        'uom_id': x.uom_id.id,
+                                        'planned_qty': x.planned_qty,
+                                        'barcode': x.barcode,
+                                        'price': x.price,
+                                        'total_price': x.total_price,
+                                        }
+                                 ))
+                rec.basket_table_id = dats
 
 
 

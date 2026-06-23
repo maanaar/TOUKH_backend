@@ -112,11 +112,21 @@ class StockController(http.Controller):
             _logger.exception('dispatch-consumables: sale.order creation failed')
             return _json({'error': str(e)}, 500)
 
+        # Validate the outgoing picking to execute the stock move
         picking = so.picking_ids[:1] if so.picking_ids else False
+        picking_name = None
+        if picking and picking.exists():
+            picking_name = picking.name
+            try:
+                for move in picking.move_ids:
+                    move.quantity = move.product_uom_qty
+                picking.button_validate()
+            except Exception:
+                _logger.warning('dispatch-consumables: picking validation failed, leaving as ready')
 
         return _json({
             'sale_order_id':   so.id,
             'sale_order_name': so.name,
-            'picking_id':      picking.id   if picking else None,
-            'picking_name':    picking.name if picking else None,
+            'picking_id':      picking.id if picking else None,
+            'picking_name':    picking_name,
         })

@@ -68,7 +68,9 @@ class SaycareVisit(models.Model):
     rad_order_ids        = fields.One2many('saycare.rad.order',      'visit_id',
                                            string='Rad Orders')
 
-    notes = fields.Text(string='Notes')
+    notes       = fields.Text(string='Notes')
+    basket_json = fields.Text(string='Basket JSON', default='[]')
+    basket_paid = fields.Boolean(string='Basket Paid', default=False)
 
     # ── Financial detail fields ────────────────────────────────────────────────
     decision_no        = fields.Char(string='رقم القرار')

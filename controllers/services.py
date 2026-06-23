@@ -230,3 +230,24 @@ class ServiceController(http.Controller):
         if not product.exists():
             return _json({'basket': []})
         return _json({'basket': _basket_items(product)})
+
+    @http.route('/saycare/api/products/search', type='http', auth='user', methods=['GET'], csrf=False)
+    def search_products(self, q='', limit='40', **kw):
+        env = request.env
+        domain = [('active', '=', True), ('sale_ok', '=', True)]
+        if q and q.strip():
+            domain = ['&'] + domain + ['|', ('name', 'ilike', q.strip()), ('default_code', 'ilike', q.strip())]
+        products = env['product.template'].sudo().search(domain, limit=int(limit))
+        results = []
+        for p in products:
+            variant = p.product_variant_ids[:1]
+            results.append({
+                'id':                 p.id,
+                'name':               p.name or '',
+                'default_code':       p.default_code or '',
+                'uom':                p.uom_id.name if p.uom_id else '',
+                'uom_id':             p.uom_id.id   if p.uom_id else None,
+                'price':              float(p.list_price),
+                'product_product_id': variant.id if variant else None,
+            })
+        return _json(results)

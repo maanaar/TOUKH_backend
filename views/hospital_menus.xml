@@ -22,4 +22,8 @@
     <menuitem id="menu_hospital_bed" name="السراير"
               parent="saycare_odoo_19.menu_saycare_config"
               action="action_hospital_bed" sequence="70"/>
+
+    <menuitem id="menu_government_expense" name="قرارات"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_government_expense" sequence="80"/>
 </odoo>

@@ -32,6 +32,6 @@ access_hospital_floor,hospital.floor,model_hospital_floor,base.group_user,1,1,1,
 access_hospital_room,hospital.room,model_hospital_room,base.group_user,1,1,1,1
 access_hospital_accommodation_grade,hospital.accommodation.grade,model_hospital_accommodation_grade,base.group_user,1,1,1,1
 access_hospital_bed,hospital.bed,model_hospital_bed,base.group_user,1,1,1,1
-
 access_basket_model,basket_model,model_basket_model,,1,1,1,1
+access_saycare_government_expense_decision,saycare_government_expense_decision,model_saycare_government_expense_decision,,1,1,1,1
 
