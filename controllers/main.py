@@ -450,7 +450,7 @@ class PickingController(http.Controller):
                 'qty_done':                 sum(ml.qty_done for ml in move.move_line_ids) if move.move_line_ids else move.quantity,
                 'availability':             getattr(move, 'availability', 0.0),
                 # ── uom ───────────────────────────────────────────────────
-                'product_uom':              move.product_uom.id if move.product_uom else None,
+                'product_uom':              move.product_uom.id   if move.product_uom else None,
                 'product_uom_name':         move.product_uom.name if move.product_uom else None,
                 # ── locations ─────────────────────────────────────────────
                 'location_id':              move.location_id.id if move.location_id else None,
@@ -556,7 +556,7 @@ class MoveController(http.Controller):
                 'quantity':                 rec.quantity,
                 'availability':             getattr(rec, 'availability', 0.0),
                 # ── uom ───────────────────────────────────────────────────
-                'product_uom':              rec.product_uom.id if rec.product_uom else None,
+                'product_uom':              rec.product_uom.id   if rec.product_uom else None,
                 'product_uom_name':         rec.product_uom.name if rec.product_uom else None,
                 # ── locations ─────────────────────────────────────────────
                 'location_id':              rec.location_id.id if rec.location_id else None,
@@ -670,8 +670,8 @@ class PurchaseOrderController(http.Controller):
                 'qty_invoiced':             line.qty_invoiced,
                 'qty_to_invoice':           line.qty_to_invoice,
                 # ── uom ───────────────────────────────────────────────────
-                'product_uom':              line.product_uom.id if line.product_uom else None,
-                'product_uom_name':         line.product_uom.name if line.product_uom else None,
+                'product_uom':              line.product_uom_id.id   if line.product_uom_id else None,
+                'product_uom_name':         line.product_uom_id.name if line.product_uom_id else None,
                 # ── pricing ───────────────────────────────────────────────
                 'price_unit':               line.price_unit,
                 'discount':                 line.discount,
@@ -1310,6 +1310,8 @@ class QuantController(http.Controller):
                 'product_id':           rec.product_id.id if rec.product_id else None,
                 'product_name':         rec.product_id.name if rec.product_id else None,
                 'product_default_code': rec.product_id.default_code or '' if rec.product_id else '',
+                'categ_id':             rec.product_id.categ_id.id if rec.product_id and rec.product_id.categ_id else None,
+                'categ_name':           rec.product_id.categ_id.name if rec.product_id and rec.product_id.categ_id else None,
                 'product_uom_id':       rec.product_uom_id.id if rec.product_uom_id else None,
                 'product_uom_name':     rec.product_uom_id.name if rec.product_uom_id else None,
                 'location_id':          rec.location_id.id if rec.location_id else None,
@@ -1529,8 +1531,57 @@ class PickingConfirmController(http.Controller):
             body = json.loads(request.httprequest.data or '{}')
             if 'q_sant' in body:
                 move.q_sant = float(body['q_sant'])
+            if 'qty_done' in body:
+                move.quantity = float(body['qty_done'])
             qty_done = sum(ml.qty_done for ml in move.move_line_ids) if move.move_line_ids else move.quantity
             return http_response({'id': move.id, 'q_sant': move.q_sant, 'qty_done': qty_done})
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/stock/pickings/<int:rec_id>/save-quantities', type='http', auth='user', methods=['POST'], csrf=False)
+    def save_quantities(self, rec_id, **kw):
+        """Save q_sant + qty_done for each move and mark picking as quantities_confirmed."""
+        try:
+            rec = request.env['stock.picking'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state == 'done':
+                return http_response({'error': 'picking is already done'}, 400)
+            if rec.state == 'cancel':
+                return http_response({'error': 'picking is cancelled'}, 400)
+
+            body = json.loads(request.httprequest.data or '{}')
+            moves_data = body.get('moves', [])
+
+            for entry in moves_data:
+                move_id = entry.get('move_id')
+                if not move_id:
+                    continue
+                move = request.env['stock.move'].sudo().browse(int(move_id))
+                if not move.exists() or move.picking_id.id != rec_id:
+                    continue
+                if 'q_sant' in entry:
+                    move.q_sant = float(entry['q_sant'])
+                if 'qty_done' in entry:
+                    move.quantity = float(entry['qty_done'])
+
+            rec.write({'state': 'quantities_confirmed'})
+
+            moves_out = []
+            for move in rec.move_ids:
+                moves_out.append({
+                    'id':              move.id,
+                    'q_sant':          getattr(move, 'q_sant', 0.0),
+                    'qty_done':        move.quantity,
+                    'product_uom_qty': move.product_uom_qty,
+                })
+
+            return http_response({
+                'id':    rec.id,
+                'name':  rec.name,
+                'state': rec.state,
+                'moves': moves_out,
+            })
         except Exception as e:
             return http_response({'error': str(e)}, 500)
 
@@ -1908,12 +1959,12 @@ class PurchaseOrderCreateController(http.Controller):
                         uom_id = uom.id
 
                 line_vals_list.append((0, 0, {
-                    'product_id':   product.id,
-                    'name':         product.display_name,
-                    'product_qty':  qty,
-                    'price_unit':   price,
-                    'product_uom':  uom_id,
-                    'date_planned': line.get('date_planned') or body.get('date_planned') or now_str,
+                    'product_id':    product.id,
+                    'name':          product.display_name,
+                    'product_qty':   qty,
+                    'price_unit':    price,
+                    'product_uom_id': uom_id,
+                    'date_planned':  line.get('date_planned') or body.get('date_planned') or now_str,
                 }))
 
             vals['order_line'] = line_vals_list
@@ -2160,17 +2211,98 @@ class CrRequisitionController(http.Controller):
 
     @http.route('/api/v1/purchase/cr-requisitions', type='http', auth='user', methods=['GET'], csrf=False)
     def get_all(self, **kw):
-        records = request.env['material.purchase.requisition'].sudo().search([])
-        data = []
-        for rec in records:
-            data.append({
+        try:
+            records = request.env['material.purchase.requisition'].sudo().search([])
+            data = []
+            for rec in records:
+                try:
+                    purchase_count = rec.purchase_count
+                except Exception:
+                    purchase_count = 0
+                try:
+                    internal_transfer_count = rec.internal_transfer_count
+                except Exception:
+                    internal_transfer_count = 0
+                data.append({
+                    'id':                           rec.id,
+                    'name':                         rec.name,
+                    'state':                        rec.state,
+                    'request_action':               rec.request_action or '',
+                    'reason_for_requisition':       rec.reason_for_requisition or '',
+                    'reason_for_rejection':         rec.reason_for_rejection or '',
+                    'employee_id':                  rec.employee_id.id if rec.employee_id else None,
+                    'employee_name':                rec.employee_id.name if rec.employee_id else None,
+                    'department_id':                rec.department_id.id if rec.department_id else None,
+                    'department_name':              rec.department_id.name if rec.department_id else None,
+                    'requisition_responsible':      rec.requisition_responsible.id if rec.requisition_responsible else None,
+                    'requisition_responsible_name': rec.requisition_responsible.name if rec.requisition_responsible else None,
+                    'confirmed_by_id':              rec.confirmed_by_id.id if rec.confirmed_by_id else None,
+                    'confirmed_by_name':            rec.confirmed_by_id.name if rec.confirmed_by_id else None,
+                    'department_manager_id':        rec.department_manager_id.id if rec.department_manager_id else None,
+                    'department_manager_name':      rec.department_manager_id.name if rec.department_manager_id else None,
+                    'approved_id':                  rec.approved_id.id if rec.approved_id else None,
+                    'approved_name':                rec.approved_id.name if rec.approved_id else None,
+                    'rejected_id':                  rec.rejected_id.id if rec.rejected_id else None,
+                    'rejected_name':                rec.rejected_id.name if rec.rejected_id else None,
+                    'requisition_date':             str(rec.requisition_date) if rec.requisition_date else None,
+                    'requisition_deadline':         str(rec.requisition_deadline) if rec.requisition_deadline else None,
+                    'received_date':                str(rec.received_date) if rec.received_date else None,
+                    'confirmed_date':               str(rec.confirmed_date) if rec.confirmed_date else None,
+                    'department_approval_date':     str(rec.department_approval_date) if rec.department_approval_date else None,
+                    'approved_date':                str(rec.approved_date) if rec.approved_date else None,
+                    'rejected_date':                str(rec.rejected_date) if rec.rejected_date else None,
+                    'source_location_id':           rec.source_location_id.id if rec.source_location_id else None,
+                    'source_location_name':         rec.source_location_id.complete_name if rec.source_location_id else None,
+                    'destination_location_id':      rec.destination_location_id.id if rec.destination_location_id else None,
+                    'destination_location_name':    rec.destination_location_id.complete_name if rec.destination_location_id else None,
+                    'picking_type_id':              rec.picking_type_id.id if rec.picking_type_id else None,
+                    'picking_type_name':            rec.picking_type_id.name if rec.picking_type_id else None,
+                    'purchase_count':               purchase_count,
+                    'internal_transfer_count':      internal_transfer_count,
+                    'company_id':                   rec.company_id.id if rec.company_id else None,
+                    'company_name':                 rec.company_id.name if rec.company_id else None,
+                })
+            return http_response(data)
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_one(self, rec_id, **kw):
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+
+            lines = []
+            for line in rec.requisition_lines:
+                lines.append({
+                    'id':               line.id,
+                    'product_id':       line.product_id.id if line.product_id else None,
+                    'product_tmpl_id':  line.product_id.product_tmpl_id.id if line.product_id else None,
+                    'product_name':     line.product_id.name if line.product_id else None,
+                    'default_code':     line.product_id.default_code or '' if line.product_id else '',
+                    'standard_price':   line.product_id.standard_price if line.product_id else 0.0,
+                    'qty':              line.quantity,
+                    'uom_id':           line.unit_of_measure.id if line.unit_of_measure else None,
+                    'uom_name':         line.unit_of_measure.name if line.unit_of_measure else None,
+                    'vendors':          [{'id': v.id, 'name': v.name} for v in line.vendor_ids],
+                    'request_action':   line.request_action or '',
+                })
+
+            try:
+                purchase_count = rec.purchase_count
+            except Exception:
+                purchase_count = 0
+            try:
+                internal_transfer_count = rec.internal_transfer_count
+            except Exception:
+                internal_transfer_count = 0
+
+            data = {
                 'id':                           rec.id,
                 'name':                         rec.name,
                 'state':                        rec.state,
-                # state: new / waiting_department_approval / waiting_ir_approval
-                #        approved / purchase_order_created / received / rejected
                 'request_action':               rec.request_action or '',
-                # request_action: purchase order / internal picking
                 'reason_for_requisition':       rec.reason_for_requisition or '',
                 'reason_for_rejection':         rec.reason_for_rejection or '',
                 'employee_id':                  rec.employee_id.id if rec.employee_id else None,
@@ -2200,75 +2332,44 @@ class CrRequisitionController(http.Controller):
                 'destination_location_name':    rec.destination_location_id.complete_name if rec.destination_location_id else None,
                 'picking_type_id':              rec.picking_type_id.id if rec.picking_type_id else None,
                 'picking_type_name':            rec.picking_type_id.name if rec.picking_type_id else None,
-                'purchase_count':               rec.purchase_count,
-                'internal_transfer_count':      rec.internal_transfer_count,
+                'purchase_count':               purchase_count,
+                'internal_transfer_count':      internal_transfer_count,
                 'company_id':                   rec.company_id.id if rec.company_id else None,
                 'company_name':                 rec.company_id.name if rec.company_id else None,
+                'lines':                        lines,
+            }
+            return http_response(data)
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+class CrRequisitionUpdateController(http.Controller):
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update_cr_requisition(self, rec_id, **kw):
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            body = json.loads(request.httprequest.data or '{}')
+            vals = {}
+            if 'source_location_id' in body:
+                loc = request.env['stock.location'].sudo().browse(int(body['source_location_id']))
+                if loc.exists():
+                    vals['source_location_id'] = loc.id
+            if 'destination_location_id' in body:
+                loc = request.env['stock.location'].sudo().browse(int(body['destination_location_id']))
+                if loc.exists():
+                    vals['destination_location_id'] = loc.id
+            if vals:
+                rec.write(vals)
+            return http_response({
+                'id':                       rec.id,
+                'source_location_id':       rec.source_location_id.id if rec.source_location_id else None,
+                'destination_location_id':  rec.destination_location_id.id if rec.destination_location_id else None,
             })
-        return http_response(data)
-
-    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_one(self, rec_id, **kw):
-        rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
-        if not rec.exists():
-            return http_response({'error': 'not found'}, 404)
-
-        lines = []
-        for line in rec.requisition_line_ids:
-            lines.append({
-                'id':               line.id,
-                'product_id':       line.product_id.id if line.product_id else None,
-                'product_name':     line.product_id.name if line.product_id else None,
-                'default_code':     line.product_id.default_code or '' if line.product_id else '',
-                'qty':              line.qty,
-                'uom_id':           line.uom_id.id if line.uom_id else None,
-                'uom_name':         line.uom_id.name if line.uom_id else None,
-                'partner_id':       line.partner_id.id if line.partner_id else None,
-                'partner_name':     line.partner_id.name if line.partner_id else None,
-                'requisition_type': line.requisition_type if hasattr(line, 'requisition_type') else '',
-            })
-
-        data = {
-            'id':                           rec.id,
-            'name':                         rec.name,
-            'state':                        rec.state,
-            'request_action':               rec.request_action or '',
-            'reason_for_requisition':       rec.reason_for_requisition or '',
-            'reason_for_rejection':         rec.reason_for_rejection or '',
-            'employee_id':                  rec.employee_id.id if rec.employee_id else None,
-            'employee_name':                rec.employee_id.name if rec.employee_id else None,
-            'department_id':                rec.department_id.id if rec.department_id else None,
-            'department_name':              rec.department_id.name if rec.department_id else None,
-            'requisition_responsible':      rec.requisition_responsible.id if rec.requisition_responsible else None,
-            'requisition_responsible_name': rec.requisition_responsible.name if rec.requisition_responsible else None,
-            'confirmed_by_id':              rec.confirmed_by_id.id if rec.confirmed_by_id else None,
-            'confirmed_by_name':            rec.confirmed_by_id.name if rec.confirmed_by_id else None,
-            'department_manager_id':        rec.department_manager_id.id if rec.department_manager_id else None,
-            'department_manager_name':      rec.department_manager_id.name if rec.department_manager_id else None,
-            'approved_id':                  rec.approved_id.id if rec.approved_id else None,
-            'approved_name':                rec.approved_id.name if rec.approved_id else None,
-            'rejected_id':                  rec.rejected_id.id if rec.rejected_id else None,
-            'rejected_name':                rec.rejected_id.name if rec.rejected_id else None,
-            'requisition_date':             str(rec.requisition_date) if rec.requisition_date else None,
-            'requisition_deadline':         str(rec.requisition_deadline) if rec.requisition_deadline else None,
-            'received_date':                str(rec.received_date) if rec.received_date else None,
-            'confirmed_date':               str(rec.confirmed_date) if rec.confirmed_date else None,
-            'department_approval_date':     str(rec.department_approval_date) if rec.department_approval_date else None,
-            'approved_date':                str(rec.approved_date) if rec.approved_date else None,
-            'rejected_date':                str(rec.rejected_date) if rec.rejected_date else None,
-            'source_location_id':           rec.source_location_id.id if rec.source_location_id else None,
-            'source_location_name':         rec.source_location_id.complete_name if rec.source_location_id else None,
-            'destination_location_id':      rec.destination_location_id.id if rec.destination_location_id else None,
-            'destination_location_name':    rec.destination_location_id.complete_name if rec.destination_location_id else None,
-            'picking_type_id':              rec.picking_type_id.id if rec.picking_type_id else None,
-            'picking_type_name':            rec.picking_type_id.name if rec.picking_type_id else None,
-            'purchase_count':               rec.purchase_count,
-            'internal_transfer_count':      rec.internal_transfer_count,
-            'company_id':                   rec.company_id.id if rec.company_id else None,
-            'company_name':                 rec.company_id.name if rec.company_id else None,
-            'requisition_line_ids':         lines,
-        }
-        return http_response(data)
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
 
 
 class CrRequisitionCreateController(http.Controller):
@@ -2351,12 +2452,12 @@ class CrRequisitionActionController(http.Controller):
 
     @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/confirm', type='http', auth='user', methods=['POST'], csrf=False)
     def confirm(self, rec_id, **kw):
-        """Move draft (new) → waiting_department_approval — called when user clicks إرسال للمراجعة."""
+        """Move draft/new → waiting_department_approval — called when user clicks إرسال للمراجعة."""
         try:
             rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
             if not rec.exists():
                 return http_response({'error': 'not found'}, 404)
-            if rec.state == 'new':
+            if rec.state in ('draft', 'new'):
                 rec.action_confirm()
             return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
         except Exception as e:
@@ -2371,7 +2472,7 @@ class CrRequisitionActionController(http.Controller):
 
             if rec.state == 'waiting_department_approval':
                 rec.action_dept_approve()
-            elif rec.state == 'new':
+            elif rec.state in ('draft', 'new'):
                 rec.action_confirm()
                 rec.action_dept_approve()
             else:
@@ -2391,12 +2492,100 @@ class CrRequisitionActionController(http.Controller):
             if rec.state == 'rejected':
                 return http_response({'error': 'requisition is already rejected'}, 400)
 
-            if hasattr(rec, 'action_reject'):
-                rec.action_reject()
-            else:
-                rec.write({'state': 'rejected'})
+            rec.write({
+                'state':        'rejected',
+                'rejected_id':   request.env.user.id,
+                'rejected_date': odoo_fields.Date.context_today(rec),
+            })
 
             return http_response({'id': rec.id, 'name': rec.name, 'state': rec.state})
 
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/create-picking-and-po', type='http', auth='user', methods=['POST'], csrf=False)
+    def create_picking_and_po(self, rec_id, **kw):
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            if rec.state not in ('approved', 'purchase_order_created'):
+                return http_response({'error': f'cannot create order in state: {rec.state}'}, 400)
+
+            body = json.loads(request.httprequest.data or '{}')
+            lines_param = body.get('lines')  # [{product_id, qty, price_unit, partner_id, uom_id, name}]
+
+            if lines_param is not None:
+                # Create PO from the caller-specified lines only, with exact prices
+                rec.write({'state': 'purchase_order_created'})
+                now_dt = odoo_fields.Datetime.to_string(odoo_fields.Datetime.now())
+
+                by_vendor = {}
+                for line in lines_param:
+                    partner_id = line.get('partner_id')
+                    product_id = line.get('product_id')
+                    template_id = line.get('template_id')
+
+                    # Resolve template → default variant when product_id is not provided
+                    if not product_id and template_id:
+                        tmpl = request.env['product.template'].sudo().browse(int(template_id))
+                        if tmpl.exists() and tmpl.product_variant_ids:
+                            product_id = tmpl.product_variant_ids[0].id
+
+                    if not partner_id or not product_id:
+                        continue
+
+                    by_vendor.setdefault(int(partner_id), []).append({**line, 'product_id': product_id})
+
+                purchase_ids = []
+                for partner_id, po_lines in by_vendor.items():
+                    order_lines = []
+                    for l in po_lines:
+                        pid = int(l['product_id'])
+                        product = request.env['product.product'].sudo().browse(pid)
+
+                        line_vals = {
+                            'product_id':   pid,
+                            'product_qty':  float(l.get('qty', 1)),
+                            'price_unit':   float(l.get('price_unit', 0)),
+                            'name':         l.get('name', '') or (product.name if product.exists() else ''),
+                            'date_planned': now_dt,
+                        }
+
+                        # UoM: use provided value, else fall back to product's purchase UoM
+                        uom_id = l.get('uom_id')
+                        if uom_id:
+                            line_vals['product_uom_id'] = int(uom_id)
+                        elif product.exists():
+                            line_vals['product_uom_id'] = (
+                                product.uom_po_id.id or product.uom_id.id
+                            )
+
+                        order_lines.append((0, 0, line_vals))
+
+                    po = request.env['purchase.order'].sudo().create({
+                        'partner_id':        partner_id,
+                        'requisition_order': rec.name,
+                        'order_line':        order_lines,
+                    })
+                    purchase_ids.append(po.id)
+
+                return http_response({
+                    'id':              rec.id,
+                    'name':            rec.name,
+                    'state':           rec.state,
+                    'pickings':        [],
+                    'purchase_orders': purchase_ids,
+                })
+
+            # No lines provided — fall back to the model's default action
+            result = rec.action_create_picking_and_po()
+            return http_response({
+                'id':              rec.id,
+                'name':            rec.name,
+                'state':           rec.state,
+                'pickings':        result.get('pickings', []) if isinstance(result, dict) else [],
+                'purchase_orders': result.get('purchase_orders', []) if isinstance(result, dict) else [],
+            })
         except Exception as e:
             return http_response({'error': str(e)}, 500)

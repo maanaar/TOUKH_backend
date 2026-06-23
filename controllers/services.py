@@ -61,6 +61,34 @@ def _products_from_categ_keyword(env, keyword, existing_names=None):
     return results
 
 
+def _basket_items(product):
+    items = []
+    for item in (product.basket_table_id or []):
+        sub_product = None
+        sub_name    = ''
+        if item.product_product_id and item.product_product_id.exists():
+            sub_product = item.product_product_id
+            sub_name    = sub_product.name or ''
+        elif item.prod_id and item.prod_id.exists():
+            tmpl        = item.prod_id
+            sub_name    = tmpl.name or ''
+            variants    = tmpl.product_variant_ids
+            sub_product = variants[0] if variants else None
+        items.append({
+            'id':                 item.id,
+            'serial_no':          item.serial_no or 0,
+            'name':               sub_name,
+            'uom':                item.uom_id.name if item.uom_id else '',
+            'uom_id':             item.uom_id.id   if item.uom_id else None,
+            'barcode':            item.barcode or '',
+            'planned_qty':        item.planned_qty or 0,
+            'price':              item.price or 0,
+            'total_price':        item.total_price or 0,
+            'product_product_id': sub_product.id if sub_product else None,
+        })
+    return items
+
+
 class ServiceController(http.Controller):
 
     @http.route('/saycare/api/services', type='http', auth='user', methods=['GET'], csrf=False)
@@ -185,3 +213,41 @@ class ServiceController(http.Controller):
             return _json({'error': 'service not found'}, 404)
         s.write({'active': False})
         return _json({'ok': True})
+
+    @http.route('/saycare/api/services/<int:service_id>/basket', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_basket(self, service_id, **kw):
+        s = request.env['saycare.service'].sudo().browse(service_id)
+        if not s.exists():
+            return _json({'basket': []})
+        product = s.product_id
+        if not product or not product.exists():
+            return _json({'basket': []})
+        return _json({'basket': _basket_items(product)})
+
+    @http.route('/saycare/api/products/<int:product_id>/basket', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_product_basket(self, product_id, **kw):
+        product = request.env['product.template'].sudo().browse(product_id)
+        if not product.exists():
+            return _json({'basket': []})
+        return _json({'basket': _basket_items(product)})
+
+    @http.route('/saycare/api/products/search', type='http', auth='user', methods=['GET'], csrf=False)
+    def search_products(self, q='', limit='40', **kw):
+        env = request.env
+        domain = [('active', '=', True), ('sale_ok', '=', True)]
+        if q and q.strip():
+            domain = ['&'] + domain + ['|', ('name', 'ilike', q.strip()), ('default_code', 'ilike', q.strip())]
+        products = env['product.template'].sudo().search(domain, limit=int(limit))
+        results = []
+        for p in products:
+            variant = p.product_variant_ids[:1]
+            results.append({
+                'id':                 p.id,
+                'name':               p.name or '',
+                'default_code':       p.default_code or '',
+                'uom':                p.uom_id.name if p.uom_id else '',
+                'uom_id':             p.uom_id.id   if p.uom_id else None,
+                'price':              float(p.list_price),
+                'product_product_id': variant.id if variant else None,
+            })
+        return _json(results)

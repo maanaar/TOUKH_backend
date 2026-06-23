@@ -20,6 +20,11 @@ class SaycareSpecialty(models.Model):
         help='Product category that holds this clinic\'s consumables/supplies',
     )
 
+    consultant_price           = fields.Float(string='سعر كشف الاستشاري', default=0.0)
+    consultant_insurance_price = fields.Float(string='حصة تأمين الاستشاري', default=0.0)
+    specialist_price           = fields.Float(string='سعر كشف الأخصائي', default=0.0)
+    specialist_insurance_price = fields.Float(string='حصة تأمين الأخصائي', default=0.0)
+
     doctor_ids    = fields.One2many(
         'hr.employee', 'specialty_id',
         string='Doctors',

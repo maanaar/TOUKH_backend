@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import datetime
+import json as _json_mod
 from odoo import http
 from odoo.http import request
 from .utils import _json
@@ -22,7 +23,7 @@ class QueueController(http.Controller):
         # Return active visits + today's completed visits so the kanban persists after refresh
         domain = [
             '|',
-            ('state', 'in', ['doctor_queue', 'in_progress']),
+            ('state', 'in', ['waiting', 'triage', 'doctor_queue', 'in_progress']),
             '&', ('state', '=', 'done'), ('admission_date', '>=', today_start),
         ]
         if specialty_id:
@@ -31,3 +32,17 @@ class QueueController(http.Controller):
             domain.append(('doctor_id', '=', int(doctor_id)))
         records = request.env['saycare.visit'].sudo().search(domain, order='admission_date asc')
         return _json([_visit_dict(v) for v in records])
+
+    @http.route('/saycare/api/queue/pending-basket', type='http', auth='user', methods=['GET'], csrf=False)
+    def pending_basket_queue(self, **kw):
+        today_start = datetime.datetime.combine(datetime.date.today(), datetime.time.min)
+        records = request.env['saycare.visit'].sudo().search(
+            [('admission_date', '>=', today_start)],
+            order='admission_date asc',
+        )
+        result = []
+        for v in records:
+            basket = _json_mod.loads(v.basket_json or '[]')
+            if basket and not v.basket_paid:
+                result.append(_visit_dict(v))
+        return _json(result)

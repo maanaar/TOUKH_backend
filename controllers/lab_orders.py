@@ -73,7 +73,7 @@ class LabOrderController(http.Controller):
     # ── Global queue ───────────────────────────────────────────────────────────
 
     @http.route('/saycare/api/lab-orders', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, state='', priority='', date='', **kw):
+    def get_all(self, state='', priority='', date='', patient_id='', **kw):
         domain = []
         if state:
             states = [s.strip() for s in state.split(',') if s.strip()]
@@ -83,6 +83,11 @@ class LabOrderController(http.Controller):
         if date:
             domain += [('requested_at', '>=', f'{date} 00:00:00'),
                        ('requested_at', '<=', f'{date} 23:59:59')]
+        if patient_id:
+            try:
+                domain.append(('patient_id', '=', int(patient_id)))
+            except (ValueError, TypeError):
+                pass
         records = request.env['saycare.lab.order'].sudo().search(
             domain, order='requested_at asc', limit=500
         )

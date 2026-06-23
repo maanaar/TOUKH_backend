@@ -43,13 +43,17 @@ class VitalsController(http.Controller):
             try: return float(val) if val not in (None, '') else default
             except (ValueError, TypeError): return default
 
+        _resp_map = {'طبيعي': 'normal', 'سريع': 'fast', 'بطيء': 'slow', 'غير طبيعي': 'fast'}
+        raw_resp = body.get('respiratory_type', 'normal') or 'normal'
+        resp_type = _resp_map.get(raw_resp, raw_resp) if raw_resp not in ('normal', 'fast', 'slow') else raw_resp
+
         vals = {
             'visit_id':         visit_id,
             'blood_pressure':   body.get('blood_pressure', ''),
             'temperature':      _f(body.get('temperature')),
             'pulse':            _f(body.get('pulse')),
             'respiratory_rate': _f(body.get('respiratory_rate')),
-            'respiratory_type': body.get('respiratory_type', 'normal'),
+            'respiratory_type': resp_type,
             'o2_saturation':    _f(body.get('o2_saturation')),
             'weight':           _f(body.get('weight')),
             'height':           _f(body.get('height')),

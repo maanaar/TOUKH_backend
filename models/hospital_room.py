@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields
+from odoo import models, fields, api
 
 
 class HospitalRoom(models.Model):
@@ -18,14 +18,18 @@ class HospitalRoom(models.Model):
         required=True,
         ondelete="restrict",
     )
-    # القسم يُملأ تلقائيًا من الدور حتى لا يحدث تعارض
     department_id = fields.Many2one(
         "hospital.inpatient.department",
         string="القسم",
-        related="floor_id.department_id",
+        compute="_compute_department_id",
         store=True,
-        readonly=True,
+        readonly=False,
     )
+
+    @api.depends("floor_id", "floor_id.department_ids")
+    def _compute_department_id(self):
+        for rec in self:
+            rec.department_id = rec.floor_id.department_ids[:1]
 
     room_type = fields.Selection(
         selection=[
@@ -67,8 +71,3 @@ class HospitalRoom(models.Model):
     active = fields.Boolean("فعال", default=True)
 
 
-    def _compute_bed_count(self):
-        for rec in self:
-            rec.bed_count = self.env["hospital.bed"].search_count(
-                [("room_id", "=", rec.id)]
-            )

@@ -49,6 +49,11 @@ class SaycareVisit(models.Model):
         ('staff',        'عاملين'),
     ], string='الوجهة المالية')
 
+    payment_method = fields.Selection([
+        ('cash',     'نقدي'),
+        ('deferred', 'مميكن'),
+    ], string='طريقة الدفع', default='cash')
+
     chief_complaint = fields.Char(string='Chief Complaint')
     triage_notes    = fields.Text(string='Triage Notes')
 
@@ -63,7 +68,9 @@ class SaycareVisit(models.Model):
     rad_order_ids        = fields.One2many('saycare.rad.order',      'visit_id',
                                            string='Rad Orders')
 
-    notes = fields.Text(string='Notes')
+    notes       = fields.Text(string='Notes')
+    basket_json = fields.Text(string='Basket JSON', default='[]')
+    basket_paid = fields.Boolean(string='Basket Paid', default=False)
 
     # ── Financial detail fields ────────────────────────────────────────────────
     decision_no        = fields.Char(string='رقم القرار')

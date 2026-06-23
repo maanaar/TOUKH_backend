@@ -8,7 +8,7 @@
                   decoration-warning="room_status == 'maintenance'">
                 <field name="code"/>
                 <field name="room_no"/>
-                <field name="department_id"/>
+                <field name="department_id" readonly="0"/>
                 <field name="floor_id"/>
                 <field name="room_type"/>
                 <field name="allowed_gender"/>
@@ -31,7 +31,7 @@
                             <field name="code"/>
                             <field name="room_no"/>
                             <field name="floor_id"/>
-                            <field name="department_id"/>
+                           <field name="department_id" readonly="0" />
                         </group>
                         <group>
                             <field name="room_type"/>

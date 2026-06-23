@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from . import (
     partner_ext,
+    pricelist_ext,
     saycare_specialty,
     saycare_service,
     saycare_visit,
@@ -19,4 +20,5 @@ from . import (
     hospital_room,
     hospital_accommodation_grade,
     hospital_bed,
+    saycare_government_expense,
 )

@@ -20,4 +20,6 @@ from . import (
     treasury,
     accounting,
     inpatient,
+    stock,
+    government_expense,
 )
