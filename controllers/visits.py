@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json as _json_mod
 import json
 import logging
 from odoo import http, fields
@@ -55,6 +56,8 @@ def _visit_dict(v, full=False):
             'insurance_price': s.insurance_price,
             'visit_type':      s.visit_type or '',
         } for s in v.service_ids],
+        'basket':          _json_mod.loads(v.basket_json or '[]') if v.basket_paid else [],
+        'basket_pending':  _json_mod.loads(v.basket_json or '[]') if not v.basket_paid else [],
         'invoice_id':      v.invoice_id.id if v.invoice_id else None,
         'total_price':     v.total_price,
         'insurance_share': v.insurance_share,
@@ -272,6 +275,42 @@ class VisitController(http.Controller):
         result = _visit_dict(v)
         result['invoice_id'] = invoice_id
         return _json(result, 200)
+
+    @http.route('/saycare/api/visit/<int:visit_id>/basket', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_basket(self, visit_id, **kw):
+        v = request.env['saycare.visit'].sudo().browse(visit_id)
+        if not v.exists():
+            return _json({'error': 'not found'}, 404)
+        return _json({'basket': _json_mod.loads(v.basket_json or '[]')})
+
+    @http.route('/saycare/api/visit/<int:visit_id>/basket', type='http', auth='user', methods=['POST'], csrf=False)
+    def set_basket(self, visit_id, **kw):
+        v = request.env['saycare.visit'].sudo().browse(visit_id)
+        if not v.exists():
+            return _json({'error': 'not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '[]')
+        except Exception:
+            return _json({'error': 'invalid JSON'}, 400)
+        items = body if isinstance(body, list) else body.get('basket', [])
+        v.write({'basket_json': _json_mod.dumps(items)})
+        return _json({'basket': items})
+
+    @http.route('/saycare/api/visit/<int:visit_id>/basket', type='http', auth='user', methods=['DELETE'], csrf=False)
+    def clear_basket(self, visit_id, **kw):
+        v = request.env['saycare.visit'].sudo().browse(visit_id)
+        if not v.exists():
+            return _json({'error': 'not found'}, 404)
+        v.write({'basket_json': '[]', 'basket_paid': False})
+        return _json({'ok': True})
+
+    @http.route('/saycare/api/visit/<int:visit_id>/basket/mark-paid', type='http', auth='user', methods=['POST'], csrf=False)
+    def mark_basket_paid(self, visit_id, **kw):
+        v = request.env['saycare.visit'].sudo().browse(visit_id)
+        if not v.exists():
+            return _json({'error': 'not found'}, 404)
+        v.write({'basket_paid': True})
+        return _json({'ok': True})
 
     @http.route('/saycare/api/visit/<int:visit_id>/state', type='http', auth='user', methods=['POST'], csrf=False)
     def change_state(self, visit_id, **kw):
