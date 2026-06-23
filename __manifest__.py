@@ -34,6 +34,7 @@
     'data': [
         'security/ir.model.access.csv',
         'data/sequences.xml',
+        'views/government_expense_views.xml',
         'views/product_template_inherit.xml',
         'views/partner_inherit.xml',
         'views/saycare_clinic_views.xml',

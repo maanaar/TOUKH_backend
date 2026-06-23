@@ -1,0 +1,41 @@
+<odoo>
+    <record id="view_government_expense_list" model="ir.ui.view">
+        <field name="name">saycare.government.expense.decision.list</field>
+        <field name="model">saycare.government.expense.decision</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="allowed_clinics_json"/>
+                <field name="scans_ids" widget="many2many_tags"/>
+                <field name="test_ids" widget="many2many_tags"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_government_expense_form" model="ir.ui.view">
+        <field name="name">saycare.government.expense.decision.form</field>
+        <field name="model">saycare.government.expense.decision</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="allowed_clinics_json"/>
+                            <field name="scans_ids" widget="many2many_tags"/>
+                            <field name="test_ids" widget="many2many_tags"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+
+    <record id="action_government_expense" model="ir.actions.act_window">
+        <field name="name">قرارات</field>
+        <field name="res_model">saycare.government.expense.decision</field>
+        <field name="view_mode">list,form</field>
+
+    </record>
+</odoo>

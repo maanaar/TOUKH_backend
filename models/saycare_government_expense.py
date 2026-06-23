@@ -9,7 +9,7 @@ class SaycareGovernmentExpenseDecision(models.Model):
     _order = 'id desc'
 
     name = fields.Char('اسم القرار', required=True)
-    number = fields.Char('رقم القرار', required=True)
+    number = fields.Char('رقم القرار')
     start_date = fields.Date('تاريخ البداية')
     month_count = fields.Integer('عدد الأشهر', default=3)
     total_amount = fields.Float('إجمالي المبلغ', digits=(12, 2))
@@ -34,6 +34,9 @@ class SaycareGovernmentExpenseDecision(models.Model):
         'saycare.government.expense.transaction', 'decision_id',
         string='المعاملات',
     )
+
+    scans_ids = fields.Many2many('product.category','medical_request_scans_rel',string='اشاعات')
+    test_ids = fields.Many2many('product.category','medical_request_tests_rel',string='التحاليل')
 
     def _to_dict(self):
         return {
