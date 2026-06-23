@@ -15,6 +15,10 @@
       <notebook position="inside">
         <page string="Basket" name="basket_table">
           <group>
+            <field name="basket_service_id"/>
+            <button name="get_service_basket" type="object" string="Get Details" class="oe_highlight"/>
+          </group>
+          <group>
             <field name="basket_table_id" string="">
                 <list editable="bottom">
                     <field name="serial_no"/>
