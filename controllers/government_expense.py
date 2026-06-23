@@ -58,11 +58,17 @@ class GovernmentExpenseController(http.Controller):
         env = request.env
         domain = []
         patient_id = kw.get('patient_id')
+        mrn = kw.get('mrn')
+        national_id = kw.get('national_id')
         if patient_id:
             try:
                 domain = [('patient_id', '=', int(patient_id))]
             except (ValueError, TypeError):
                 pass
+        elif mrn:
+            domain = [('patient_id.mrn', '=', mrn)]
+        elif national_id:
+            domain = [('patient_id.id_number', '=', national_id)]
         records = env['saycare.government.expense.decision'].search(domain, order='id desc')
         return _json([r._to_dict() for r in records])
 
