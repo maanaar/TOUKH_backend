@@ -35,8 +35,8 @@ class SaycareGovernmentExpenseDecision(models.Model):
         string='المعاملات',
     )
 
-    scans_ids = fields.Many2many('product.category','medical_request_scans_rel',string='اشاعات')
-    test_ids = fields.Many2many('product.category','medical_request_tests_rel',string='التحاليل')
+    scans_ids = fields.Many2many('product.category', 'medical_request_scans_rel', 'decision_id', 'categ_id', string='اشاعات')
+    test_ids  = fields.Many2many('product.category', 'medical_request_tests_rel', 'decision_id', 'categ_id', string='التحاليل')
 
     def _to_dict(self):
         return {
@@ -58,6 +58,8 @@ class SaycareGovernmentExpenseDecision(models.Model):
             'allowedClinics': self._load_json('allowed_clinics_json', []),
             'allocations': self._load_json('allocations_json', []),
             'transactions': [t._to_dict() for t in self.transaction_ids.sorted('id')],
+            'scans': [{'id': c.id, 'name': c.name} for c in self.scans_ids],
+            'tests': [{'id': c.id, 'name': c.name} for c in self.test_ids],
         }
 
     def _load_json(self, field_name, default):
