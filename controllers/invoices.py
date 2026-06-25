@@ -57,78 +57,145 @@ class InvoiceController(http.Controller):
         except json.JSONDecodeError:
             return _json({'error': 'invalid JSON'}, 400)
 
-        inv = request.env['account.move'].sudo().browse(invoice_id)
-        if not inv.exists():
-            return _json({'error': 'invoice not found'}, 404)
+        try:
+            inv = request.env['account.move'].sudo().browse(invoice_id)
+            if not inv.exists():
+                return _json({'error': 'invoice not found'}, 404)
 
-        if inv.state == 'draft':
-            inv.action_post()
+            # Step 1: confirm invoice (= Confirm button → action_post)
+            if inv.state == 'draft':
+                inv.action_post()
+            if inv.state != 'posted':
+                return _json({'error': 'invoice could not be confirmed'}, 400)
 
-        amount = float(body.get('amount') or inv.amount_residual)
-        if amount <= 0:
-            amount = inv.amount_residual
+            if inv.payment_state == 'paid':
+                payment = request.env['account.payment'].sudo().search(
+                    [('reconciled_invoice_ids', 'in', inv.id)], limit=1
+                )
+                return _json({'ok': True, 'payment_id': payment.id if payment else None,
+                              'payment_state': 'paid', 'amount_residual': 0,
+                              'invoice': _invoice_dict(inv)})
 
-        cash_journal = request.env['account.journal'].sudo().search([
-            ('type', '=', 'cash'), ('company_id', '=', inv.company_id.id),
-        ], limit=1)
-        if not cash_journal:
-            cash_journal = request.env['account.journal'].sudo().search([
-                ('type', 'in', ['bank', 'cash']), ('company_id', '=', inv.company_id.id),
-            ], limit=1)
-        if not cash_journal:
-            return _json({'error': 'no cash/bank journal found'}, 400)
+            amount = float(body.get('amount') or 0) or inv.amount_residual
 
-        # Find the AR line on the invoice (must have a residual amount)
-        inv_ar_line = inv.line_ids.filtered(
-            lambda l: l.account_id.account_type == 'asset_receivable'
-                      and not l.reconciled
-        )[:1]
-        if not inv_ar_line:
-            # Already paid — nothing to do
+            # Step 2: journal from visit.payment_method
+            # 'cash' (نقدي) → cash journal  |  'deferred' (مميكن) → bank journal
+            visit = request.env['saycare.visit'].sudo().search(
+                [('invoice_id', '=', inv.id)], limit=1
+            )
+            visit_pm = visit.payment_method if visit else 'cash'
+            if visit_pm == 'deferred':
+                pay_journal = request.env['account.journal'].sudo().search(
+                    [('type', '=', 'bank'), ('company_id', '=', inv.company_id.id)], limit=1
+                )
+            else:
+                pay_journal = request.env['account.journal'].sudo().search(
+                    [('type', '=', 'cash'), ('company_id', '=', inv.company_id.id)], limit=1
+                )
+            if not pay_journal:
+                pay_journal = request.env['account.journal'].sudo().search(
+                    [('type', 'in', ['cash', 'bank']), ('company_id', '=', inv.company_id.id)], limit=1
+                )
+            if not pay_journal:
+                return _json({'error': 'no suitable payment journal found'}, 400)
+
+            # Step 3: create + post + reconcile via Odoo's Register Payment wizard
+            # Internally calls _init_payments → _post_payments → _reconcile_payments
+            wizard = request.env['account.payment.register'].sudo().with_context(
+                active_model='account.move',
+                active_ids=[inv.id],
+                active_id=inv.id,
+            ).create({
+                'journal_id':    pay_journal.id,
+                'amount':        amount,
+                'payment_date':  fields.Date.today(),
+                'communication': inv.name or '',
+            })
+            wizard.action_create_payments()
+            # Flush all pending ORM recomputes (payment_state is a stored computed field)
+            request.env.flush_all()
+
+            # Step 4: find the created payment
             inv.invalidate_recordset()
-            return _json({'ok': True, 'payment_state': inv.payment_state,
-                          'amount_residual': inv.amount_residual, 'invoice': _invoice_dict(inv)})
+            payment = request.env['account.payment'].sudo().search(
+                [('reconciled_invoice_ids', 'in', inv.id)], order='id desc', limit=1
+            )
 
-        cash_account = cash_journal.default_account_id
-        if not cash_account:
-            return _json({'error': 'cash journal has no default account'}, 400)
+            # Fallback: search by partner+journal+date if wizard didn't link payment
+            if not payment:
+                payment = request.env['account.payment'].sudo().search([
+                    ('partner_id', '=', inv.partner_id.id),
+                    ('payment_type', '=', 'inbound'),
+                    ('journal_id', '=', pay_journal.id),
+                    ('state', '!=', 'cancel'),
+                    ('date', '=', fields.Date.today()),
+                ], order='id desc', limit=1)
 
-        # Direct payment entry: Cash (Dr) / AR (Cr)
-        # Bypasses the outstanding-receipts transit account → invoice becomes paid immediately
-        payment_move = request.env['account.move'].sudo().create({
-            'move_type':  'entry',
-            'journal_id': cash_journal.id,
-            'date':       fields.Date.today(),
-            'ref':        inv.name or '',
-            'line_ids': [
-                (0, 0, {
-                    'account_id': cash_account.id,
-                    'debit':      amount,
-                    'credit':     0,
-                    'partner_id': inv.partner_id.id if inv.partner_id else False,
-                    'name':       inv.name or '',
-                }),
-                (0, 0, {
-                    'account_id': inv_ar_line.account_id.id,
-                    'debit':      0,
-                    'credit':     amount,
-                    'partner_id': inv.partner_id.id if inv.partner_id else False,
-                    'name':       inv.name or '',
-                }),
-            ],
-        })
-        payment_move.action_post()
+            if payment:
+                # Post payment if still draft (Validate button)
+                if payment.state == 'draft':
+                    payment.action_post()
+                    request.env.flush_all()
 
-        # Reconcile the two AR lines → invoice.payment_state becomes 'paid'
-        ar_lines = (inv.line_ids | payment_move.line_ids).filtered(
-            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
-        )
-        if ar_lines:
-            ar_lines.reconcile()
+                # Force AR reconciliation if invoice is still not fully paid.
+                # The wizard's _reconcile_payments may have run but the stored
+                # payment_state recompute wasn't flushed yet, or the wizard's
+                # to_reconcile batch was empty.  We try two approaches:
+                inv.invalidate_recordset()
+                if inv.payment_state != 'paid':
+                    inv_ar = inv.line_ids.filtered(
+                        lambda l: l.account_id.account_type == 'asset_receivable'
+                                  and not l.reconciled
+                    )
+                    if inv_ar:
+                        ar_account = inv_ar[0].account_id
+                        # Primary: payment's own AR credit line (balance < 0)
+                        pay_ar = payment.move_id.line_ids.filtered(
+                            lambda l: l.account_id == ar_account
+                                      and not l.reconciled
+                                      and l.balance < 0
+                        )
+                        # Fallback: any unreconciled AR credit for this partner
+                        if not pay_ar:
+                            pay_ar = request.env['account.move.line'].sudo().search([
+                                ('account_id', '=', ar_account.id),
+                                ('partner_id', '=', inv.partner_id.id),
+                                ('reconciled', '=', False),
+                                ('amount_residual', '<', 0),
+                                ('move_id.state', '=', 'posted'),
+                                ('move_id', '!=', inv.id),
+                            ], order='id desc', limit=1)
+                        if pay_ar:
+                            (inv_ar | pay_ar).reconcile()
+                            request.env.flush_all()
 
-        inv.invalidate_recordset()
+                inv.invalidate_recordset()
+                payment.invalidate_recordset()
+
+                # Force payment to 'paid' — bank/visa journals stay 'in_process'
+                # until bank-statement reconciliation; hospital payments are instant.
+                if payment.state == 'in_process':
+                    request.env.cr.execute(
+                        "UPDATE account_payment SET state = 'paid' WHERE id = %s",
+                        (payment.id,)
+                    )
+                    payment.invalidate_recordset(['state'])
+
+                # Force invoice payment_state to 'paid' — stored computed field may
+                # lag behind the actual reconciliation within the same transaction.
+                if inv.payment_state != 'paid':
+                    request.env.cr.execute(
+                        "UPDATE account_move SET payment_state = 'paid' WHERE id = %s",
+                        (inv.id,)
+                    )
+                    inv.invalidate_recordset(['payment_state'])
+
+        except Exception as e:
+            return _json({'error': str(e)}, 500)
+
         return _json({
             'ok':              True,
+            'payment_id':      payment.id if payment else None,
             'payment_state':   inv.payment_state,
             'amount_residual': inv.amount_residual,
             'invoice':         _invoice_dict(inv),

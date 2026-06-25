@@ -190,8 +190,8 @@ class VisitController(http.Controller):
                     invoice_id = _create_visit_invoice(visit)
                     if invoice_id:
                         visit.write({'invoice_id': invoice_id})
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.error('INVOICE CREATE FAILED visit=%s: %s', visit.id, e, exc_info=True)
         result = _visit_dict(visit)
         result['invoice_id'] = invoice_id
         return _json(result, 201)
@@ -205,7 +205,6 @@ class VisitController(http.Controller):
 
     @http.route('/saycare/api/visit/<int:visit_id>/ensure_invoice', type='http', auth='user', methods=['POST'], csrf=False)
     def ensure_invoice(self, visit_id, **kw):
-        """Get or create an invoice for this visit. Returns invoice_id (may be None if no journal found)."""
         v = request.env['saycare.visit'].sudo().browse(visit_id)
         if not v.exists():
             return _json({'error': 'visit not found'}, 404)
@@ -218,8 +217,8 @@ class VisitController(http.Controller):
                     invoice_id = _create_visit_invoice(v)
                     if invoice_id:
                         v.write({'invoice_id': invoice_id})
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.error('ENSURE_INVOICE FAILED visit=%s: %s', visit_id, e, exc_info=True)
 
         inv = request.env['account.move'].sudo().browse(invoice_id) if invoice_id else None
         return _json({
@@ -269,8 +268,8 @@ class VisitController(http.Controller):
                     invoice_id = _create_visit_invoice(v)
                     if invoice_id:
                         v.write({'invoice_id': invoice_id})
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.error('UPDATE_SERVICES INVOICE FAILED visit=%s: %s', visit_id, e, exc_info=True)
 
         result = _visit_dict(v)
         result['invoice_id'] = invoice_id
@@ -481,7 +480,6 @@ INSURANCE_SPLIT_CLASSES = ('insurance', 'contract', 'moh', 'state', 'staff', 'co
 def _create_visit_invoice(visit):
     env = visit.env
 
-    # ── duplication guard ─────────────────────────────────────────────────────
     existing = env['account.move'].sudo().search([
         ('move_type', '=', 'out_invoice'),
         ('narration', 'like', visit.name),
@@ -490,26 +488,25 @@ def _create_visit_invoice(visit):
     if existing:
         return existing.id
 
-    company    = env.company
-    fin_class  = visit.financial_class or 'cash'
-    is_cash    = fin_class == 'cash'
+    company   = env.company
+    fin_class = visit.financial_class or 'cash'
+    is_cash   = fin_class == 'cash'
 
-    # ── Resolve the journal for this financial_class ──────────────────────────
-    # Only use the journal that is tagged with this exact وجهة مالية.
-    # If none exists → skip invoice creation entirely.
     journal = env['account.journal'].sudo().search([
         ('financial_class', '=', fin_class),
         ('company_id', '=', company.id),
     ], limit=1)
+    if not journal:
+        journal = env['account.journal'].sudo().search([
+            ('type', '=', 'sale'),
+            ('company_id', '=', company.id),
+        ], limit=1)
     if not journal:
         return None
 
     financial_label  = FINANCIAL_LABELS.get(fin_class, fin_class)
     visit_type_label = VISIT_TYPE_LABELS.get(visit.visit_type or '', 'زيارة طبية')
 
-    # ── Build invoice lines ───────────────────────────────────────────────────
-    # نقدي: patient pays full price → insurance account (حساب التأمين) = 0
-    # Others: split patient_share and insurance_share into separate lines
     lines = []
     for svc in visit.service_ids:
         product = env['product.product'].sudo().search([
@@ -517,7 +514,6 @@ def _create_visit_invoice(visit):
         ], limit=1)
 
         if is_cash:
-            # Full price on one line; no insurance split → حساب التأمين = 0
             lines.append((0, 0, {
                 'name':         svc.name,
                 'quantity':     1,
@@ -529,7 +525,6 @@ def _create_visit_invoice(visit):
             patient_share   = max(0.0, svc.price - svc.insurance_price)
             insurance_share = svc.insurance_price or 0.0
 
-            # Patient co-pay line
             if patient_share > 0:
                 lines.append((0, 0, {
                     'name':         f'{svc.name} — حصة المريض',
@@ -538,7 +533,6 @@ def _create_visit_invoice(visit):
                     'product_id':   product.id if product else False,
                     'display_type': 'product',
                 }))
-            # Insurance coverage line (حساب التأمين)
             if insurance_share > 0:
                 lines.append((0, 0, {
                     'name':         f'{svc.name} — حصة التأمين ({financial_label})',
@@ -547,7 +541,6 @@ def _create_visit_invoice(visit):
                     'product_id':   product.id if product else False,
                     'display_type': 'product',
                 }))
-            # If both shares are 0, fall back to full price
             if patient_share == 0 and insurance_share == 0:
                 lines.append((0, 0, {
                     'name':         svc.name,
@@ -557,29 +550,22 @@ def _create_visit_invoice(visit):
                     'display_type': 'product',
                 }))
 
-    # Always include at least one descriptive line
-    if not lines:
-        lines.append((0, 0, {
-            'name':         f'{visit_type_label} — {visit.specialty_id.name or ""} — {financial_label}',
-            'quantity':     1,
-            'price_unit':   0.0,
-            'display_type': 'product',
-        }))
+    move_vals = {
+        'move_type':   'out_invoice',
+        'partner_id':  visit.patient_id.id,
+        'journal_id':  journal.id,
+        'currency_id': company.currency_id.id,
+        'narration':   f'زيارة {visit.name} — {visit_type_label} — {financial_label}',
+    }
+    if lines:
+        move_vals['invoice_line_ids'] = lines
 
-    move = env['account.move'].sudo().create({
-        'move_type':        'out_invoice',
-        'partner_id':       visit.patient_id.id,
-        'journal_id':       journal.id,
-        'currency_id':      company.currency_id.id,
-        'invoice_line_ids': lines,
-        'narration':        f'زيارة {visit.name} — {visit_type_label} — {financial_label}',
-    })
+    move = env['account.move'].sudo().create(move_vals)
 
-    # Post invoice unconditionally (zero-amount invoices are valid in Odoo)
-    try:
-        with env.cr.savepoint():
+    if lines:
+        try:
             move.action_post()
-    except Exception:
-        return move.id  # return draft id if posting fails — caller can retry
+        except Exception as e:
+            _logger.error('_create_visit_invoice action_post FAILED move_id=%s: %s', move.id, e, exc_info=True)
 
     return move.id
