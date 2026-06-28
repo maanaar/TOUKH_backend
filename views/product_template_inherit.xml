@@ -20,6 +20,7 @@
         <field name="arch" type="xml">
             <group name="first" position="after">
                 <group name="saycare_categ">
+                    <field name="name_ar"/>
                     <field name="categ_type"/>
                 </group>
             </group>
@@ -33,6 +34,7 @@
         <field name="inherit_id" ref="product.product_category_list_view"/>
         <field name="arch" type="xml">
             <field name="display_name" position="after">
+                <field name="name_ar"/>
                 <field name="categ_type"/>
             </field>
         </field>

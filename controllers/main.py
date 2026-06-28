@@ -154,6 +154,7 @@ class ProductController(http.Controller):
                 'is_storable': rec.is_storable,
                 'categ_id':                 rec.categ_id.id if rec.categ_id else None,
                 'categ_name':               rec.categ_id.complete_name if rec.categ_id else None,
+                'categ_name_ar':            rec.categ_id.name_ar if rec.categ_id else None,
                 'active':                   rec.active,
                 'sale_ok':                  rec.sale_ok,
                 'purchase_ok':              rec.purchase_ok,
@@ -213,7 +214,12 @@ class ProductController(http.Controller):
         """Lightweight product search for dropdowns — returns only the fields needed."""
         domain = [('active', '=', True)]
         if term:
-            domain += ['|', ('name', 'ilike', term), ('default_code', 'ilike', term)]
+            domain += ['|', '|', '|',
+                ('name', 'ilike', term),
+                ('default_code', 'ilike', term),
+                ('categ_id.name', 'ilike', term),
+                ('categ_id.name_ar', 'ilike', term),
+            ]
         if product_type:
             domain.append(('type', '=', product_type))
 
@@ -229,6 +235,7 @@ class ProductController(http.Controller):
             'name':         rec.name,
             'default_code': rec.default_code or '',
             'categ_name':   rec.categ_id.complete_name if rec.categ_id else '',
+            'categ_name_ar': rec.categ_id.name_ar if rec.categ_id else '',
             'uom_id':       rec.uom_id.id   if rec.uom_id else None,
             'uom_name':     rec.uom_id.name if rec.uom_id else '',
             'type':         rec.type,

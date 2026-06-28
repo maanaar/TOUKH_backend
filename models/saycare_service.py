@@ -38,6 +38,8 @@ class ProductCategory(models.Model):
         ('procedures', 'إجراءات'),
     ], string='Category Type')
 
+    name_ar = fields.Char(string='الاسم العربي')
+
 
 class ProductTemplate(models.Model):
     _inherit = 'product.template'
