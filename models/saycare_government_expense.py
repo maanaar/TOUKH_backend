@@ -36,8 +36,8 @@ class SaycareGovernmentExpenseDecision(models.Model):
         string='المعاملات',
     )
 
-    scans_ids = fields.Many2many('product.category', 'medical_request_scans_rel', 'decision_id', 'categ_id', string='اشاعات')
-    test_ids  = fields.Many2many('product.category', 'medical_request_tests_rel', 'decision_id', 'categ_id', string='التحاليل')
+    scans_ids = fields.Many2many('product.category', 'gov_expense_decision_scans_rel', 'decision_id', 'categ_id', string='اشاعات')
+    test_ids  = fields.Many2many('product.category', 'gov_expense_decision_tests_rel', 'decision_id', 'categ_id', string='التحاليل')
 
     def _to_dict(self):
         return {
