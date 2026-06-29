@@ -215,7 +215,7 @@ class ProductController(http.Controller):
         return http_response(data)
 
     @http.route('/api/v1/products/search', type='http', auth='user', methods=['GET'], csrf=False)
-    def search_lite(self, term='', limit='50', offset='0', product_type='', **kw):
+    def search_lite(self, term='', limit='50', offset='0', product_type='', categ_keyword='', **kw):
         """Lightweight product search for dropdowns — returns only the fields needed."""
         domain = [('active', '=', True)]
         if term:
@@ -224,6 +224,12 @@ class ProductController(http.Controller):
                 ('default_code', 'ilike', term),
                 ('categ_id.name', 'ilike', term),
                 ('categ_id.name_ar', 'ilike', term),
+            ]
+        if categ_keyword:
+            domain += ['|', '|',
+                ('categ_id.name', 'ilike', categ_keyword),
+                ('categ_id.complete_name', 'ilike', categ_keyword),
+                ('categ_id.name_ar', 'ilike', categ_keyword),
             ]
         if product_type:
             domain.append(('type', '=', product_type))

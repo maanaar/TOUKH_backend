@@ -1,6 +1,51 @@
 # -*- coding: utf-8 -*-
 import json
+from datetime import date
 from odoo import models, fields, api
+
+
+class SaycareGovExpenseAllocation(models.Model):
+    _name = 'saycare.gov.expense.allocation'
+    _description = 'Government Expense Monthly Allocation'
+    _order = 'month_key asc'
+
+    decision_id = fields.Many2one(
+        'saycare.government.expense.decision',
+        required=True, ondelete='cascade',
+    )
+    month_key = fields.Char(string='مفتاح الشهر')   # e.g. "2024-01"
+    label      = fields.Char(string='الشهر')         # e.g. "يناير 2024"
+    amount     = fields.Float(string='الحد الشهري',  digits=(12, 2))
+    addition   = fields.Float(string='الإضافة',      digits=(12, 2))
+    manual     = fields.Boolean(string='يدوي',        default=False)
+
+    used_amount  = fields.Float(string='المستخدم',  digits=(12, 2), compute='_compute_usage', store=True)
+    remaining    = fields.Float(string='المتبقي',   digits=(12, 2), compute='_compute_usage', store=True)
+    state_label  = fields.Char(string='الحالة',     compute='_compute_usage', store=True)
+
+    @api.depends('amount', 'decision_id.transaction_ids', 'decision_id.transaction_ids.parts_json')
+    def _compute_usage(self):
+        today_key = date.today().strftime('%Y-%m')
+        for rec in self:
+            used = 0.0
+            for txn in rec.decision_id.transaction_ids:
+                try:
+                    for part in json.loads(txn.parts_json or '[]'):
+                        if part.get('monthKey') == rec.month_key:
+                            used += part.get('amount', 0)
+                except Exception:
+                    pass
+            rec.used_amount = round(used, 2)
+            rec.remaining   = round(max(0.0, rec.amount - used), 2)
+            if rec.month_key:
+                if rec.month_key < today_key:
+                    rec.state_label = 'منتهي'
+                elif rec.month_key == today_key:
+                    rec.state_label = 'جاري'
+                else:
+                    rec.state_label = 'قادم'
+            else:
+                rec.state_label = ''
 
 
 class SaycareGovExpenseClinic(models.Model):
@@ -123,23 +168,85 @@ class SaycareGovernmentExpenseDecision(models.Model):
         'saycare.government.expense.transaction', 'decision_id',
         string='المعاملات',
     )
+    allocation_ids = fields.One2many(
+        'saycare.gov.expense.allocation', 'decision_id',
+        string='التوزيع الشهري',
+    )
+
+    # ── Editable per-decision deduction ──────────────────────────────────────
+    deduction_amount = fields.Float(
+        string='خصم المؤسسة', digits=(12, 2),
+        default=lambda self: self.env['saycare.government.expense.settings'].get_settings().deduction_amount,
+    )
+
+    # ── Computed summary (reads deduction_amount from the record itself) ──────
+    distributable_amount = fields.Float(string='الصافي للتوزيع',  digits=(12, 2), compute='_compute_summary')
+    allocated_total      = fields.Float(string='الموزع',          digits=(12, 2), compute='_compute_summary')
+    used_total           = fields.Float(string='إجمالي المستخدم', digits=(12, 2), compute='_compute_summary')
+    usable_remaining     = fields.Float(string='المتاح',          digits=(12, 2), compute='_compute_summary')
+    expired_amount       = fields.Float(string='منتهي',           digits=(12, 2), compute='_compute_summary')
+
+    @api.depends('total_amount', 'deduction_amount', 'allocation_ids.amount',
+                 'allocation_ids.used_amount', 'allocation_ids.month_key', 'transaction_ids.amount')
+    def _compute_summary(self):
+        today_key = date.today().strftime('%Y-%m')
+        for rec in self:
+            rec.distributable_amount = round(max(0.0, rec.total_amount - rec.deduction_amount), 2)
+            rec.allocated_total      = round(sum(a.amount for a in rec.allocation_ids), 2)
+            rec.used_total           = round(sum(t.amount for t in rec.transaction_ids), 2)
+            usable  = sum(a.remaining for a in rec.allocation_ids if (a.month_key or '') >= today_key)
+            expired = sum(a.remaining for a in rec.allocation_ids if (a.month_key or '') <  today_key)
+            rec.usable_remaining = round(usable,  2)
+            rec.expired_amount   = round(expired, 2)
 
     scans_ids = fields.Many2many(
-        'product.category',
-        'gov_expense_decision_scans_rel', 'decision_id', 'categ_id',
-        string='اشاعات',
+        'product.template',
+        'gov_expense_decision_scans_product_rel', 'decision_id', 'product_id',
+        string='الأشعة المسموح بها',
     )
     test_ids = fields.Many2many(
+        'product.template',
+        'gov_expense_decision_tests_product_rel', 'decision_id', 'product_id',
+        string='التحاليل المسموح بها',
+    )
+    specialty_ids = fields.Many2many(
+        'saycare.specialty',
+        'gov_expense_decision_specialty_rel', 'decision_id', 'specialty_id',
+        string='العيادات المسموح بها',
+    )
+    medicine_categ_ids = fields.Many2many(
         'product.category',
-        'gov_expense_decision_tests_rel', 'decision_id', 'categ_id',
-        string='التحاليل',
+        'gov_expense_decision_medicine_categ_rel', 'decision_id', 'categ_id',
+        string='مجموعات الأدوية المسموح بها',
+        domain="[('parent_id.name', 'ilike', 'medications')]",
     )
 
     def _to_dict(self):
-        if self.clinic_ids:
+        # Build allowedClinics from specialty_ids (simple M2M), fall back to legacy
+        if self.specialty_ids:
+            allowed_clinics = [
+                {
+                    'specialtyId': str(s.id),
+                    'specialtyName': s.name_ar if hasattr(s, 'name_ar') and s.name_ar else s.name,
+                    'allowedServices': [],
+                    'allowedMedicines': [],
+                }
+                for s in self.specialty_ids
+            ]
+        elif self.clinic_ids:
             allowed_clinics = [c._to_dict() for c in self.clinic_ids]
         else:
             allowed_clinics = self._load_json('allowed_clinics_json', [])
+
+        # Build allowedGroups from M2M fields, fall back to JSON if empty
+        medicines = [{'id': str(c.id), 'label': c.name_ar if hasattr(c, 'name_ar') and c.name_ar else c.name} for c in self.medicine_categ_ids]
+        labs      = [{'id': str(t.id), 'label': t.name} for t in self.test_ids]
+        radiology = [{'id': str(s.id), 'label': s.name} for s in self.scans_ids]
+        if not medicines and not labs and not radiology:
+            allowed_groups = self._load_json('allowed_groups_json', {'medicines': [], 'labs': [], 'radiology': []})
+        else:
+            allowed_groups = {'medicines': medicines, 'labs': labs, 'radiology': radiology}
+
         return {
             'id': self.id,
             'name': self.name or '',
@@ -147,6 +254,7 @@ class SaycareGovernmentExpenseDecision(models.Model):
             'startDate': str(self.start_date) if self.start_date else '',
             'monthCount': self.month_count or 3,
             'totalAmount': self.total_amount or 0.0,
+            'deductionAmount': self.deduction_amount or 0.0,
             'status': self.status or 'جاري',
             'notes': self.notes or '',
             'patient': {
@@ -157,11 +265,20 @@ class SaycareGovernmentExpenseDecision(models.Model):
                 'mobile': self.patient_id.phone or '' if self.patient_id else '',
             },
             'allowedClinics': allowed_clinics,
-            'allocations':    self._load_json('allocations_json', []),
-            'allowedGroups':  self._load_json('allowed_groups_json', {'medicines': [], 'labs': [], 'radiology': []}),
+            'allocations': [
+                {
+                    'monthKey': a.month_key,
+                    'label':    a.label,
+                    'amount':   a.amount,
+                    'addition': a.addition,
+                    'manual':   a.manual,
+                }
+                for a in self.allocation_ids.sorted('month_key')
+            ] if self.allocation_ids else self._load_json('allocations_json', []),
+            'allowedGroups':  allowed_groups,
             'transactions': [t._to_dict() for t in self.transaction_ids.sorted('id')],
-            'scans': [{'id': c.id, 'name': c.name} for c in self.scans_ids],
-            'tests': [{'id': c.id, 'name': c.name} for c in self.test_ids],
+            'scans': [{'id': s.id, 'name': s.name} for s in self.scans_ids],
+            'tests': [{'id': t.id, 'name': t.name} for t in self.test_ids],
         }
 
     def _load_json(self, field_name, default):
@@ -172,6 +289,28 @@ class SaycareGovernmentExpenseDecision(models.Model):
             return json.loads(raw)
         except Exception:
             return default
+
+
+class SaycareGovernmentExpenseSettings(models.Model):
+    _name = 'saycare.government.expense.settings'
+    _description = 'Government Expense Decision Settings'
+
+    name = fields.Char(default='إعدادات قرارات نفقة الدولة', readonly=True)
+    deduction_amount = fields.Float('المبلغ المخصوم', default=60.0, digits=(12, 2))
+    max_addition_amount = fields.Float('أقصى مبلغ إضافة للشهر', default=40.0, digits=(12, 2))
+
+    @api.model
+    def get_settings(self):
+        rec = self.sudo().search([], limit=1)
+        if not rec:
+            rec = self.sudo().create({})
+        return rec
+
+    def _to_dict(self):
+        return {
+            'deductionAmount': self.deduction_amount or 0.0,
+            'maxAdditionAmount': self.max_addition_amount or 0.0,
+        }
 
 
 class SaycareGovernmentExpenseTransaction(models.Model):
@@ -199,6 +338,17 @@ class SaycareGovernmentExpenseTransaction(models.Model):
     parts_json = fields.Text('التوزيع الشهري', default='[]')
     touches_future_month = fields.Boolean('يمس شهر مستقبلي', default=False)
     notes = fields.Text('ملاحظات')
+
+    deducted = fields.Float(string='المخصوم فعلياً', digits=(12, 2), compute='_compute_deducted', store=True)
+
+    @api.depends('parts_json')
+    def _compute_deducted(self):
+        for rec in self:
+            try:
+                parts = json.loads(rec.parts_json or '[]')
+                rec.deducted = round(sum(p.get('amount', 0) for p in parts), 2)
+            except Exception:
+                rec.deducted = 0.0
 
     def _to_dict(self):
         parts = []
