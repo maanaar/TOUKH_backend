@@ -39,6 +39,8 @@ def _decision_vals(body, env):
         vals['allowed_clinics_json'] = json.dumps(body['allowedClinics'] or [])
     if 'allocations' in body:
         vals['allocations_json'] = json.dumps(body['allocations'] or [])
+    if 'allowedGroups' in body:
+        vals['allowed_groups_json'] = json.dumps(body['allowedGroups'] or {})
 
     patient = body.get('patient') or {}
     patient_id = patient.get('id')

@@ -19,12 +19,17 @@ class CategoryController(http.Controller):
 
     @http.route('/api/v1/categories', type='http', auth='user', methods=['GET'], csrf=False)
     def get_all(self, **kw):
-        records = request.env['product.category'].sudo().search([])
+        domain = []
+        parent_name = kw.get('parent_name')
+        if parent_name:
+            domain = [('parent_id.name', 'ilike', parent_name)]
+        records = request.env['product.category'].sudo().search(domain)
         data = []
         for rec in records:
             data.append({
                 'id':                        rec.id,
                 'name':                      rec.name,
+                'name_ar':                   rec.name_ar if hasattr(rec, 'name_ar') else '',
                 'complete_name':             rec.complete_name,
                 'parent_id':                 rec.parent_id.id if rec.parent_id else None,
                 'parent_name':               rec.parent_id.name if rec.parent_id else None,
@@ -231,14 +236,16 @@ class ProductController(http.Controller):
             domain, limit=limit_i, offset=offset_i, order='name asc'
         )
         items = [{
-            'id':           rec.id,
-            'name':         rec.name,
-            'default_code': rec.default_code or '',
-            'categ_name':   rec.categ_id.complete_name if rec.categ_id else '',
-            'categ_name_ar': rec.categ_id.name_ar if rec.categ_id else '',
-            'uom_id':       rec.uom_id.id   if rec.uom_id else None,
-            'uom_name':     rec.uom_id.name if rec.uom_id else '',
-            'type':         rec.type,
+            'id':                rec.id,
+            'name':              rec.name,
+            'default_code':      rec.default_code or '',
+            'categ_id':          rec.categ_id.id if rec.categ_id else None,
+            'categ_name':        rec.categ_id.complete_name if rec.categ_id else '',
+            'categ_name_ar':     rec.categ_id.name_ar if rec.categ_id else '',
+            'categ_parent_name': rec.categ_id.parent_id.name if rec.categ_id and rec.categ_id.parent_id else '',
+            'uom_id':            rec.uom_id.id   if rec.uom_id else None,
+            'uom_name':          rec.uom_id.name if rec.uom_id else '',
+            'type':              rec.type,
         } for rec in records]
         return http_response({'items': items, 'total': total, 'offset': offset_i, 'limit': limit_i})
 

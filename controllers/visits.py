@@ -334,6 +334,13 @@ class VisitController(http.Controller):
             vals['discharge_date'] = DT.now()
         v.write(vals)
 
+        if new_state == 'cancelled':
+            linked_appt = request.env['saycare.appointment'].sudo().search(
+                [('visit_id', '=', v.id), ('state', '!=', 'cancelled')], limit=1
+            )
+            if linked_appt:
+                linked_appt.write({'state': 'cancelled'})
+
         invoice_id = None
         if new_state == 'done' and v.service_ids and v.patient_id:
             invoice_id = _create_visit_invoice(v)

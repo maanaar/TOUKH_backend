@@ -28,7 +28,8 @@ class SaycareGovernmentExpenseDecision(models.Model):
 
     # JSON blobs to avoid extra tables for complex nested structures
     allowed_clinics_json = fields.Text('العيادات المسموح بها', default='[]')
-    allocations_json = fields.Text('التوزيع الشهري', default='[]')
+    allocations_json     = fields.Text('التوزيع الشهري', default='[]')
+    allowed_groups_json  = fields.Text('المجموعات المسموح بها', default='{}')
 
     transaction_ids = fields.One2many(
         'saycare.government.expense.transaction', 'decision_id',
@@ -56,7 +57,8 @@ class SaycareGovernmentExpenseDecision(models.Model):
                 'mobile': self.patient_id.phone or '' if self.patient_id else '',
             },
             'allowedClinics': self._load_json('allowed_clinics_json', []),
-            'allocations': self._load_json('allocations_json', []),
+            'allocations':    self._load_json('allocations_json', []),
+            'allowedGroups':  self._load_json('allowed_groups_json', {'medicines': [], 'labs': [], 'radiology': []}),
             'transactions': [t._to_dict() for t in self.transaction_ids.sorted('id')],
             'scans': [{'id': c.id, 'name': c.name} for c in self.scans_ids],
             'tests': [{'id': c.id, 'name': c.name} for c in self.test_ids],
