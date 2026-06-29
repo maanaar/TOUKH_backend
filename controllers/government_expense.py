@@ -36,11 +36,79 @@ def _decision_vals(body, env):
     if 'notes' in body:
         vals['notes'] = body['notes'] or ''
     if 'allowedClinics' in body:
-        vals['allowed_clinics_json'] = json.dumps(body['allowedClinics'] or [])
+        clinic_commands = [(5, 0, 0)]
+        for clinic_data in (body['allowedClinics'] or []):
+            spec_id = None
+            spec_id_raw = clinic_data.get('specialtyId')
+            if spec_id_raw:
+                try:
+                    spec = env['saycare.specialty'].browse(int(spec_id_raw))
+                    if spec.exists():
+                        spec_id = spec.id
+                except (TypeError, ValueError):
+                    pass
+
+            service_ids = []
+            product_service_ids = []
+            for svc in (clinic_data.get('allowedServices') or []):
+                svc_id = svc.get('id')
+                source = svc.get('source', 'service')
+                if not svc_id:
+                    continue
+                try:
+                    svc_id_int = int(svc_id)
+                except (TypeError, ValueError):
+                    continue  # skip synthetic ids like "lab-group:blood"
+                if source == 'service':
+                    rec = env['saycare.service'].browse(svc_id_int)
+                    if rec.exists():
+                        service_ids.append(svc_id_int)
+                else:
+                    rec = env['product.template'].browse(svc_id_int)
+                    if rec.exists():
+                        product_service_ids.append(svc_id_int)
+
+            medicine_ids = []
+            for med in (clinic_data.get('allowedMedicines') or []):
+                prod_id = med.get('productId') or med.get('variantId')
+                if not prod_id:
+                    continue
+                try:
+                    prod_id_int = int(prod_id)
+                except (TypeError, ValueError):
+                    continue
+                rec = env['product.product'].browse(prod_id_int)
+                if rec.exists():
+                    medicine_ids.append(prod_id_int)
+
+            clinic_commands.append((0, 0, {
+                'specialty_id': spec_id,
+                'specialty_name': clinic_data.get('specialtyName') or '',
+                'service_ids': [(6, 0, list(dict.fromkeys(service_ids)))],
+                'product_service_ids': [(6, 0, list(dict.fromkeys(product_service_ids)))],
+                'medicine_ids': [(6, 0, list(dict.fromkeys(medicine_ids)))],
+            }))
+        vals['clinic_ids'] = clinic_commands
     if 'allocations' in body:
         vals['allocations_json'] = json.dumps(body['allocations'] or [])
     if 'allowedGroups' in body:
         vals['allowed_groups_json'] = json.dumps(body['allowedGroups'] or {})
+    if 'scans' in body:
+        ids = []
+        for i in (body.get('scans') or []):
+            try:
+                ids.append(int(i))
+            except (TypeError, ValueError):
+                pass
+        vals['scans_ids'] = [(6, 0, ids)]
+    if 'tests' in body:
+        ids = []
+        for i in (body.get('tests') or []):
+            try:
+                ids.append(int(i))
+            except (TypeError, ValueError):
+                pass
+        vals['test_ids'] = [(6, 0, ids)]
 
     patient = body.get('patient') or {}
     patient_id = patient.get('id')

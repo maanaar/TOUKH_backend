@@ -3,6 +3,89 @@ import json
 from odoo import models, fields, api
 
 
+class SaycareGovExpenseClinic(models.Model):
+    _name = 'saycare.gov.expense.clinic'
+    _description = 'Government Expense Decision – Clinic Line'
+    _order = 'id asc'
+
+    decision_id = fields.Many2one(
+        'saycare.government.expense.decision',
+        ondelete='cascade', required=True,
+    )
+    specialty_id   = fields.Many2one('saycare.specialty', string='العيادة')
+    specialty_name = fields.Char(string='اسم العيادة')
+
+    # Services defined in saycare.service (source="service")
+    service_ids = fields.Many2many(
+        'saycare.service',
+        'gov_expense_clinic_service_rel',
+        'clinic_line_id', 'service_id',
+        string='الخدمات (كتالوج)',
+    )
+    # Products used as services (source="product", e.g. lab/rad from product category)
+    product_service_ids = fields.Many2many(
+        'product.template',
+        'gov_expense_clinic_product_svc_rel',
+        'clinic_line_id', 'template_id',
+        string='الخدمات (منتجات)',
+    )
+    # Medicines
+    medicine_ids = fields.Many2many(
+        'product.product',
+        'gov_expense_clinic_medicine_rel',
+        'clinic_line_id', 'product_id',
+        string='الأدوية المسموحة',
+    )
+
+    def _to_dict(self):
+        services = []
+        for s in self.service_ids:
+            services.append({
+                'id': s.id,
+                'code': s.code or '',
+                'name': s.name or '',
+                'category': 'عيادة',
+                'price': s.price or 0,
+                'insurance_price': s.insurance_price or 0,
+                'source': 'service',
+                'groupId': '',
+                'groupLabel': '',
+            })
+        for t in self.product_service_ids:
+            services.append({
+                'id': t.id,
+                'code': t.default_code or '',
+                'name': t.name or '',
+                'category': t.categ_id.name or '',
+                'price': t.list_price or 0,
+                'insurance_price': 0,
+                'source': 'product',
+                'groupId': '',
+                'groupLabel': '',
+            })
+        medicines = []
+        for p in self.medicine_ids:
+            medicines.append({
+                'productId': p.id,
+                'variantId': p.id,
+                'code': p.default_code or '',
+                'name': p.name or '',
+                'price': p.lst_price or 0,
+                'uom': p.uom_id.name if p.uom_id else '',
+                'category': p.categ_id.complete_name or '',
+                'source': 'product',
+                'groupId': str(p.categ_id.id) if p.categ_id else '',
+                'groupLabel': p.categ_id.name or '',
+            })
+        return {
+            'specialtyId': str(self.specialty_id.id) if self.specialty_id else '',
+            'specialtyName': self.specialty_name or (self.specialty_id.name if self.specialty_id else ''),
+            'allowedServices': services,
+            'allowedMedicines': medicines,
+            'serviceOptions': [],
+        }
+
+
 class SaycareGovernmentExpenseDecision(models.Model):
     _name = 'saycare.government.expense.decision'
     _description = 'Government Expense Decision'
@@ -26,8 +109,13 @@ class SaycareGovernmentExpenseDecision(models.Model):
         ondelete='restrict',
     )
 
-    # JSON blobs to avoid extra tables for complex nested structures
-    allowed_clinics_json = fields.Text('العيادات المسموح بها', default='[]')
+    clinic_ids = fields.One2many(
+        'saycare.gov.expense.clinic', 'decision_id',
+        string='العيادات المسموح بها',
+    )
+
+    # Kept for fallback on old decisions not yet re-saved through the UI
+    allowed_clinics_json = fields.Text('العيادات (JSON قديم)', default='[]')
     allocations_json     = fields.Text('التوزيع الشهري', default='[]')
     allowed_groups_json  = fields.Text('المجموعات المسموح بها', default='{}')
 
@@ -36,10 +124,22 @@ class SaycareGovernmentExpenseDecision(models.Model):
         string='المعاملات',
     )
 
-    scans_ids = fields.Many2many('product.category', 'gov_expense_decision_scans_rel', 'decision_id', 'categ_id', string='اشاعات')
-    test_ids  = fields.Many2many('product.category', 'gov_expense_decision_tests_rel', 'decision_id', 'categ_id', string='التحاليل')
+    scans_ids = fields.Many2many(
+        'product.category',
+        'gov_expense_decision_scans_rel', 'decision_id', 'categ_id',
+        string='اشاعات',
+    )
+    test_ids = fields.Many2many(
+        'product.category',
+        'gov_expense_decision_tests_rel', 'decision_id', 'categ_id',
+        string='التحاليل',
+    )
 
     def _to_dict(self):
+        if self.clinic_ids:
+            allowed_clinics = [c._to_dict() for c in self.clinic_ids]
+        else:
+            allowed_clinics = self._load_json('allowed_clinics_json', [])
         return {
             'id': self.id,
             'name': self.name or '',
@@ -56,7 +156,7 @@ class SaycareGovernmentExpenseDecision(models.Model):
                 'nationalId': self.patient_id.id_number or '' if self.patient_id else '',
                 'mobile': self.patient_id.phone or '' if self.patient_id else '',
             },
-            'allowedClinics': self._load_json('allowed_clinics_json', []),
+            'allowedClinics': allowed_clinics,
             'allocations':    self._load_json('allocations_json', []),
             'allowedGroups':  self._load_json('allowed_groups_json', {'medicines': [], 'labs': [], 'radiology': []}),
             'transactions': [t._to_dict() for t in self.transaction_ids.sorted('id')],

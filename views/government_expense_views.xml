@@ -5,9 +5,10 @@
         <field name="arch" type="xml">
             <list>
                 <field name="name"/>
-                <field name="allowed_clinics_json"/>
-                <field name="scans_ids" widget="many2many_tags"/>
-                <field name="test_ids" widget="many2many_tags"/>
+                <field name="number"/>
+                <field name="status"/>
+                <field name="patient_id"/>
+                <field name="total_amount"/>
             </list>
         </field>
     </record>
@@ -21,21 +22,52 @@
                     <group>
                         <group>
                             <field name="name"/>
-                            <field name="allowed_clinics_json"/>
+                            <field name="number"/>
+                            <field name="status"/>
+                            <field name="patient_id"/>
+                            <field name="total_amount"/>
+                            <field name="start_date"/>
+                            <field name="month_count"/>
+                        </group>
+                        <group>
                             <field name="scans_ids" widget="many2many_tags"/>
                             <field name="test_ids" widget="many2many_tags"/>
+                            <field name="notes"/>
                         </group>
                     </group>
+                    <notebook>
+                        <page string="العيادات المسموح بها">
+                            <field name="clinic_ids">
+                                <list editable="bottom">
+                                    <field name="specialty_id"/>
+                                    <field name="specialty_name"/>
+                                    <field name="service_ids" widget="many2many_tags"/>
+                                    <field name="product_service_ids" widget="many2many_tags"/>
+                                    <field name="medicine_ids" widget="many2many_tags"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="المعاملات">
+                            <field name="transaction_ids">
+                                <list>
+                                    <field name="reference_no"/>
+                                    <field name="date"/>
+                                    <field name="specialty_name"/>
+                                    <field name="item_name"/>
+                                    <field name="amount"/>
+                                    <field name="qty"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>
     </record>
 
-
     <record id="action_government_expense" model="ir.actions.act_window">
         <field name="name">قرارات</field>
         <field name="res_model">saycare.government.expense.decision</field>
         <field name="view_mode">list,form</field>
-
     </record>
 </odoo>
