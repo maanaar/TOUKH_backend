@@ -111,17 +111,38 @@ class InvoiceController(http.Controller):
                 'payment_date':  fields.Date.today(),
                 'communication': inv.name or '',
             })
-            wizard.action_create_payments()
+            action = wizard.action_create_payments()
             # Flush all pending ORM recomputes (payment_state is a stored computed field)
             request.env.flush_all()
 
-            # Step 4: find the created payment
-            inv.invalidate_recordset()
-            payment = request.env['account.payment'].sudo().search(
-                [('reconciled_invoice_ids', 'in', inv.id)], order='id desc', limit=1
-            )
+            # Step 4: get the created payment ID directly from the wizard action
+            # — more reliable than searching reconciled_invoice_ids within the same txn
+            payment = None
+            payment_id_from_action = None
+            if isinstance(action, dict):
+                if action.get('res_id'):
+                    payment_id_from_action = action['res_id']
+                elif action.get('domain'):
+                    for part in (action['domain'] or []):
+                        if isinstance(part, (list, tuple)) and len(part) == 3 and part[0] == 'id':
+                            ids = part[2] if isinstance(part[2], list) else [part[2]]
+                            if ids:
+                                payment_id_from_action = ids[0]
+                            break
 
-            # Fallback: search by partner+journal+date if wizard didn't link payment
+            if payment_id_from_action:
+                candidate = request.env['account.payment'].sudo().browse(payment_id_from_action)
+                if candidate.exists():
+                    payment = candidate
+
+            # Fallback 1: reconciled_invoice_ids (computed, may lag within same txn)
+            inv.invalidate_recordset()
+            if not payment:
+                payment = request.env['account.payment'].sudo().search(
+                    [('reconciled_invoice_ids', 'in', inv.id)], order='id desc', limit=1
+                )
+
+            # Fallback 2: partner + journal + date
             if not payment:
                 payment = request.env['account.payment'].sudo().search([
                     ('partner_id', '=', inv.partner_id.id),
