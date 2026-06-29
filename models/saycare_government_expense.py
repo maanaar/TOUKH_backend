@@ -175,9 +175,17 @@ class SaycareGovernmentExpenseDecision(models.Model):
 
     # ── Editable per-decision deduction ──────────────────────────────────────
     deduction_amount = fields.Float(
-        string='خصم المؤسسة', digits=(12, 2),
-        default=lambda self: self.env['saycare.government.expense.settings'].get_settings().deduction_amount,
+        string='خصم المؤسسة', digits=(12, 2), default=60.0,
     )
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        settings = self.env['saycare.government.expense.settings'].sudo().search([], limit=1)
+        default_deduction = settings.deduction_amount if settings else 60.0
+        for vals in vals_list:
+            if 'deduction_amount' not in vals:
+                vals['deduction_amount'] = default_deduction
+        return super().create(vals_list)
 
     # ── Computed summary (reads deduction_amount from the record itself) ──────
     distributable_amount = fields.Float(string='الصافي للتوزيع',  digits=(12, 2), compute='_compute_summary')
