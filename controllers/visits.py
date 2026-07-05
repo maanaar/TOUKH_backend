@@ -56,7 +56,8 @@ def _visit_dict(v, full=False):
             'insurance_price': s.insurance_price,
             'visit_type':      s.visit_type or '',
         } for s in v.service_ids],
-        'basket':          _json_mod.loads(v.basket_json or '[]') if v.basket_paid else [],
+        'basket':          _json_mod.loads(v.basket_json or '[]'),
+        'basket_paid':     v.basket_paid,
         'basket_pending':  _json_mod.loads(v.basket_json or '[]') if not v.basket_paid else [],
         'invoice_id':      v.invoice_id.id if v.invoice_id else None,
         'total_price':     v.total_price,
@@ -292,8 +293,25 @@ class VisitController(http.Controller):
         except Exception:
             return _json({'error': 'invalid JSON'}, 400)
         items = body if isinstance(body, list) else body.get('basket', [])
-        v.write({'basket_json': _json_mod.dumps(items)})
-        return _json({'basket': items})
+        if not isinstance(items, list):
+            return _json({'error': 'basket must be a list'}, 400)
+
+        clean_items = []
+        for item in items:
+            if not isinstance(item, dict) or not str(item.get('name') or '').strip():
+                continue
+            try:
+                price = float(item.get('price') or 0)
+                insurance_price = float(item.get('insurance_price') or 0)
+            except (TypeError, ValueError):
+                continue
+            clean_item = dict(item)
+            clean_item['price'] = price
+            clean_item['insurance_price'] = insurance_price
+            clean_items.append(clean_item)
+
+        v.write({'basket_json': _json_mod.dumps(clean_items)})
+        return _json({'basket': clean_items})
 
     @http.route('/saycare/api/visit/<int:visit_id>/basket', type='http', auth='user', methods=['DELETE'], csrf=False)
     def clear_basket(self, visit_id, **kw):
@@ -333,6 +351,13 @@ class VisitController(http.Controller):
         if new_state == 'done':
             vals['discharge_date'] = DT.now()
         v.write(vals)
+
+        if new_state == 'cancelled':
+            linked_appt = request.env['saycare.appointment'].sudo().search(
+                [('visit_id', '=', v.id), ('state', '!=', 'cancelled')], limit=1
+            )
+            if linked_appt:
+                linked_appt.write({'state': 'cancelled'})
 
         invoice_id = None
         if new_state == 'done' and v.service_ids and v.patient_id:

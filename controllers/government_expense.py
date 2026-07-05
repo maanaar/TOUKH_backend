@@ -31,14 +31,85 @@ def _decision_vals(body, env):
         vals['month_count'] = int(body['monthCount'] or 3)
     if 'totalAmount' in body:
         vals['total_amount'] = float(body['totalAmount'] or 0)
+    if 'deductionAmount' in body:
+        vals['deduction_amount'] = max(0.0, float(body['deductionAmount'] or 0))
     if 'status' in body:
         vals['status'] = body['status'] or 'جاري'
     if 'notes' in body:
         vals['notes'] = body['notes'] or ''
     if 'allowedClinics' in body:
-        vals['allowed_clinics_json'] = json.dumps(body['allowedClinics'] or [])
+        spec_ids = []
+        for clinic_data in (body['allowedClinics'] or []):
+            spec_id_raw = clinic_data.get('specialtyId')
+            if not spec_id_raw:
+                continue
+            try:
+                spec = env['saycare.specialty'].browse(int(spec_id_raw))
+                if spec.exists():
+                    spec_ids.append(spec.id)
+            except (TypeError, ValueError):
+                pass
+        vals['specialty_ids'] = [(6, 0, list(dict.fromkeys(spec_ids)))]
     if 'allocations' in body:
         vals['allocations_json'] = json.dumps(body['allocations'] or [])
+        alloc_cmds = [(5, 0, 0)]
+        for a in (body['allocations'] or []):
+            alloc_cmds.append((0, 0, {
+                'month_key': a.get('monthKey') or '',
+                'label':     a.get('label') or '',
+                'amount':    float(a.get('amount') or 0),
+                'addition':  float(a.get('addition') or 0),
+                'manual':    bool(a.get('manual', False)),
+            }))
+        vals['allocation_ids'] = alloc_cmds
+    if 'allowedGroups' in body:
+        groups = body['allowedGroups'] or {}
+        vals['allowed_groups_json'] = json.dumps(groups)
+        # Save medicine categories to M2M field
+        med_categ_ids = []
+        for item in (groups.get('medicines') or []):
+            raw_id = item.get('id') if isinstance(item, dict) else item
+            try:
+                med_categ_ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                pass
+        vals['medicine_categ_ids'] = [(6, 0, list(dict.fromkeys(med_categ_ids)))]
+        # Save labs to test_ids
+        lab_ids = []
+        for item in (groups.get('labs') or []):
+            raw_id = item.get('id') if isinstance(item, dict) else item
+            try:
+                lab_ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                pass
+        vals['test_ids'] = [(6, 0, list(dict.fromkeys(lab_ids)))]
+        # Save radiology to scans_ids
+        rad_ids = []
+        for item in (groups.get('radiology') or []):
+            raw_id = item.get('id') if isinstance(item, dict) else item
+            try:
+                rad_ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                pass
+        vals['scans_ids'] = [(6, 0, list(dict.fromkeys(rad_ids)))]
+    # 'scans' and 'tests' are category-IDs sent alongside 'allowedGroups'.
+    # Only use them if allowedGroups was absent (legacy path).
+    if 'scans' in body and 'allowedGroups' not in body:
+        ids = []
+        for i in (body.get('scans') or []):
+            try:
+                ids.append(int(i))
+            except (TypeError, ValueError):
+                pass
+        vals['scans_ids'] = [(6, 0, ids)]
+    if 'tests' in body and 'allowedGroups' not in body:
+        ids = []
+        for i in (body.get('tests') or []):
+            try:
+                ids.append(int(i))
+            except (TypeError, ValueError):
+                pass
+        vals['test_ids'] = [(6, 0, ids)]
 
     patient = body.get('patient') or {}
     patient_id = patient.get('id')
@@ -153,3 +224,23 @@ class GovernmentExpenseController(http.Controller):
         txn.unlink()
         decision = env['saycare.government.expense.decision'].browse(decision_id)
         return _json({'ok': True, 'decision': decision._to_dict() if decision.exists() else {}})
+
+    @http.route('/saycare/api/government-expense/settings',
+                type='http', auth='user', methods=['GET'], cors=CORS, csrf=False)
+    def get_settings(self, **kw):
+        settings = request.env['saycare.government.expense.settings'].get_settings()
+        return _json(settings._to_dict())
+
+    @http.route('/saycare/api/government-expense/settings',
+                type='http', auth='user', methods=['PUT'], cors=CORS, csrf=False)
+    def update_settings(self, **kw):
+        body = _parse_body()
+        settings = request.env['saycare.government.expense.settings'].get_settings()
+        vals = {}
+        if 'deductionAmount' in body:
+            vals['deduction_amount'] = max(0.0, float(body['deductionAmount'] or 0))
+        if 'maxAdditionAmount' in body:
+            vals['max_addition_amount'] = max(0.0, float(body['maxAdditionAmount'] or 0))
+        if vals:
+            settings.sudo().write(vals)
+        return _json(settings._to_dict())

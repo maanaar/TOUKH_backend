@@ -8,6 +8,7 @@
   <record id="view_saycare_specialty_tree" model="ir.ui.view">
     <field name="name">saycare.specialty.tree</field>
     <field name="model">saycare.specialty</field>
+    <field name="type">list</field>
     <field name="arch" type="xml">
       <list string="العيادات">
         <field name="name"/>
