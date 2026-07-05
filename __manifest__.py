@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'SayCare-odoo',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.0.1',
     'summary': 'HTTP REST Endpoints for Inventory, Purchase, Employee Requisition and Clinical HIS',
     'description': """
         Provides HTTP endpoints (returning Python objects as HTTP responses) for:
