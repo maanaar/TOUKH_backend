@@ -11,8 +11,10 @@ class QueueController(http.Controller):
 
     @http.route('/saycare/api/queue/nurse', type='http', auth='user', methods=['GET'], csrf=False)
     def nurse_queue(self, **kw):
+        # Includes doctor_queue/in_progress so nurses keep visibility of a visit
+        # (e.g. to dispatch a basket the doctor just ordered) after triage is done.
         records = request.env['saycare.visit'].sudo().search(
-            [('state', 'in', ['waiting', 'triage'])],
+            [('state', 'in', ['waiting', 'triage', 'doctor_queue', 'in_progress'])],
             order='admission_date asc',
         )
         return _json([_visit_dict(v) for v in records])

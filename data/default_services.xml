@@ -7,6 +7,22 @@
       <field name="name">خدمات عيادة عامة</field>
     </record>
 
+    <!-- Pharmacy products category — used to filter products shown in the pharmacy screen -->
+    <record id="product_categ_pharmacy" model="product.category">
+      <field name="name">صيدلية</field>
+    </record>
+
+    <!-- Product categories for medication tab group lines -->
+    <record id="product_categ_lab" model="product.category">
+      <field name="name">تحاليل</field>
+    </record>
+    <record id="product_categ_radiology" model="product.category">
+      <field name="name">أشعة</field>
+    </record>
+    <record id="product_categ_procedures" model="product.category">
+      <field name="name">اجراءات</field>
+    </record>
+
     <!-- Products (manageable from Odoo Products list) -->
     <record id="product_kashf_consultant" model="product.template">
       <field name="name">كشف طبيب استشاري</field>
