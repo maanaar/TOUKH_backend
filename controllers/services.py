@@ -36,22 +36,36 @@ def _product_service_dict(p, specialty_id=None, specialty_name=''):
     }
 
 
+def _categs_by_keyword(env, keyword):
+    """Return all product.category IDs whose name or complete_name contains keyword."""
+    # Search by direct name match
+    by_name = env['product.category'].sudo().search([('name', 'ilike', keyword)])
+    # Also search by complete_name (full path like "All / اجراءات / ...")
+    try:
+        by_complete = env['product.category'].sudo().search([('complete_name', 'ilike', keyword)])
+    except Exception:
+        by_complete = env['product.category'].sudo()
+    all_categs = by_name | by_complete
+    if not all_categs:
+        return []
+    # Include all child categories
+    return env['product.category'].sudo().search(
+        [('id', 'child_of', all_categs.ids)]
+    ).ids
+
+
 def _products_from_categ_keyword(env, keyword, existing_names=None):
     """Return _product_service_dict list for products in categories whose
-    name contains *keyword* (case-insensitive).  Skips names already in
-    existing_names to avoid duplicates."""
+    name or complete_name contains *keyword* (case-insensitive)."""
     if existing_names is None:
         existing_names = set()
-    categs = env['product.category'].sudo().search([('name', 'ilike', keyword)])
-    if not categs:
+    categ_ids = _categs_by_keyword(env, keyword)
+    if not categ_ids:
         return []
-    categ_ids = env['product.category'].sudo().search(
-        [('id', 'child_of', categs.ids)]
-    ).ids
+    # No sale_ok filter — medical services may not be flagged as saleable
     products = env['product.template'].sudo().search([
         ('categ_id', 'in', categ_ids),
         ('active', '=', True),
-        ('sale_ok', '=', True),
     ])
     results = []
     for p in products:
@@ -249,5 +263,57 @@ class ServiceController(http.Controller):
                 'uom_id':             p.uom_id.id   if p.uom_id else None,
                 'price':              float(p.list_price),
                 'product_product_id': variant.id if variant else None,
+            })
+        return _json(results)
+
+    @http.route('/saycare/api/product-categories', type='http', auth='user', methods=['GET'], csrf=False)
+    def list_categories(self, **kw):
+        """Return all product categories (id, name, complete_name, parent) — used for diagnostics."""
+        env = request.env
+        categs = env['product.category'].sudo().search([], order='complete_name asc')
+        results = []
+        for c in categs:
+            try:
+                complete = c.complete_name or c.name or ''
+            except Exception:
+                complete = c.name or ''
+            results.append({
+                'id':            c.id,
+                'name':          c.name or '',
+                'complete_name': complete,
+                'parent_id':     c.parent_id.id   if c.parent_id else None,
+                'parent_name':   c.parent_id.name if c.parent_id else '',
+            })
+        return _json(results)
+
+    @http.route('/saycare/api/products/by-categ', type='http', auth='user', methods=['GET'], csrf=False)
+    def products_by_categ(self, keyword='', limit='500', **kw):
+        """Return products whose category name (or full path) contains keyword.
+        No sale_ok filter — medical products may not be marked saleable."""
+        env = request.env
+        if not keyword.strip():
+            return _json([])
+        categ_ids = _categs_by_keyword(env, keyword.strip())
+        if not categ_ids:
+            return _json([])
+        products = env['product.template'].sudo().search(
+            [('categ_id', 'in', categ_ids), ('active', '=', True)],
+            limit=int(limit),
+            order='name asc',
+        )
+        results = []
+        seen = set()
+        for p in products:
+            if p.name in seen:
+                continue
+            seen.add(p.name)
+            results.append({
+                'id':              p.id,
+                'name':            p.name or '',
+                'code':            p.default_code or '',
+                'price':           float(p.list_price),
+                'insurance_price': 0.0,
+                'categ_name':      p.categ_id.name if p.categ_id else '',
+                'source':          'product',
             })
         return _json(results)

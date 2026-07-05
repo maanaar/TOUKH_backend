@@ -73,14 +73,20 @@ class RadOrderController(http.Controller):
     # ── Global queue ───────────────────────────────────────────────────────────
 
     @http.route('/saycare/api/rad-orders', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, state='', study_type='', date='', patient_id='', **kw):
+    def get_all(self, state='', study_type='', date='', date_from='', date_to='', patient_id='', **kw):
         domain = []
         if state:
             states = [s.strip() for s in state.split(',') if s.strip()]
             domain.append(('state', 'in', states) if len(states) > 1 else ('state', '=', states[0]))
         if study_type:
             domain.append(('study_type', '=', study_type))
-        if date:
+        # date_from/date_to takes priority over the legacy single-day 'date' param
+        if date_from or date_to:
+            if date_from:
+                domain.append(('requested_at', '>=', f'{date_from} 00:00:00'))
+            if date_to:
+                domain.append(('requested_at', '<=', f'{date_to} 23:59:59'))
+        elif date:
             domain += [('requested_at', '>=', f'{date} 00:00:00'),
                        ('requested_at', '<=', f'{date} 23:59:59')]
         if patient_id:

@@ -2067,7 +2067,7 @@ class RequisitionActionController(http.Controller):
 class DashboardController(http.Controller):
 
     @http.route('/api/v1/inventory/dashboard', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_dashboard(self, **kw):
+    def get_dashboard(self, date_from='', date_to='', **kw):
         env = request.env
 
         total_products = env['product.template'].sudo().search_count([
@@ -2091,13 +2091,29 @@ class DashboardController(http.Controller):
         except Exception:
             expiring_count = 0
 
-        today_start = odoo_fields.Datetime.to_string(
-            odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        )
-        todays_movements = env['stock.picking'].sudo().search_count([
-            ('state', '=', 'done'),
-            ('date_done', '>=', today_start),
-        ])
+        if date_from:
+            try:
+                range_start = odoo_fields.Datetime.to_string(
+                    datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+                )
+                range_end = odoo_fields.Datetime.to_string(
+                    datetime.strptime(date_to or date_from, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                )
+            except ValueError:
+                range_start = odoo_fields.Datetime.to_string(
+                    odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                )
+                range_end = None
+        else:
+            range_start = odoo_fields.Datetime.to_string(
+                odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            )
+            range_end = None
+
+        move_domain = [('state', '=', 'done'), ('date_done', '>=', range_start)]
+        if range_end:
+            move_domain.append(('date_done', '<=', range_end))
+        todays_movements = env['stock.picking'].sudo().search_count(move_domain)
 
         try:
             pending_requisitions = env['employee.purchase.requisition'].sudo().search_count([
@@ -2124,10 +2140,29 @@ class DashboardController(http.Controller):
         })
 
     @http.route('/api/v1/inventory/alerts', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_alerts(self, **kw):
+    def get_alerts(self, date_from='', date_to='', **kw):
         env = request.env
         today  = date.today()
         in_30  = today + timedelta(days=30)
+
+        if date_from:
+            try:
+                moves_start = odoo_fields.Datetime.to_string(
+                    datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+                )
+                moves_end = odoo_fields.Datetime.to_string(
+                    datetime.strptime(date_to or date_from, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                )
+            except ValueError:
+                moves_start = odoo_fields.Datetime.to_string(
+                    odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                )
+                moves_end = None
+        else:
+            moves_start = odoo_fields.Datetime.to_string(
+                odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            )
+            moves_end = None
 
         # ── low-stock: quants with qty <= 0 in internal locations ────────────
         quants = env['stock.quant'].sudo().search([('location_id.usage', '=', 'internal')])
@@ -2172,14 +2207,13 @@ class DashboardController(http.Controller):
             except Exception:
                 continue
 
-        # ── recent moves: today's done pickings ──────────────────────────────
-        today_start = odoo_fields.Datetime.to_string(
-            odoo_fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        # ── recent moves: done pickings in the requested date range ──────────
+        pick_domain = [('state', '=', 'done'), ('date_done', '>=', moves_start)]
+        if moves_end:
+            pick_domain.append(('date_done', '<=', moves_end))
+        pickings = env['stock.picking'].sudo().search(
+            pick_domain, limit=20, order='date_done desc'
         )
-        pickings = env['stock.picking'].sudo().search([
-            ('state', '=', 'done'),
-            ('date_done', '>=', today_start),
-        ], limit=20, order='date_done desc')
         recent = []
         for p in pickings:
             try:
