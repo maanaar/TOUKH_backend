@@ -79,7 +79,7 @@ class InvoiceController(http.Controller):
             amount = float(body.get('amount') or 0) or inv.amount_residual
 
             # Step 2: journal from visit.payment_method
-            # 'cash' (نقدي) → cash journal  |  'deferred' (مميكن) → bank journal
+            # 'cash' (نقدي) → cash journal  |  'deferred' (فيزا) → bank journal
             visit = request.env['saycare.visit'].sudo().search(
                 [('invoice_id', '=', inv.id)], limit=1
             )

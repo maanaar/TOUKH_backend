@@ -8,7 +8,7 @@
 
 
       <field name="category_id" position="after">
-        <field name="x_payment_type"/>
+        <!-- <field name="x_payment_type"/> -->
       </field>
 
       <!-- Patient + Vendor toggles next to Job Position -->

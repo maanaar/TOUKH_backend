@@ -314,6 +314,18 @@ class SaycareGovernmentExpenseSettings(models.Model):
             rec = self.sudo().create({})
         return rec
 
+    def action_open_settings(self):
+        """Always open the one persisted settings record, never a blank/new one."""
+        settings = self.get_settings()
+        return {
+            'type':     'ir.actions.act_window',
+            'name':     'إعدادات القرارات',
+            'res_model': self._name,
+            'view_mode': 'form',
+            'res_id':   settings.id,
+            'target':   'current',
+        }
+
     def _to_dict(self):
         return {
             'deductionAmount': self.deduction_amount or 0.0,

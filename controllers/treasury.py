@@ -72,6 +72,20 @@ def _refund_row(rfn, visit=None):
     }
 
 
+def _refunded_partner_ids(partner_ids):
+    """Partner ids that already have at least one posted credit-note (out_refund),
+    regardless of which invoice/visit it was issued against."""
+    partner_ids = [pid for pid in partner_ids if pid]
+    if not partner_ids:
+        return set()
+    refunds = request.env['account.move'].sudo().search([
+        ('move_type',  '=', 'out_refund'),
+        ('state',      '=', 'posted'),
+        ('partner_id', 'in', partner_ids),
+    ])
+    return set(refunds.mapped('partner_id.id'))
+
+
 class TreasuryController(http.Controller):
 
     @http.route('/saycare/api/treasury', type='http', auth='user', methods=['GET'], csrf=False)
@@ -89,6 +103,10 @@ class TreasuryController(http.Controller):
             ('admission_date', '<=', f'{target} 23:59:59'),
             ('invoice_id',     '!=', False),
         ], order='admission_date desc')
+
+        refunded_partner_ids = _refunded_partner_ids(
+            [v.patient_id.id for v in visits if v.patient_id]
+        )
 
         rows = []
         for v in visits:
@@ -124,8 +142,16 @@ class TreasuryController(http.Controller):
                 refund_reason = (rfn_move.narration or '') if rfn_move else ''
                 amount_total = -amount_total  # display as negative
 
+            # patient has a posted refund on ANY of their invoices/visits (khazna,
+            # doctor or nurse) → block further refunds and flag every one of their
+            # appointments as already reversed, not just the refunded visit itself.
+            patient_already_refunded = bool(
+                v.patient_id and v.patient_id.id in refunded_partner_ids
+            )
+
             rows.append({
-                'is_refund':         is_reversed,
+                'is_refund':               is_reversed,
+                'patient_already_refunded': patient_already_refunded,
                 'visit_id':          v.id,
                 'visit_name':        v.name or '',
                 'time':              time_str,
@@ -198,6 +224,15 @@ class TreasuryController(http.Controller):
             return _json({'error': 'invoice not found'}, 404)
         if inv.state != 'posted':
             return _json({'error': 'invoice must be posted before refunding'}, 400)
+
+        # ── one refund per patient, no matter where it originated ────────────
+        # (khazna/treasury, a doctor's visit invoice or a nurse's visit invoice
+        # all funnel through this same endpoint)
+        if inv.partner_id and inv.partner_id.id in _refunded_partner_ids([inv.partner_id.id]):
+            return _json({
+                'error': 'patient_already_refunded',
+                'message': 'تم استرداد مبلغ لهذا المريض من قبل، لا يمكن الاسترداد مرة أخرى',
+            }, 400)
 
         today = odoo_fields.Date.today()
 
