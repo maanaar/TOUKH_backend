@@ -7,6 +7,26 @@ from .utils import _json
 from .visits import _visit_dict
 
 
+def _drop_refunded(records):
+    """Exclude visits whose invoice has a posted refund (out_refund) against
+    it - a second, independent line of defense on top of the state filter,
+    in case a visit's state was never (or not yet) flipped to 'cancelled'."""
+    invoice_ids = [i for i in records.mapped('invoice_id').ids if i]
+    if not invoice_ids:
+        return records
+    refunded = request.env['account.move'].sudo().search([
+        ('move_type', '=', 'out_refund'),
+        ('state', '=', 'posted'),
+        ('reversed_entry_id', 'in', invoice_ids),
+    ])
+    refunded_invoice_ids = set(refunded.mapped('reversed_entry_id').ids)
+    if not refunded_invoice_ids:
+        return records
+    return records.filtered(
+        lambda v: not v.invoice_id or v.invoice_id.id not in refunded_invoice_ids
+    )
+
+
 class QueueController(http.Controller):
 
     @http.route('/saycare/api/queue/nurse', type='http', auth='user', methods=['GET'], csrf=False)
@@ -17,6 +37,7 @@ class QueueController(http.Controller):
             [('state', 'in', ['waiting', 'triage', 'doctor_queue', 'in_progress'])],
             order='admission_date asc',
         )
+        records = _drop_refunded(records)
         return _json([_visit_dict(v) for v in records])
 
     @http.route('/saycare/api/queue/doctor', type='http', auth='user', methods=['GET'], csrf=False)
@@ -33,6 +54,7 @@ class QueueController(http.Controller):
         if doctor_id:
             domain.append(('doctor_id', '=', int(doctor_id)))
         records = request.env['saycare.visit'].sudo().search(domain, order='admission_date asc')
+        records = _drop_refunded(records)
         return _json([_visit_dict(v) for v in records])
 
     @http.route('/saycare/api/queue/pending-basket', type='http', auth='user', methods=['GET'], csrf=False)

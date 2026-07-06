@@ -230,8 +230,7 @@ class TreasuryController(http.Controller):
         # all funnel through this same endpoint)
         if inv.partner_id and inv.partner_id.id in _refunded_partner_ids([inv.partner_id.id]):
             return _json({
-                'error': 'patient_already_refunded',
-                'message': 'تم استرداد مبلغ لهذا المريض من قبل، لا يمكن الاسترداد مرة أخرى',
+                'error': 'تم استرداد مبلغ لهذا المريض من قبل، لا يمكن الاسترداد مرة أخرى',
             }, 400)
 
         today = odoo_fields.Date.today()
@@ -323,6 +322,28 @@ class TreasuryController(http.Controller):
                         ar_lines.reconcile()
 
                     refund.invalidate_recordset()
+
+        # ── cancel the underlying visit (and its appointment) regardless of
+        # whether the page that requested this refund already did so - Dr/Nurse's
+        # own cancel-visit call can fail/race independently of the refund itself,
+        # so this is the single authoritative place that guarantees a refunded
+        # visit disappears from the nurse/doctor queues. ─────────────────────
+        visit = request.env['saycare.visit'].sudo().search(
+            [('invoice_id', '=', inv.id)], limit=1
+        )
+        if visit and visit.state != 'cancelled':
+            visit.write({'state': 'cancelled'})
+            linked_appt = request.env['saycare.appointment'].sudo().search(
+                [('visit_id', '=', visit.id), ('state', '!=', 'cancelled')], limit=1
+            )
+            if linked_appt:
+                linked_appt.write({'state': 'cancelled'})
+
+        # ── this refund fulfills any pending Dr/Nurse refund request for the
+        # same visit/invoice - clear it so it stops showing as "pending" ─────
+        request.env['saycare.refund.request'].sudo().search([
+            '|', ('invoice_id', '=', inv.id), ('visit_id', '=', visit.id if visit else False),
+        ]).unlink()
 
         return _json({
             'ok':            True,
