@@ -57,6 +57,12 @@ class HospitalRoom(models.Model):
     capacity = fields.Integer("السعة (عدد السراير)")
     bed_count = fields.Integer("عدد السراير الفعلي", compute="_compute_bed_count")
 
+    @api.depends()
+    def _compute_bed_count(self):
+        Bed = self.env["hospital.bed"]
+        for rec in self:
+            rec.bed_count = Bed.search_count([("room_id", "=", rec.id)])
+
     room_status = fields.Selection(
         selection=[
             ("available", "متاحة"),

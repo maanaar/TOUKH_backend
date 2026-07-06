@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields
+from odoo import api, models, fields
 
 
 class HospitalInpatientDepartment(models.Model):
@@ -42,4 +42,12 @@ class HospitalInpatientDepartment(models.Model):
 
     active = fields.Boolean("فعال", default=True)
     notes = fields.Text("ملاحظات")
+
+    @api.depends()
+    def _compute_counts(self):
+        Floor = self.env["hospital.floor"]
+        Bed = self.env["hospital.bed"]
+        for rec in self:
+            rec.floor_count = Floor.search_count([("department_ids", "in", rec.id)])
+            rec.bed_count = Bed.search_count([("department_id", "=", rec.id)])
 

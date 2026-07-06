@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
 from odoo import models, fields, api
+from odoo.exceptions import ValidationError
 
 
 class ResPartnerPatient(models.Model):
@@ -29,6 +30,20 @@ class ResPartnerPatient(models.Model):
 
     # ── Medical Record Number ─────────────────────────────────────────────────
     mrn = fields.Char(string='MRN', copy=False, index=True)
+
+    # ── Inpatient entry permit (إذن الدخول) ────────────────────────────────────
+    entry_permit_no = fields.Char(string='إذن الدخول', copy=False, index=True)
+
+    _sql_constraints = [
+        ('entry_permit_no_uniq', 'unique(entry_permit_no)',
+         'رقم إذن الدخول مستخدم من قبل، برجاء إدخال رقم آخر.'),
+    ]
+
+    @api.constrains('entry_permit_no')
+    def _check_entry_permit_no(self):
+        for rec in self:
+            if rec.entry_permit_no and not rec.entry_permit_no.isdigit():
+                raise ValidationError('إذن الدخول يجب أن يحتوي على أرقام فقط.')
 
     # ── Identity ──────────────────────────────────────────────────────────────
     id_type = fields.Selection([

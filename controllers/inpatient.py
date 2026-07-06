@@ -37,16 +37,20 @@ def _department_dict(r):
 
 
 def _floor_dict(r):
+    first_dept = r.department_ids[:1]
     return {
-        'id':              r.id,
-        'code':            r.code or '',
-        'name':            r.name or '',
-        'building':        r.building or '',
-        'floor_no':        r.floor_no or '',
-        'department_id':   r.department_id.id if r.department_id else None,
-        'department_name': r.department_id.display_name if r.department_id else '',
-        'active':          r.active,
-        'notes':           r.notes or '',
+        'id':               r.id,
+        'code':             r.code or '',
+        'name':             r.name or '',
+        'building':         r.building or '',
+        'floor_no':         r.floor_no or '',
+        'department_ids':   r.department_ids.ids,
+        'department_names': [d.display_name for d in r.department_ids],
+        # kept for callers still expecting a single department (first linked one)
+        'department_id':    first_dept.id if first_dept else None,
+        'department_name':  first_dept.display_name if first_dept else '',
+        'active':           r.active,
+        'notes':            r.notes or '',
     }
 
 
@@ -188,7 +192,7 @@ class FloorController(http.Controller):
     def get_all(self, department_id='', **kw):
         domain = [('active', '=', True)]
         if department_id:
-            domain.append(('department_id', '=', int(department_id)))
+            domain.append(('department_ids', 'in', [int(department_id)]))
         records = request.env[self._model].sudo().search(domain)
         return _json([_floor_dict(r) for r in records])
 
@@ -204,15 +208,16 @@ class FloorController(http.Controller):
         body, err = _load_body()
         if err:
             return err
-        if not body.get('code') or not body.get('name') or not body.get('department_id'):
-            return _json({'error': 'code, name and department_id are required'}, 400)
+        department_ids = body.get('department_ids') or ([body['department_id']] if body.get('department_id') else [])
+        if not body.get('code') or not body.get('name') or not department_ids:
+            return _json({'error': 'code, name and department_ids are required'}, 400)
         vals = {
-            'code':          body['code'],
-            'name':          body['name'],
-            'building':      body.get('building', ''),
-            'floor_no':      body.get('floor_no', ''),
-            'department_id': int(body['department_id']),
-            'notes':         body.get('notes', ''),
+            'code':           body['code'],
+            'name':           body['name'],
+            'building':       body.get('building', ''),
+            'floor_no':       body.get('floor_no', ''),
+            'department_ids': [(6, 0, [int(d) for d in department_ids])],
+            'notes':          body.get('notes', ''),
         }
         rec = request.env[self._model].sudo().create(vals)
         return _json(_floor_dict(rec), 201)
@@ -229,8 +234,10 @@ class FloorController(http.Controller):
         for f in ('code', 'name', 'building', 'floor_no', 'notes', 'active'):
             if f in body:
                 vals[f] = body[f]
-        if 'department_id' in body:
-            vals['department_id'] = int(body['department_id']) if body['department_id'] else False
+        if 'department_ids' in body:
+            vals['department_ids'] = [(6, 0, [int(d) for d in (body['department_ids'] or [])])]
+        elif 'department_id' in body:
+            vals['department_ids'] = [(6, 0, [int(body['department_id'])] if body['department_id'] else [])]
         if vals:
             rec.write(vals)
         return _json(_floor_dict(rec))
@@ -411,10 +418,15 @@ class BedController(http.Controller):
             return err
         if not body.get('code') or not body.get('bed_no') or not body.get('room_id'):
             return _json({'error': 'code, bed_no and room_id are required'}, 400)
+        room = request.env['hospital.room'].sudo().browse(int(body['room_id']))
         vals = {
             'code':           body['code'],
             'bed_no':         body['bed_no'],
-            'room_id':        int(body['room_id']),
+            'room_id':        room.id,
+            # floor/department are manually settable, but default to the room's own
+            # so a bed isn't silently left without them when the caller omits these.
+            'floor_id':       int(body['floor_id']) if body.get('floor_id') else (room.floor_id.id or False),
+            'department_id':  int(body['department_id']) if body.get('department_id') else (room.department_id.id or False),
             'bed_status':     body.get('bed_status', 'available'),
             'allowed_gender': body.get('allowed_gender', 'all'),
         }
@@ -439,9 +451,14 @@ class BedController(http.Controller):
         for f in ('code', 'bed_no', 'bed_status', 'allowed_gender', 'last_occupancy_date', 'active'):
             if f in body:
                 vals[f] = body[f]
-        for f in ('room_id', 'grade_id', 'current_patient_id'):
+        for f in ('room_id', 'floor_id', 'department_id', 'grade_id', 'current_patient_id'):
             if f in body:
                 vals[f] = int(body[f]) if body[f] else False
+        # room changed without an explicit floor/department override — follow the room
+        if 'room_id' in vals and vals['room_id'] and 'floor_id' not in body and 'department_id' not in body:
+            room = request.env['hospital.room'].sudo().browse(vals['room_id'])
+            vals['floor_id'] = room.floor_id.id or False
+            vals['department_id'] = room.department_id.id or False
         if vals:
             rec.write(vals)
         return _json(_bed_dict(rec))
