@@ -10,19 +10,34 @@ AR_DAYS = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخمي
 class DashboardController(http.Controller):
 
     @http.route('/saycare/api/dashboard/stats', type='http', auth='user', methods=['GET'], csrf=False)
-    def stats(self, **kw):
+    def stats(self, date_from='', date_to='', **kw):
         env = request.env
+
+        # "today" is only used as an anchor for the always-relative KPIs
+        # (dispensed-today, weekly trend) — it must not depend on the filter.
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_end   = today_start + timedelta(days=1)
+
+        # ── requested range for the visit list/stats — empty means "all data" ───
+        range_start = range_end = None
+        try:
+            if date_from:
+                range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+            if date_to:
+                range_end = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        except ValueError:
+            range_start = range_end = None
 
         Visit = env['saycare.visit'].sudo()
         Med   = env['saycare.medication.order'].sudo()
 
-        # ── today's visits ──────────────────────────────────────────────────────
-        today_visits = Visit.search([
-            ('admission_date', '>=', str(today_start)),
-            ('admission_date', '<',  str(today_end)),
-        ])
+        # ── visits for the requested range (no bounds → all data) ───────────────
+        visit_domain = []
+        if range_start:
+            visit_domain.append(('admission_date', '>=', str(range_start)))
+        if range_end:
+            visit_domain.append(('admission_date', '<=', str(range_end)))
+        today_visits = Visit.search(visit_domain)
 
         by_state = {}
         for v in today_visits:
@@ -98,9 +113,18 @@ class DashboardController(http.Controller):
         })
 
     @http.route('/saycare/api/dashboard/visits-today', type='http', auth='user', methods=['GET'], csrf=False)
-    def visits_today(self, **kw):
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end   = today_start + timedelta(days=1)
+    def visits_today(self, date_from='', date_to='', **kw):
+        # No date_from/date_to at all → no restriction, return all visits.
+        domain = []
+        try:
+            if date_from:
+                range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+                domain.append(('admission_date', '>=', str(range_start)))
+            if date_to:
+                range_end = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                domain.append(('admission_date', '<=', str(range_end)))
+        except ValueError:
+            domain = []
 
         STATE_LABEL = {
             'waiting':      'في الانتظار',
@@ -111,10 +135,7 @@ class DashboardController(http.Controller):
             'cancelled':    'ملغي',
         }
 
-        visits = request.env['saycare.visit'].sudo().search([
-            ('admission_date', '>=', str(today_start)),
-            ('admission_date', '<',  str(today_end)),
-        ], order='admission_date asc')
+        visits = request.env['saycare.visit'].sudo().search(domain, order='admission_date asc')
 
         rows = []
         for v in visits:

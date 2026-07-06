@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+from datetime import datetime, timedelta
 from odoo import http
 from odoo.http import request
 from odoo.fields import Datetime as DT
@@ -124,10 +125,22 @@ class MedicationOrderController(http.Controller):
 class PharmacyQueueController(http.Controller):
 
     @http.route('/saycare/api/pharmacy/queue', type='http', auth='user', methods=['GET'], csrf=False)
-    def queue(self, **kw):
-        records = request.env['saycare.medication.order'].sudo().search(
-            [('state', '=', 'active')], order='prescribed_at asc'
-        )
+    def queue(self, date_from='', date_to='', **kw):
+        if date_from:
+            try:
+                range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0,  minute=0,  second=0)
+                range_end   = datetime.strptime(date_to or date_from, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            except ValueError:
+                range_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                range_end   = range_start + timedelta(days=1)
+        else:
+            range_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            range_end   = range_start + timedelta(days=1)
+
+        records = request.env['saycare.medication.order'].sudo().search([
+            ('prescribed_at', '>=', str(range_start)),
+            ('prescribed_at', '<=', str(range_end)),
+        ], order='prescribed_at asc')
         return _json([_med_dict(m) for m in records])
 
 
