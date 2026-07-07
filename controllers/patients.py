@@ -82,7 +82,7 @@ class PatientController(http.Controller):
             'contract_entity':   body.get('contract_entity', '') or '',
             'x_blood_type':      sel('blood_type', False,
                                      ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
-            'entry_permit_no':   body.get('entry_permit_no', '') or '',
+            'x_entry_permit_no':   body.get('x_entry_permit_no', '') or '',
         }
         for k, v in custom.items():
             if k in pf:
