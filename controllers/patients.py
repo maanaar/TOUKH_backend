@@ -123,8 +123,8 @@ class PatientController(http.Controller):
         except Exception:
             existing = None
 
-        if entry_permit_no:
-            dup_domain = [('entry_permit_no', '=', entry_permit_no)]
+        if x_entry_permit_no:
+            dup_domain = [('x_entry_permit_no', '=', x_entry_permit_no)]
             if existing:
                 dup_domain.append(('id', '!=', existing.id))
             if request.env['res.partner'].sudo().search_count(dup_domain):
@@ -135,13 +135,13 @@ class PatientController(http.Controller):
                 existing.write(vals)
                 return _json({
                     'id': existing.id, 'mrn': getattr(existing, 'mrn', '') or '', 'name': existing.name,
-                    'entry_permit_no': getattr(existing, 'entry_permit_no', '') or '',
+                    'x_entry_permit_no': getattr(existing, 'x_entry_permit_no', '') or '',
                 }, 200)
 
             patient = request.env['res.partner'].sudo().create(vals)
             return _json({
                 'id': patient.id, 'mrn': getattr(patient, 'mrn', '') or '', 'name': patient.name,
-                'entry_permit_no': getattr(patient, 'entry_permit_no', '') or '',
+                'x_entry_permit_no': getattr(patient, 'x_entry_permit_no', '') or '',
             }, 201)
         except Exception as e:
             import logging
@@ -176,7 +176,7 @@ class PatientController(http.Controller):
             'phone', 'home_phone', 'occupation',
             'governorate', 'city', 'street', 'dob', 'gender',
             'financial_class', 'insurance_company', 'contract_entity',
-            'x_blood_type', 'entry_permit_no',
+            'x_blood_type', 'x_entry_permit_no',
         ]
         vals = {k: body[k] for k in allowed if k in body}
         name_parts = [
