@@ -22,4 +22,5 @@ from . import (
     inpatient,
     stock,
     government_expense,
+    refund_requests,
 )

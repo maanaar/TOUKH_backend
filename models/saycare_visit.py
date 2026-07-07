@@ -51,7 +51,7 @@ class SaycareVisit(models.Model):
 
     payment_method = fields.Selection([
         ('cash',     'نقدي'),
-        ('deferred', 'مميكن'),
+        ('deferred', 'فيزا'),
     ], string='طريقة الدفع', default='cash')
 
     chief_complaint = fields.Char(string='Chief Complaint')

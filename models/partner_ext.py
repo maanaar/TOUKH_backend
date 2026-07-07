@@ -100,12 +100,12 @@ class ResPartnerPatient(models.Model):
     insurance_company = fields.Char(string='Insurance Company')
     contract_entity   = fields.Char(string='Contract Entity')
 
-    x_payment_type = fields.Selection([
-        ('insurance', 'تامين صحي'),
-        ('companies', 'شركات'),
-        ('state',     'نفقة دوله'),
-        ('takaful',   'تكافل و كرامه'),
-    ], string='Payment Type')
+    # x_payment_type = fields.Selection([
+    #     ('insurance', 'تامين صحي'),
+    #     ('companies', 'شركات'),
+    #     ('state',     'نفقة دوله'),
+    #     ('takaful',   'تكافل و كرامه'),
+    # ], string='Payment Type')
 
     is_vendor = fields.Boolean(
         string='مصنّع / مورد رئيسي',

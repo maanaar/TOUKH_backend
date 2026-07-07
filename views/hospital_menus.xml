@@ -33,5 +33,5 @@
 
     <menuitem id="menu_government_expense_settings" name="إعدادات القرارات"
               parent="menu_government_expense_root"
-              action="action_government_expense_settings" sequence="20"/>
+              action="action_government_expense_settings_open" sequence="20"/>
 </odoo>

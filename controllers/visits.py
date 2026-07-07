@@ -517,15 +517,13 @@ def _create_visit_invoice(visit):
     fin_class = visit.financial_class or 'cash'
     is_cash   = fin_class == 'cash'
 
+    # Invoice always posts to the default Customer Invoices journal, regardless
+    # of financial class (وجهة مالية) - only the payment (register_payment in
+    # invoices.py) is routed by payment_method (طريقة الدفع).
     journal = env['account.journal'].sudo().search([
-        ('financial_class', '=', fin_class),
+        ('type', '=', 'sale'),
         ('company_id', '=', company.id),
     ], limit=1)
-    if not journal:
-        journal = env['account.journal'].sudo().search([
-            ('type', '=', 'sale'),
-            ('company_id', '=', company.id),
-        ], limit=1)
     if not journal:
         return None
 

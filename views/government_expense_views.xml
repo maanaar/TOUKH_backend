@@ -127,10 +127,16 @@
         </field>
     </record>
 
-    <record id="action_government_expense_settings" model="ir.actions.act_window">
+    <!-- The old action_government_expense_settings (ir.actions.act_window) used
+         to open a blank/new record every time (defaulting deduction_amount to
+         60). It's no longer defined here or referenced by any menu - the row
+         stays in the DB unused, harmlessly. The menu now points at this server
+         action instead, which always loads the single persisted settings
+         record via action_open_settings(). -->
+    <record id="action_government_expense_settings_open" model="ir.actions.server">
         <field name="name">إعدادات القرارات</field>
-        <field name="res_model">saycare.government.expense.settings</field>
-        <field name="view_mode">form</field>
-        <field name="target">current</field>
+        <field name="model_id" ref="model_saycare_government_expense_settings"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open_settings()</field>
     </record>
 </odoo>
