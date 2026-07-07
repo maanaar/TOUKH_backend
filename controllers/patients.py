@@ -88,9 +88,9 @@ class PatientController(http.Controller):
             if k in pf:
                 vals[k] = v
 
-        entry_permit_no = (body.get('entry_permit_no') or '').strip()
-        if entry_permit_no and not entry_permit_no.isdigit():
-            return _json({'error': 'إذن الدخول يجب أن يحتوي على أرقام فقط'}, 400)
+        # entry_permit_no = (body.get('entry_permit_no') or '').strip()
+        # if entry_permit_no and not entry_permit_no.isdigit():
+        #     return _json({'error': 'إذن الدخول يجب أن يحتوي على أرقام فقط'}, 400)
 
         dob = body.get('dob')
         if dob and 'dob' in pf:
@@ -195,14 +195,14 @@ class PatientController(http.Controller):
             if country:
                 vals['country_id'] = country.id
 
-        entry_permit_no = (vals.get('entry_permit_no') or '').strip()
-        if entry_permit_no:
-            if not entry_permit_no.isdigit():
-                return _json({'error': 'إذن الدخول يجب أن يحتوي على أرقام فقط'}, 400)
-            if request.env['res.partner'].sudo().search_count([
-                ('entry_permit_no', '=', entry_permit_no), ('id', '!=', p.id),
-            ]):
-                return _json({'error': 'رقم إذن الدخول مستخدم من قبل، برجاء إدخال رقم آخر.'}, 409)
+        # entry_permit_no = (vals.get('entry_permit_no') or '').strip()
+        # if entry_permit_no:
+        #     if not entry_permit_no.isdigit():
+        #         return _json({'error': 'إذن الدخول يجب أن يحتوي على أرقام فقط'}, 400)
+        #     if request.env['res.partner'].sudo().search_count([
+        #         ('entry_permit_no', '=', entry_permit_no), ('id', '!=', p.id),
+        #     ]):
+        #         return _json({'error': 'رقم إذن الدخول مستخدم من قبل، برجاء إدخال رقم آخر.'}, 409)
 
         p.write(vals)
         return _json(_patient_dict(p))

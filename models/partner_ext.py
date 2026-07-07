@@ -32,7 +32,7 @@ class ResPartnerPatient(models.Model):
     mrn = fields.Char(string='MRN', copy=False, index=True)
 
     # ── Inpatient entry permit (إذن الدخول) ────────────────────────────────────
-    entry_permit_no = fields.Char(string='إذن الدخول', copy=False, index=True)
+    # entry_permit_no = fields.Char(string='إذن الدخول', copy=False, index=True)
 
     _sql_constraints = [
         ('entry_permit_no_uniq', 'unique(entry_permit_no)',
