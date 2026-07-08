@@ -23,4 +23,5 @@ from . import (
     stock,
     government_expense,
     refund_requests,
+    admission_requests,
 )
