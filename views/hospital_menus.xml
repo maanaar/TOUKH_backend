@@ -24,7 +24,7 @@
               action="action_hospital_bed" sequence="70"/>
 
     <menuitem id="menu_government_expense_root" name="القرارات"
-              parent="saycare_odoo_19.menu_saycare_config"
+              parent="saycare_odoo_19.menu_saycare_root"
               sequence="80"/>
 
     <menuitem id="menu_government_expense" name="القرارات"
