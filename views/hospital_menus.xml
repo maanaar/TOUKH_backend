@@ -23,7 +23,7 @@
               parent="saycare_odoo_19.menu_saycare_config"
               action="action_hospital_bed" sequence="70"/>
 
-    <menuitem id="menu_government_expense_root" name="قرارات نفقة الدولة"
+    <menuitem id="menu_government_expense_root" name="القرارات"
               parent="saycare_odoo_19.menu_saycare_config"
               sequence="80"/>
 
@@ -31,7 +31,7 @@
               parent="menu_government_expense_root"
               action="action_government_expense" sequence="10"/>
 
-    <menuitem id="menu_government_expense_settings" name="إعدادات القرارات"
+    <menuitem id="menu_government_expense_settings" name="اعدادات عامه للقرار"
               parent="menu_government_expense_root"
               action="action_government_expense_settings_open" sequence="20"/>
 </odoo>
