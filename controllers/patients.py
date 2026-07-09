@@ -105,18 +105,18 @@ class PatientController(http.Controller):
             if country:
                 vals['country_id'] = country.id
 
-        # ── last known bed assignment (القسم/الدور/الغرفة/السرير) ────────────
-        for body_key, model_field in (
-            ('department_id', 'last_department_id'),
-            ('floor_id',      'last_floor_id'),
-            ('room_id',       'last_room_id'),
-            ('bed_id',        'last_bed_id'),
-        ):
-            if body.get(body_key) and model_field in pf:
-                try:
-                    vals[model_field] = int(body[body_key])
-                except (TypeError, ValueError):
-                    pass
+        # # ── last known bed assignment (القسم/الدور/الغرفة/السرير) ────────────
+        # for body_key, model_field in (
+        #     ('department_id', 'last_department_id'),
+        #     ('floor_id',      'last_floor_id'),
+        #     ('room_id',       'last_room_id'),
+        #     ('bed_id',        'last_bed_id'),
+        # ):
+        #     if body.get(body_key) and model_field in pf:
+        #         try:
+        #             vals[model_field] = int(body[body_key])
+        #         except (TypeError, ValueError):
+        #             pass
 
         # ── duplication guard: match by id_number or mrn ─────────────────────
         id_number = body.get('id_number', '').strip()
@@ -210,17 +210,17 @@ class PatientController(http.Controller):
             if country:
                 vals['country_id'] = country.id
 
-        for body_key, model_field in (
-            ('department_id', 'last_department_id'),
-            ('floor_id',      'last_floor_id'),
-            ('room_id',       'last_room_id'),
-            ('bed_id',        'last_bed_id'),
-        ):
-            if body_key in body:
-                try:
-                    vals[model_field] = int(body[body_key]) if body[body_key] else False
-                except (TypeError, ValueError):
-                    pass
+        # for body_key, model_field in (
+        #     ('department_id', 'last_department_id'),
+        #     ('floor_id',      'last_floor_id'),
+        #     ('room_id',       'last_room_id'),
+        #     ('bed_id',        'last_bed_id'),
+        # ):
+        #     if body_key in body:
+        #         try:
+        #             vals[model_field] = int(body[body_key]) if body[body_key] else False
+        #         except (TypeError, ValueError):
+        #             pass
 
         entry_permit_no = (vals.get('x_entry_permit_no') or '').strip()
         if entry_permit_no:

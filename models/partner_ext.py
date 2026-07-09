@@ -49,10 +49,10 @@ class ResPartnerPatient(models.Model):
     # Convenience "last known" location captured from the booking form so a
     # later booking pre-fills where this patient was last placed. This is not
     # a live occupancy pointer — see hospital.bed.current_patient_id for that.
-    last_department_id = fields.Many2one('hospital.inpatient.department', string='آخر قسم')
-    last_floor_id       = fields.Many2one('hospital.floor', string='آخر دور')
-    last_room_id        = fields.Many2one('hospital.room', string='آخر غرفة')
-    last_bed_id         = fields.Many2one('hospital.bed', string='آخر سرير')
+    # last_department_id = fields.Many2one('hospital.inpatient.department', string='آخر قسم')
+    # last_floor_id       = fields.Many2one('hospital.floor', string='آخر دور')
+    # last_room_id        = fields.Many2one('hospital.room', string='آخر غرفة')
+    # last_bed_id         = fields.Many2one('hospital.bed', string='آخر سرير')
 
     # ── Identity ──────────────────────────────────────────────────────────────
     id_type = fields.Selection([
