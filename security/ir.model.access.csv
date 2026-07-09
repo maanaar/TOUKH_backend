@@ -40,4 +40,6 @@ access_saycare_gov_expense_allocation,saycare_gov_expense_allocation,model_sayca
 access_saycare_gov_expense_settings,saycare_gov_expense_settings,model_saycare_government_expense_settings,,1,1,1,0
 access_saycare_gov_expense_settings_admin,saycare_gov_expense_settings_admin,model_saycare_government_expense_settings,base.group_system,1,1,1,1
 access_saycare_refund_request_user,saycare.refund.request user,model_saycare_refund_request,,1,1,1,1
+access_saycare_admission_request_user,saycare.admission.request user,model_saycare_admission_request,,1,1,1,0
+access_saycare_admission_request_admin,saycare.admission.request admin,model_saycare_admission_request,base.group_system,1,1,1,1
 

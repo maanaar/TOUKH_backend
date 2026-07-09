@@ -22,4 +22,5 @@ from . import (
     hospital_bed,
     saycare_government_expense,
     saycare_refund_request,
+    saycare_admission_request,
 )

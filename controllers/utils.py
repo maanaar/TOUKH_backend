@@ -38,5 +38,9 @@ def _patient_dict(p):
         'financial_class':   p.financial_class or 'cash',
         'insurance_company': p.insurance_company or '',
         'contract_entity':   p.contract_entity or '',
+        'department_id':     getattr(p, 'last_department_id', False).id if getattr(p, 'last_department_id', False) else None,
+        'floor_id':          getattr(p, 'last_floor_id', False).id if getattr(p, 'last_floor_id', False) else None,
+        'room_id':           getattr(p, 'last_room_id', False).id if getattr(p, 'last_room_id', False) else None,
+        'bed_id':            getattr(p, 'last_bed_id', False).id if getattr(p, 'last_bed_id', False) else None,
         'image_url':         '/web/image/res.partner/%d/image_1920' % p.id if p.image_1920 else '',
     }
