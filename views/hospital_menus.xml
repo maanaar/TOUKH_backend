@@ -15,6 +15,10 @@
               parent="saycare_odoo_19.menu_saycare_config"
               action="action_hospital_room" sequence="50"/>
 
+    <menuitem id="menu_hospital_grade_type" name="أسماء درجات الإقامة"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_hospital_grade_type" sequence="55"/>
+
     <menuitem id="menu_hospital_grade" name="الادارة والاقامة"
               parent="saycare_odoo_19.menu_saycare_config"
               action="action_hospital_grade" sequence="60"/>

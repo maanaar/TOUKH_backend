@@ -30,6 +30,7 @@ access_saycare_usage_type_admin,saycare.usage.type admin,model_saycare_usage_typ
 access_hospital_department,hospital.inpatient.department,model_hospital_inpatient_department,base.group_user,1,1,1,1
 access_hospital_floor,hospital.floor,model_hospital_floor,base.group_user,1,1,1,1
 access_hospital_room,hospital.room,model_hospital_room,base.group_user,1,1,1,1
+access_hospital_accommodation_grade_type,hospital.accommodation.grade.type,model_hospital_accommodation_grade_type,base.group_user,1,1,1,1
 access_hospital_accommodation_grade,hospital.accommodation.grade,model_hospital_accommodation_grade,base.group_user,1,1,1,1
 access_hospital_bed,hospital.bed,model_hospital_bed,base.group_user,1,1,1,1
 access_basket_model,basket_model,model_basket_model,,1,1,1,1

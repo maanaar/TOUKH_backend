@@ -7,8 +7,12 @@ Generated from models/*.py. Table names are the Odoo-derived snake_case of each 
 
 ### Hospital / Ward structure
 
+- hospital.accommodation.grade.type -> hospital_accommodation_grade_type
+  name (Char, uniq), sequence, active
+  lookup table for grade names (اقتصادي/عادي/خاص/VIP/ICU), seeded via data XML
+
 - hospital.accommodation.grade -> hospital_accommodation_grade
-  code (uniq), name (Selection: economy/normal/private/vip/icu), price_per_day,
+  code (uniq), name (M2one to hospital.accommodation.grade.type, required), price_per_day,
   include_nursing, include_meals, need_approval
 
 - hospital.floor -> hospital_floor

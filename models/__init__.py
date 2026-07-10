@@ -18,6 +18,7 @@ from . import (
     hospital_inpatient_department,
     hospital_floor,
     hospital_room,
+    hospital_accommodation_grade_type,
     hospital_accommodation_grade,
     hospital_bed,
     saycare_government_expense,

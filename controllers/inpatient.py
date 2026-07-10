@@ -72,19 +72,19 @@ def _room_dict(r):
     }
 
 
-_GRADE_NAME_LABELS = {
-    'economy': 'اقتصادي',
-    'normal':  'عادي',
-    'private': 'خاص',
-    'vip':     'VIP',
-    'icu':     'ICU',
-}
+def _grade_type_dict(r):
+    return {
+        'id':   r.id,
+        'name': r.name or '',
+    }
+
 
 def _grade_dict(r):
     return {
         'id':                 r.id,
         'code':               r.code or '',
-        'name':               _GRADE_NAME_LABELS.get(r.name, r.name or ''),
+        'name':               r.name.display_name if r.name else '',
+        'name_id':            r.name.id if r.name else None,
         'accommodation_type': r.accommodation_type or '',
         'price_per_day':      r.price_per_day,
         'include_nursing':    r.include_nursing,
@@ -321,6 +321,15 @@ class RoomController(http.Controller):
         return _json({'deleted': True, 'id': rec_id})
 
 
+class GradeTypeController(http.Controller):
+    _model = 'hospital.accommodation.grade.type'
+
+    @http.route('/saycare/api/accommodation-grade-types', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_all(self, **kw):
+        records = request.env[self._model].sudo().search([('active', '=', True)])
+        return _json([_grade_type_dict(r) for r in records])
+
+
 class GradeController(http.Controller):
     _model = 'hospital.accommodation.grade'
 
@@ -341,11 +350,12 @@ class GradeController(http.Controller):
         body, err = _load_body()
         if err:
             return err
-        if not body.get('code') or not body.get('name'):
-            return _json({'error': 'code and name are required'}, 400)
+        name_id = body.get('name_id', body.get('name'))
+        if not body.get('code') or not name_id:
+            return _json({'error': 'code and name (grade type id) are required'}, 400)
         vals = {
             'code':               body['code'],
-            'name':               body['name'],
+            'name':               int(name_id),
             'accommodation_type': body.get('accommodation_type', ''),
             'price_per_day':      float(body['price_per_day']) if body.get('price_per_day') else 0.0,
             'include_nursing':    bool(body.get('include_nursing')),
@@ -364,9 +374,13 @@ class GradeController(http.Controller):
         if err:
             return err
         vals = {}
-        for f in ('code', 'name', 'accommodation_type', 'active'):
+        for f in ('code', 'accommodation_type', 'active'):
             if f in body:
                 vals[f] = body[f]
+        if 'name_id' in body:
+            vals['name'] = int(body['name_id']) if body['name_id'] else False
+        elif 'name' in body:
+            vals['name'] = int(body['name']) if body['name'] else False
         if 'price_per_day' in body:
             vals['price_per_day'] = float(body['price_per_day']) if body['price_per_day'] else 0.0
         for f in ('include_nursing', 'include_meals', 'need_approval'):

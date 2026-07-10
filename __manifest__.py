@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'SayCare-odoo',
-    'version': '19.0.1.0.2',
+    'version': '19.0.1.0.3',
     'summary': 'HTTP REST Endpoints for Inventory, Purchase, Employee Requisition and Clinical HIS',
     'description': """
         Provides HTTP endpoints (returning Python objects as HTTP responses) for:
@@ -44,6 +44,8 @@
         'views/hospital_department_views.xml',
         'views/hospital_floor_views.xml',
         'views/hospital_room_views.xml',
+        'views/hospital_accommodation_grade_type_views.xml',
+        'data/hospital_accommodation_grade_type_data.xml',
         'views/hospital_accommodation_grade_views.xml',
         'views/hospital_bed_views.xml',
         "views/hospital_menus.xml",

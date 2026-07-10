@@ -8,15 +8,8 @@ class HospitalAccommodationGrade(models.Model):
     _order = "code"
 
     code = fields.Char("كود الدرجة", required=True, copy=False, index=True)
-    # اسم الدرجة: اقتصادي / عادي / خاص / VIP / ICU
-    name = fields.Selection(
-        selection=[
-            ("economy", "اقتصادي"),
-            ("normal", "عادي"),
-            ("private", "خاص"),
-            ("vip", "VIP"),
-            ("icu", "ICU"),
-        ],
+    name = fields.Many2one(
+        "hospital.accommodation.grade.type",
         string="اسم الدرجة",
         required=True,
     )

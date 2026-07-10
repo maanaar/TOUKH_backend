@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="grade_type_economy" model="hospital.accommodation.grade.type">
+        <field name="name">اقتصادي</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="grade_type_normal" model="hospital.accommodation.grade.type">
+        <field name="name">عادي</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="grade_type_private" model="hospital.accommodation.grade.type">
+        <field name="name">خاص</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="grade_type_vip" model="hospital.accommodation.grade.type">
+        <field name="name">VIP</field>
+        <field name="sequence">40</field>
+    </record>
+    <record id="grade_type_icu" model="hospital.accommodation.grade.type">
+        <field name="name">ICU</field>
+        <field name="sequence">50</field>
+    </record>
+</odoo>
