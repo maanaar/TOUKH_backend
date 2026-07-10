@@ -32,27 +32,27 @@ class ResPartnerPatient(models.Model):
     mrn = fields.Char(string='MRN', copy=False, index=True)
 
     # ── Inpatient entry permit (إذن الدخول) ────────────────────────────────────
-    entry_permit_no = fields.Char(string='إذن الدخول', copy=False, index=True)
+    x_entry_permit_no = fields.Char(string='إذن الدخول', copy=False, index=True)
 
     _sql_constraints = [
-        ('entry_permit_no_uniq', 'unique(entry_permit_no)',
+        ('entry_permit_no_uniq', 'unique(x_entry_permit_no)',
          'رقم إذن الدخول مستخدم من قبل، برجاء إدخال رقم آخر.'),
     ]
 
-    @api.constrains('entry_permit_no')
+    @api.constrains('x_entry_permit_no')
     def _check_entry_permit_no(self):
         for rec in self:
-            if rec.entry_permit_no and not rec.entry_permit_no.isdigit():
+            if rec.x_entry_permit_no and not rec.x_entry_permit_no.isdigit():
                 raise ValidationError('إذن الدخول يجب أن يحتوي على أرقام فقط.')
 
     # ── Last inpatient bed assignment ───────────────────────────────────────
     # Convenience "last known" location captured from the booking form so a
     # later booking pre-fills where this patient was last placed. This is not
     # a live occupancy pointer — see hospital.bed.current_patient_id for that.
-    last_department_id = fields.Many2one('hospital.inpatient.department', string='آخر قسم')
-    last_floor_id       = fields.Many2one('hospital.floor', string='آخر دور')
-    last_room_id        = fields.Many2one('hospital.room', string='آخر غرفة')
-    last_bed_id         = fields.Many2one('hospital.bed', string='آخر سرير')
+    # last_department_id = fields.Many2one('hospital.inpatient.department', string='آخر قسم')
+    # last_floor_id       = fields.Many2one('hospital.floor', string='آخر دور')
+    # last_room_id        = fields.Many2one('hospital.room', string='آخر غرفة')
+    # last_bed_id         = fields.Many2one('hospital.bed', string='آخر سرير')
 
     # ── Identity ──────────────────────────────────────────────────────────────
     id_type = fields.Selection([

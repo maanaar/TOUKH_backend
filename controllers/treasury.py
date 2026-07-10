@@ -72,20 +72,6 @@ def _refund_row(rfn, visit=None):
     }
 
 
-def _refunded_partner_ids(partner_ids):
-    """Partner ids that already have at least one posted credit-note (out_refund),
-    regardless of which invoice/visit it was issued against."""
-    partner_ids = [pid for pid in partner_ids if pid]
-    if not partner_ids:
-        return set()
-    refunds = request.env['account.move'].sudo().search([
-        ('move_type',  '=', 'out_refund'),
-        ('state',      '=', 'posted'),
-        ('partner_id', 'in', partner_ids),
-    ])
-    return set(refunds.mapped('partner_id.id'))
-
-
 class TreasuryController(http.Controller):
 
     @http.route('/saycare/api/treasury', type='http', auth='user', methods=['GET'], csrf=False)
@@ -103,10 +89,6 @@ class TreasuryController(http.Controller):
             ('admission_date', '<=', f'{target} 23:59:59'),
             ('invoice_id',     '!=', False),
         ], order='admission_date desc')
-
-        refunded_partner_ids = _refunded_partner_ids(
-            [v.patient_id.id for v in visits if v.patient_id]
-        )
 
         rows = []
         for v in visits:
@@ -142,16 +124,8 @@ class TreasuryController(http.Controller):
                 refund_reason = (rfn_move.narration or '') if rfn_move else ''
                 amount_total = -amount_total  # display as negative
 
-            # patient has a posted refund on ANY of their invoices/visits (khazna,
-            # doctor or nurse) → block further refunds and flag every one of their
-            # appointments as already reversed, not just the refunded visit itself.
-            patient_already_refunded = bool(
-                v.patient_id and v.patient_id.id in refunded_partner_ids
-            )
-
             rows.append({
                 'is_refund':               is_reversed,
-                'patient_already_refunded': patient_already_refunded,
                 'visit_id':          v.id,
                 'visit_name':        v.name or '',
                 'time':              time_str,
@@ -225,12 +199,15 @@ class TreasuryController(http.Controller):
         if inv.state != 'posted':
             return _json({'error': 'invoice must be posted before refunding'}, 400)
 
-        # ── one refund per patient, no matter where it originated ────────────
-        # (khazna/treasury, a doctor's visit invoice or a nurse's visit invoice
-        # all funnel through this same endpoint)
-        if inv.partner_id and inv.partner_id.id in _refunded_partner_ids([inv.partner_id.id]):
+        # ── this specific invoice can only be refunded once ───────────────────
+        already_refunded = request.env['account.move'].sudo().search_count([
+            ('reversed_entry_id', '=', inv.id),
+            ('move_type', '=', 'out_refund'),
+            ('state', '=', 'posted'),
+        ])
+        if already_refunded:
             return _json({
-                'error': 'تم استرداد مبلغ لهذا المريض من قبل، لا يمكن الاسترداد مرة أخرى',
+                'error': 'تم استرداد مبلغ لهذه الفاتورة من قبل، لا يمكن الاسترداد مرة أخرى',
             }, 400)
 
         today = odoo_fields.Date.today()
@@ -269,8 +246,18 @@ class TreasuryController(http.Controller):
         })
         refund.action_post()
 
-        # ── register payment for cash refunds ─────────────────────────────────
-        if method == 'cash':
+        # ── register payment for cash refunds — via the standard Register
+        # Payment wizard (same mechanism invoices.py uses for invoice payments)
+        # so this shows up as a real account.payment, not just a reconciled
+        # manual journal entry.
+        #
+        # action_post() above may have already auto-reconciled this credit
+        # note against the original invoice's own receivable line (e.g. when
+        # that invoice was never actually paid — there's nothing to hand back
+        # in cash, the credit note just voids it). In that case amount_residual
+        # is already 0 and there is nothing left to register a payment for.
+        # ───────────────────────────────────────────────────────────────────
+        if method == 'cash' and refund.amount_residual:
             cash_journal = request.env['account.journal'].sudo().search([
                 ('type', '=', 'cash'),
                 ('company_id', '=', refund.company_id.id),
@@ -282,46 +269,19 @@ class TreasuryController(http.Controller):
                 ], limit=1)
 
             if cash_journal:
-                refund_amount = refund.amount_total
-                ar_line = refund.line_ids.filtered(
-                    lambda l: l.account_id.account_type == 'asset_receivable'
-                              and not l.reconciled
-                )[:1]
-                cash_account = cash_journal.default_account_id
-
-                if ar_line and cash_account:
-                    pay_move = request.env['account.move'].sudo().create({
-                        'move_type':  'entry',
-                        'journal_id': cash_journal.id,
-                        'date':       today,
-                        'ref':        refund.name or '',
-                        'line_ids': [
-                            (0, 0, {
-                                'account_id': ar_line.account_id.id,
-                                'debit':      refund_amount,
-                                'credit':     0.0,
-                                'partner_id': refund.partner_id.id if refund.partner_id else False,
-                                'name':       refund.name or '',
-                            }),
-                            (0, 0, {
-                                'account_id': cash_account.id,
-                                'debit':      0.0,
-                                'credit':     refund_amount,
-                                'partner_id': refund.partner_id.id if refund.partner_id else False,
-                                'name':       refund.name or '',
-                            }),
-                        ],
-                    })
-                    pay_move.action_post()
-
-                    ar_lines = (refund.line_ids | pay_move.line_ids).filtered(
-                        lambda l: l.account_id.account_type == 'asset_receivable'
-                                  and not l.reconciled
-                    )
-                    if ar_lines:
-                        ar_lines.reconcile()
-
-                    refund.invalidate_recordset()
+                wizard = request.env['account.payment.register'].sudo().with_context(
+                    active_model='account.move',
+                    active_ids=[refund.id],
+                    active_id=refund.id,
+                ).create({
+                    'journal_id':    cash_journal.id,
+                    'amount':        refund.amount_residual,
+                    'payment_date':  today,
+                    'communication': refund.name or '',
+                })
+                wizard.action_create_payments()
+                request.env.flush_all()
+                refund.invalidate_recordset()
 
         # ── cancel the underlying visit (and its appointment) regardless of
         # whether the page that requested this refund already did so - Dr/Nurse's

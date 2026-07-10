@@ -82,7 +82,7 @@ class PatientController(http.Controller):
             'contract_entity':   body.get('contract_entity', '') or '',
             'x_blood_type':      sel('blood_type', False,
                                      ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
-            'entry_permit_no':   body.get('entry_permit_no', '') or '',
+            'x_entry_permit_no': body.get('entry_permit_no', '') or '',
         }
         for k, v in custom.items():
             if k in pf:
@@ -105,18 +105,18 @@ class PatientController(http.Controller):
             if country:
                 vals['country_id'] = country.id
 
-        # ── last known bed assignment (القسم/الدور/الغرفة/السرير) ────────────
-        for body_key, model_field in (
-            ('department_id', 'last_department_id'),
-            ('floor_id',      'last_floor_id'),
-            ('room_id',       'last_room_id'),
-            ('bed_id',        'last_bed_id'),
-        ):
-            if body.get(body_key) and model_field in pf:
-                try:
-                    vals[model_field] = int(body[body_key])
-                except (TypeError, ValueError):
-                    pass
+        # # ── last known bed assignment (القسم/الدور/الغرفة/السرير) ────────────
+        # for body_key, model_field in (
+        #     ('department_id', 'last_department_id'),
+        #     ('floor_id',      'last_floor_id'),
+        #     ('room_id',       'last_room_id'),
+        #     ('bed_id',        'last_bed_id'),
+        # ):
+        #     if body.get(body_key) and model_field in pf:
+        #         try:
+        #             vals[model_field] = int(body[body_key])
+        #         except (TypeError, ValueError):
+        #             pass
 
         # ── duplication guard: match by id_number or mrn ─────────────────────
         id_number = body.get('id_number', '').strip()
@@ -137,7 +137,7 @@ class PatientController(http.Controller):
             existing = None
 
         if entry_permit_no:
-            dup_domain = [('entry_permit_no', '=', entry_permit_no)]
+            dup_domain = [('x_entry_permit_no', '=', entry_permit_no)]
             if existing:
                 dup_domain.append(('id', '!=', existing.id))
             if request.env['res.partner'].sudo().search_count(dup_domain):
@@ -148,13 +148,13 @@ class PatientController(http.Controller):
                 existing.write(vals)
                 return _json({
                     'id': existing.id, 'mrn': getattr(existing, 'mrn', '') or '', 'name': existing.name,
-                    'entry_permit_no': getattr(existing, 'entry_permit_no', '') or '',
+                    'entry_permit_no': getattr(existing, 'x_entry_permit_no', '') or '',
                 }, 200)
 
             patient = request.env['res.partner'].sudo().create(vals)
             return _json({
                 'id': patient.id, 'mrn': getattr(patient, 'mrn', '') or '', 'name': patient.name,
-                'entry_permit_no': getattr(patient, 'entry_permit_no', '') or '',
+                'entry_permit_no': getattr(patient, 'x_entry_permit_no', '') or '',
             }, 201)
         except Exception as e:
             import logging
@@ -189,9 +189,11 @@ class PatientController(http.Controller):
             'phone', 'home_phone', 'occupation',
             'governorate', 'city', 'street', 'dob', 'gender',
             'financial_class', 'insurance_company', 'contract_entity',
-            'x_blood_type', 'entry_permit_no',
+            'x_blood_type',
         ]
         vals = {k: body[k] for k in allowed if k in body}
+        if 'entry_permit_no' in body:
+            vals['x_entry_permit_no'] = body['entry_permit_no']
         name_parts = [
             body.get('first_name',  p.first_name  or ''),
             body.get('second_name', p.second_name or ''),
@@ -208,24 +210,24 @@ class PatientController(http.Controller):
             if country:
                 vals['country_id'] = country.id
 
-        for body_key, model_field in (
-            ('department_id', 'last_department_id'),
-            ('floor_id',      'last_floor_id'),
-            ('room_id',       'last_room_id'),
-            ('bed_id',        'last_bed_id'),
-        ):
-            if body_key in body:
-                try:
-                    vals[model_field] = int(body[body_key]) if body[body_key] else False
-                except (TypeError, ValueError):
-                    pass
+        # for body_key, model_field in (
+        #     ('department_id', 'last_department_id'),
+        #     ('floor_id',      'last_floor_id'),
+        #     ('room_id',       'last_room_id'),
+        #     ('bed_id',        'last_bed_id'),
+        # ):
+        #     if body_key in body:
+        #         try:
+        #             vals[model_field] = int(body[body_key]) if body[body_key] else False
+        #         except (TypeError, ValueError):
+        #             pass
 
-        entry_permit_no = (vals.get('entry_permit_no') or '').strip()
+        entry_permit_no = (vals.get('x_entry_permit_no') or '').strip()
         if entry_permit_no:
             if not entry_permit_no.isdigit():
                 return _json({'error': 'إذن الدخول يجب أن يحتوي على أرقام فقط'}, 400)
             if request.env['res.partner'].sudo().search_count([
-                ('entry_permit_no', '=', entry_permit_no), ('id', '!=', p.id),
+                ('x_entry_permit_no', '=', entry_permit_no), ('id', '!=', p.id),
             ]):
                 return _json({'error': 'رقم إذن الدخول مستخدم من قبل، برجاء إدخال رقم آخر.'}, 409)
 
