@@ -2,6 +2,7 @@
 import json
 from datetime import date
 from odoo import models, fields, api
+from odoo.exceptions import ValidationError
 
 
 class SaycareGovExpenseAllocation(models.Model):
@@ -289,6 +290,24 @@ class SaycareGovernmentExpenseDecision(models.Model):
             'tests': [{'id': t.id, 'name': t.name} for t in self.test_ids],
         }
 
+    def _to_list_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name or '',
+            'number': self.number or '',
+            'startDate': str(self.start_date) if self.start_date else '',
+            'totalAmount': self.total_amount or 0.0,
+            'usableRemaining': self.usable_remaining or 0.0,
+            'status': self.status or 'جاري',
+            'patient': {
+                'id': self.patient_id.id if self.patient_id else None,
+                'name': self.patient_id.name or '' if self.patient_id else '',
+                'mrn': self.patient_id.mrn or '' if self.patient_id else '',
+                'nationalId': self.patient_id.id_number or '' if self.patient_id else '',
+                'mobile': self.patient_id.phone or '' if self.patient_id else '',
+            },
+        }
+
     def _load_json(self, field_name, default):
         raw = getattr(self, field_name, None)
         if not raw:
@@ -342,7 +361,9 @@ class SaycareGovernmentExpenseTransaction(models.Model):
         'saycare.government.expense.decision',
         string='القرار', required=True, ondelete='cascade',
     )
-    reference_no = fields.Char('رقم المرجع')
+    # Kept only for historical records created before رقم الصفحة was introduced.
+    reference_no = fields.Char('رقم المرجع القديم')
+    page_no = fields.Integer('رقم الصفحة', copy=False, index=True)
     date = fields.Date('التاريخ')
     item_type = fields.Selection(
         [('service', 'خدمة'), ('medicine', 'دواء')],
@@ -360,6 +381,26 @@ class SaycareGovernmentExpenseTransaction(models.Model):
     notes = fields.Text('ملاحظات')
 
     deducted = fields.Float(string='المخصوم فعلياً', digits=(12, 2), compute='_compute_deducted', store=True)
+
+    def init(self):
+        self.env.cr.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+                saycare_gov_expense_transaction_page_no_uniq
+            ON saycare_government_expense_transaction (page_no)
+            WHERE page_no IS NOT NULL AND page_no > 0
+        """)
+
+    @api.constrains('page_no')
+    def _check_page_no(self):
+        for rec in self:
+            if rec.page_no <= 0:
+                raise ValidationError('رقم الصفحة يجب أن يكون رقماً صحيحاً أكبر من صفر')
+            duplicate = self.sudo().search_count([
+                ('page_no', '=', rec.page_no),
+                ('id', '!=', rec.id),
+            ])
+            if duplicate:
+                raise ValidationError('رقم الصفحة مستخدم بالفعل')
 
     @api.depends('parts_json')
     def _compute_deducted(self):
@@ -379,6 +420,7 @@ class SaycareGovernmentExpenseTransaction(models.Model):
                 pass
         return {
             'id': self.id,
+            'pageNo': self.page_no if self.page_no > 0 else None,
             'referenceNo': self.reference_no or '',
             'date': str(self.date) if self.date else '',
             'itemType': self.item_type or 'service',

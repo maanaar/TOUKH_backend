@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
-from odoo import http
+from psycopg2 import IntegrityError
+from odoo import fields, http
+from odoo.exceptions import ValidationError
 from odoo.http import request
 from .utils import _json
 
@@ -131,17 +133,36 @@ class GovernmentExpenseController(http.Controller):
         patient_id = kw.get('patient_id')
         mrn = kw.get('mrn')
         national_id = kw.get('national_id')
+        date_from_raw = kw.get('date_from')
+        date_to_raw = kw.get('date_to')
+        summary_only = str(kw.get('summary') or '').lower() in ('1', 'true', 'yes')
+
         if patient_id:
             try:
-                domain = [('patient_id', '=', int(patient_id))]
+                domain.append(('patient_id', '=', int(patient_id)))
             except (ValueError, TypeError):
                 pass
         elif mrn:
-            domain = [('patient_id.mrn', '=', mrn)]
+            domain.append(('patient_id.mrn', '=', mrn))
         elif national_id:
-            domain = [('patient_id.id_number', '=', national_id)]
+            domain.append(('patient_id.id_number', '=', national_id))
+
+        try:
+            date_from = fields.Date.to_date(date_from_raw) if date_from_raw else None
+            date_to = fields.Date.to_date(date_to_raw) if date_to_raw else None
+        except (TypeError, ValueError):
+            return _json({'error': 'صيغة التاريخ غير صحيحة'}, status=400)
+
+        if date_from and date_to and date_from > date_to:
+            return _json({'error': 'تاريخ البداية يجب أن يسبق تاريخ النهاية'}, status=400)
+        if date_from:
+            domain.append(('start_date', '>=', date_from))
+        if date_to:
+            domain.append(('start_date', '<=', date_to))
+
         records = env['saycare.government.expense.decision'].search(domain, order='id desc')
-        return _json([r._to_dict() for r in records])
+        serializer = '_to_list_dict' if summary_only else '_to_dict'
+        return _json([getattr(record, serializer)() for record in records])
 
     @http.route('/saycare/api/government-expense/decisions/<int:decision_id>',
                 type='http', auth='user', methods=['GET'], cors=CORS, csrf=False)
@@ -194,8 +215,25 @@ class GovernmentExpenseController(http.Controller):
         if not decision.exists():
             return _json({'error': 'decision not found'}, status=404)
         body = _parse_body()
+        page_no_raw = body.get('pageNo')
+        if page_no_raw in (None, ''):
+            return _json({'error': 'أدخل رقم الصفحة'}, status=400)
+        try:
+            if isinstance(page_no_raw, bool):
+                raise ValueError
+            page_no = int(str(page_no_raw).strip())
+        except (TypeError, ValueError):
+            return _json({'error': 'رقم الصفحة يجب أن يكون رقماً صحيحاً'}, status=400)
+        if page_no <= 0:
+            return _json({'error': 'رقم الصفحة يجب أن يكون أكبر من صفر'}, status=400)
+
+        transaction_model = env['saycare.government.expense.transaction']
+        if transaction_model.sudo().search_count([('page_no', '=', page_no)]):
+            return _json({'error': 'رقم الصفحة مستخدم بالفعل'}, status=409)
+
         vals = {
             'decision_id': decision.id,
+            'page_no': page_no,
             'reference_no': body.get('referenceNo') or '',
             'date': body.get('date') or False,
             'item_type': body.get('itemType') or 'service',
@@ -210,7 +248,12 @@ class GovernmentExpenseController(http.Controller):
             'touches_future_month': bool(body.get('touchesFutureMonth')),
             'notes': body.get('notes') or '',
         }
-        txn = env['saycare.government.expense.transaction'].create(vals)
+        try:
+            with env.cr.savepoint():
+                txn = transaction_model.create(vals)
+        except (ValidationError, IntegrityError):
+            return _json({'error': 'رقم الصفحة مستخدم بالفعل'}, status=409)
+
         # Return the full updated decision so frontend can sync in one shot
         return _json({'transaction': txn._to_dict(), 'decision': decision._to_dict()})
 
