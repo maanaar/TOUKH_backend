@@ -16,6 +16,11 @@ def _specialty_dict(r):
         'categ_name':  r.categ_id.name if r.categ_id else '',
         'location_id':   r.location_id.id if r.location_id else None,
         'location_name': r.location_id.complete_name if r.location_id else '',
+        # Convenience: the warehouse that owns this location — dispatch/checkout
+        # actions (e.g. صرف المستهلكات) still work in terms of a warehouse, while
+        # stock look-ups use the more granular location itself.
+        'warehouse_id':   r.location_id.warehouse_id.id if r.location_id and r.location_id.warehouse_id else None,
+        'warehouse_name': r.location_id.warehouse_id.name if r.location_id and r.location_id.warehouse_id else '',
         'doctor_ids':  [_doctor_summary(d) for d in r.doctor_ids],
         'consultant_price':           r.consultant_price or 0.0,
         'consultant_insurance_price': r.consultant_insurance_price or 0.0,

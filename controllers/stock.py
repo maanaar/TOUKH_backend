@@ -48,6 +48,39 @@ class StockController(http.Controller):
 
         return _json({'qty': float(qty)})
 
+    @http.route('/saycare/api/stock/by-location', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_stock_by_location(self, location_id='', product_ids='', **kw):
+        """Batch stock lookup at an arbitrary stock.location (a clinic's
+        assigned موقع, which may be a whole warehouse's location or a
+        narrower sub-location). Every requested product id is always present
+        in the result — 0 for anything not stocked there — so callers can
+        show "غير متوفر" instead of hiding the item."""
+        try:
+            ppids = [int(x) for x in product_ids.split(',') if x.strip().isdigit()]
+        except Exception:
+            ppids = []
+        if not ppids:
+            return _json({})
+
+        result = {str(ppid): 0.0 for ppid in ppids}
+        if not location_id:
+            return _json(result)
+
+        try:
+            loc = request.env['stock.location'].sudo().browse(int(location_id))
+        except (ValueError, TypeError):
+            return _json(result)
+        if not loc.exists():
+            return _json(result)
+
+        quants = request.env['stock.quant'].sudo().search([
+            ('product_id', 'in', ppids),
+            ('location_id', 'child_of', loc.id),
+        ])
+        for q in quants:
+            result[str(q.product_id.id)] += (q.quantity - q.reserved_quantity)
+        return _json(result)
+
     @http.route('/saycare/api/visit/<int:visit_id>/dispatch-consumables', type='http', auth='user', methods=['POST'], csrf=False)
     def dispatch_consumables(self, visit_id, **kw):
         try:
