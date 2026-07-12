@@ -138,8 +138,18 @@ class UomController(http.Controller):
 class ProductController(http.Controller):
 
     @http.route('/api/v1/products', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, **kw):
-        records = request.env['product.template'].sudo().search([])
+    def get_all(self, warehouse_id='', **kw):
+        domain = []
+        if warehouse_id:
+            wh = request.env['stock.warehouse'].sudo().browse(int(warehouse_id))
+            if wh.exists() and wh.lot_stock_id:
+                quants = request.env['stock.quant'].sudo().search([
+                    ('location_id', 'child_of', wh.lot_stock_id.id),
+                ])
+                domain = [('id', 'in', quants.mapped('product_id.product_tmpl_id').ids)]
+            else:
+                domain = [('id', '=', 0)]  # unknown warehouse — no products, not "all products"
+        records = request.env['product.template'].sudo().search(domain)
         data = []
         for rec in records:
             data.append({

@@ -15,6 +15,7 @@
         <field name="code"/>
         <field name="room_number"/>
         <field name="categ_id"/>
+        <field name="warehouse_id"/>
         <field name="active"/>
       </list>
     </field>
@@ -57,6 +58,8 @@
                      domain="[]"
                      options="{'no_create_edit': False}"
                      help="فئة المنتجات الخاصة بهذه العيادة (للمستلزمات والمخزون)"/>
+              <field name="warehouse_id"
+                     help="المخزن الذي تُصرف منه أصناف هذه العيادة — يُستخدم لتصفية قائمة المنتجات في شاشة الطبيب"/>
               <field name="description"/>
             </group>
           </group>
