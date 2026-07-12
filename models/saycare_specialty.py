@@ -20,10 +20,12 @@ class SaycareSpecialty(models.Model):
         help='Product category that holds this clinic\'s consumables/supplies',
     )
 
-    warehouse_id  = fields.Many2one(
-        'stock.warehouse',
-        string='المخزن',
-        help='المخزن الذي تُصرف منه أصناف هذه العيادة — يُستخدم لتصفية قائمة المنتجات في شاشة الطبيب',
+    location_id   = fields.Many2one(
+        'stock.location',
+        string='الموقع',
+        domain=[('usage', '=', 'internal')],
+        help='موقع المخزون الذي تُصرف منه أصناف هذه العيادة — يُستخدم لتصفية قائمة المنتجات في شاشة الطبيب. '
+             'يمكن اختيار موقع مخزن كامل أو موقع فرعي أدق منه.',
     )
 
     consultant_price           = fields.Float(string='سعر كشف الاستشاري', default=0.0)

@@ -14,8 +14,8 @@ def _specialty_dict(r):
         'room_number': r.room_number or '',
         'categ_id':    r.categ_id.id if r.categ_id else None,
         'categ_name':  r.categ_id.name if r.categ_id else '',
-        'warehouse_id':   r.warehouse_id.id if r.warehouse_id else None,
-        'warehouse_name': r.warehouse_id.name if r.warehouse_id else '',
+        'location_id':   r.location_id.id if r.location_id else None,
+        'location_name': r.location_id.complete_name if r.location_id else '',
         'doctor_ids':  [_doctor_summary(d) for d in r.doctor_ids],
         'consultant_price':           r.consultant_price or 0.0,
         'consultant_insurance_price': r.consultant_insurance_price or 0.0,
@@ -62,8 +62,8 @@ class SpecialtyController(http.Controller):
         }
         if body.get('categ_id'):
             vals['categ_id'] = int(body['categ_id'])
-        if body.get('warehouse_id'):
-            vals['warehouse_id'] = int(body['warehouse_id'])
+        if body.get('location_id'):
+            vals['location_id'] = int(body['location_id'])
         rec = request.env['saycare.specialty'].sudo().create(vals)
         return _json(_specialty_dict(rec), 201)
 
@@ -82,8 +82,8 @@ class SpecialtyController(http.Controller):
                 vals[f] = body[f]
         if 'categ_id' in body:
             vals['categ_id'] = int(body['categ_id']) if body['categ_id'] else False
-        if 'warehouse_id' in body:
-            vals['warehouse_id'] = int(body['warehouse_id']) if body['warehouse_id'] else False
+        if 'location_id' in body:
+            vals['location_id'] = int(body['location_id']) if body['location_id'] else False
         if vals:
             rec.write(vals)
         return _json(_specialty_dict(rec))
