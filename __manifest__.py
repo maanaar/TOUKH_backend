@@ -51,6 +51,8 @@
         "views/hospital_menus.xml",
         'data/account_journals.xml',
         'data/default_services.xml',
+        'data/saycare.governorate.csv',
+        'data/saycare.city.csv',
     ],
     'installable': True,
     'application': False,
