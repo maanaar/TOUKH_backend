@@ -155,10 +155,14 @@ class GovernmentExpenseController(http.Controller):
 
         if date_from and date_to and date_from > date_to:
             return _json({'error': 'تاريخ البداية يجب أن يسبق تاريخ النهاية'}, status=400)
+        # Filter by when the decision was entered into the system (create_date),
+        # not تاريخ القرار (start_date) — a decision entered today with an
+        # earlier start_date would otherwise be invisible in the default
+        # today→today list view even though it was just created.
         if date_from:
-            domain.append(('start_date', '>=', date_from))
+            domain.append(('create_date', '>=', f'{date_from} 00:00:00'))
         if date_to:
-            domain.append(('start_date', '<=', date_to))
+            domain.append(('create_date', '<=', f'{date_to} 23:59:59'))
 
         records = env['saycare.government.expense.decision'].search(domain, order='id desc')
         serializer = '_to_list_dict' if summary_only else '_to_dict'
