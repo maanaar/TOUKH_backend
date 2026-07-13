@@ -112,6 +112,124 @@ class DashboardController(http.Controller):
             'weekly_visits':           weekly_visits,
         })
 
+    @http.route('/saycare/api/dashboard/clinics-overview', type='http', auth='user', methods=['GET'], csrf=False)
+    def clinics_overview(self, date_from='', date_to='', **kw):
+        env = request.env
+
+        range_start = range_end = None
+        try:
+            if date_from:
+                range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+            if date_to:
+                range_end = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        except ValueError:
+            range_start = range_end = None
+
+        Visit      = env['saycare.visit'].sudo()
+        Med        = env['saycare.medication.order'].sudo()
+        Admission  = env['saycare.admission.request'].sudo()
+
+        visit_domain = [('state', '!=', 'cancelled')]
+        if range_start:
+            visit_domain.append(('admission_date', '>=', str(range_start)))
+        if range_end:
+            visit_domain.append(('admission_date', '<=', str(range_end)))
+        visits = Visit.search(visit_domain)
+
+        # ── 1) حجز العيادات: العيادة - الدكتور - الفئة - عدد الحالات ─────────────
+        GRADE_LABEL = {'consultant': 'استشاري', 'specialist': 'أخصائي'}
+        booking_counts = {}
+        for v in visits:
+            specialty_name = v.specialty_id.name if v.specialty_id else 'غير محدد'
+            doctor_name    = v.doctor_id.name if v.doctor_id else 'غير محدد'
+            grade          = v.doctor_id.doctor_grade if v.doctor_id else False
+            key = (specialty_name, doctor_name, grade)
+            booking_counts[key] = booking_counts.get(key, 0) + 1
+        clinic_bookings = sorted([
+            {
+                'specialty': specialty_name,
+                'doctor':    doctor_name,
+                'grade':     grade or '',
+                'grade_label': GRADE_LABEL.get(grade, 'غير محدد'),
+                'count':     count,
+            }
+            for (specialty_name, doctor_name, grade), count in booking_counts.items()
+        ], key=lambda x: -x['count'])
+
+        # ── 2) عدد حالات الصرف من الصيدلية ────────────────────────────────────────
+        med_domain = [('state', '=', 'dispensed')]
+        if range_start:
+            med_domain.append(('dispensed_at', '>=', str(range_start)))
+        if range_end:
+            med_domain.append(('dispensed_at', '<=', str(range_end)))
+        pharmacy_dispensed_count = Med.search_count(med_domain)
+
+        # ── 3) نسبة اكتمال تشخيص/إجراءات الطبيب لكل عيادة (تقديري: وجود ملاحظة سريرية) ─
+        # ── 4) نسبة اكتمال إجراءات التمريض لكل عيادة (تقديري: وجود قياسات حيوية) ─────
+        doctor_stage_visits = visits.filtered(lambda v: v.state in ('doctor_queue', 'in_progress', 'done'))
+        by_specialty = {}
+        for v in visits:
+            name = v.specialty_id.name if v.specialty_id else 'غير محدد'
+            by_specialty.setdefault(name, {'nurse_total': 0, 'nurse_done': 0, 'doctor_total': 0, 'doctor_done': 0})
+            by_specialty[name]['nurse_total'] += 1
+            if v.vital_sign_ids:
+                by_specialty[name]['nurse_done'] += 1
+        for v in doctor_stage_visits:
+            name = v.specialty_id.name if v.specialty_id else 'غير محدد'
+            by_specialty.setdefault(name, {'nurse_total': 0, 'nurse_done': 0, 'doctor_total': 0, 'doctor_done': 0})
+            by_specialty[name]['doctor_total'] += 1
+            if v.clinical_note_ids:
+                by_specialty[name]['doctor_done'] += 1
+
+        def _rate(done, total):
+            return round((done / total) * 100, 1) if total else 0.0
+
+        doctor_completion = sorted([
+            {
+                'specialty': name,
+                'total':     data['doctor_total'],
+                'completed': data['doctor_done'],
+                'rate':      _rate(data['doctor_done'], data['doctor_total']),
+            }
+            for name, data in by_specialty.items() if data['doctor_total']
+        ], key=lambda x: -x['total'])
+
+        nursing_completion = sorted([
+            {
+                'specialty': name,
+                'total':     data['nurse_total'],
+                'completed': data['nurse_done'],
+                'rate':      _rate(data['nurse_done'], data['nurse_total']),
+            }
+            for name, data in by_specialty.items() if data['nurse_total']
+        ], key=lambda x: -x['total'])
+
+        # ── 5) عدد مرضى قسم الداخلي وفقاً للقسم والفئة المالية ─────────────────────
+        admission_domain = [('status', '=', 'admitted')]
+        if range_start:
+            admission_domain.append(('create_date', '>=', str(range_start)))
+        if range_end:
+            admission_domain.append(('create_date', '<=', str(range_end)))
+        admissions = Admission.search(admission_domain)
+        inpatient_counts = {}
+        for a in admissions:
+            dept_name = a.department_id.name_ar if a.department_id else 'غير محدد'
+            fin_class = a.payment_type or 'غير محدد'
+            key = (dept_name, fin_class)
+            inpatient_counts[key] = inpatient_counts.get(key, 0) + 1
+        inpatient_by_department = sorted([
+            {'department': dept_name, 'financial_class': fin_class, 'count': count}
+            for (dept_name, fin_class), count in inpatient_counts.items()
+        ], key=lambda x: -x['count'])
+
+        return _json({
+            'clinic_bookings':          clinic_bookings,
+            'pharmacy_dispensed_count': pharmacy_dispensed_count,
+            'doctor_completion':        doctor_completion,
+            'nursing_completion':       nursing_completion,
+            'inpatient_by_department':  inpatient_by_department,
+        })
+
     @http.route('/saycare/api/dashboard/visits-today', type='http', auth='user', methods=['GET'], csrf=False)
     def visits_today(self, date_from='', date_to='', **kw):
         # No date_from/date_to at all → no restriction, return all visits.

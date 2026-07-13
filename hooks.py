@@ -19,6 +19,60 @@ def uninstall_hook(env):
     pass
 
 
+def adopt_manual_field(cr, model, field_name):
+    """Data-safe fix for a common deploy trap: a field this module defines in
+    code collides with a pre-existing 'manual' ir.model.fields row on the
+    target server — usually a field someone added by hand via Settings >
+    Technical > Fields (or Studio) directly on that server, independent of
+    this codebase. That collision is what crashes -u with a field-type/
+    ondelete error (the same root cause as the x_payment_type crash fixed in
+    migrations/19.0.1.0.1/pre-migrate.py).
+
+    Deleting the field in the UI "fixes" it but destroys whatever data staff
+    already typed into it. This instead only clears Odoo's *bookkeeping* row
+    (ir.model.fields / ir.model.fields.selection + their ir.model.data
+    entries) — never the underlying Postgres column. Odoo's own _auto_init
+    checks the real column via information_schema, not ir_model_fields, so
+    if the column already exists with a compatible type it's left exactly as
+    is and simply gets re-registered as owned by this module; the data
+    is preserved. Only genuinely incompatible type changes fall back to
+    Odoo's own _auto_init column-rename safety net, same as any other field
+    type change.
+
+    Call this from a pre-migrate.py script (cr only, no env — same reason
+    the x_payment_type fix uses raw SQL: the ORM's unlink() refuses to
+    remove a code-defined field outside of a real module uninstall), once
+    per (model, field_name) pair, BEFORE this module's own fields get
+    reflected for the target version:
+
+        from odoo.addons.saycare_odoo_19.hooks import adopt_manual_field
+
+        def migrate(cr, version):
+            adopt_manual_field(cr, 'res.partner', 'x_some_new_field')
+    """
+    cr.execute("""
+        SELECT id, state FROM ir_model_fields
+         WHERE model = %s AND name = %s
+    """, (model, field_name))
+    row = cr.fetchone()
+    if not row:
+        return  # field doesn't exist on this server yet — nothing to adopt
+    field_id, state = row
+    if state != 'manual':
+        return  # already module-owned (or something else) — leave it alone
+
+    cr.execute("""
+        DELETE FROM ir_model_data
+         WHERE model = 'ir.model.fields.selection'
+           AND res_id IN (SELECT id FROM ir_model_fields_selection WHERE field_id = %s)
+    """, (field_id,))
+    cr.execute("DELETE FROM ir_model_fields_selection WHERE field_id = %s", (field_id,))
+    cr.execute("""
+        DELETE FROM ir_model_data WHERE model = 'ir.model.fields' AND res_id = %s
+    """, (field_id,))
+    cr.execute("DELETE FROM ir_model_fields WHERE id = %s", (field_id,))
+
+
 def _fix_journal_names(env):
     """
     For every financial_class journal:
