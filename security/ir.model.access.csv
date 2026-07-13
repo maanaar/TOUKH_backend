@@ -44,3 +44,7 @@ access_saycare_refund_request_user,saycare.refund.request user,model_saycare_ref
 access_saycare_admission_request_user,saycare.admission.request user,model_saycare_admission_request,,1,1,1,0
 access_saycare_admission_request_admin,saycare.admission.request admin,model_saycare_admission_request,base.group_system,1,1,1,1
 
+access_saycare_governorate_user,saycare.governorate user,model_saycare_governorate,,1,0,0,0
+access_saycare_governorate_admin,saycare.governorate admin,model_saycare_governorate,base.group_system,1,1,1,1
+access_saycare_city_user,saycare.city user,model_saycare_city,,1,0,0,0
+access_saycare_city_admin,saycare.city admin,model_saycare_city,base.group_system,1,1,1,1
