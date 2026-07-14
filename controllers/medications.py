@@ -13,6 +13,27 @@ def _med_dict(m):
         'visit_id':           m.visit_id.id if m.visit_id else None,
         'patient_id':         m.patient_id.id if m.patient_id else None,
         'patient_name':       m.patient_id.name if m.patient_id else '',
+        'patient_mrn':        (getattr(m.patient_id, 'mrn', '') or '') if m.patient_id else '',
+        'patient_national_id': (getattr(m.patient_id, 'id_number', '') or '') if m.patient_id else '',
+        'patient_mobile':      (
+            getattr(m.patient_id, 'mobile', '')
+            or getattr(m.patient_id, 'phone', '')
+            or ''
+        ) if m.patient_id else '',
+        'visit_reference':    m.visit_id.name if m.visit_id else '',
+        'financial_class':    m.visit_id.financial_class if m.visit_id else '',
+        'specialty_id':       m.visit_id.specialty_id.id if (m.visit_id and m.visit_id.specialty_id) else None,
+        'specialty_name':     m.visit_id.specialty_id.name if (m.visit_id and m.visit_id.specialty_id) else '',
+        'doctor_id':          (
+            m.visit_id.doctor_id.id
+            if (m.visit_id and m.visit_id.doctor_id)
+            else (m.prescribed_by.id if m.prescribed_by else None)
+        ),
+        'doctor_name':        (
+            m.visit_id.doctor_id.name
+            if (m.visit_id and m.visit_id.doctor_id)
+            else (m.prescribed_by.name if m.prescribed_by else '')
+        ),
         'product_id':         m.product_id.id if m.product_id else None,
         'product_name':       m.product_id.name if m.product_id else '',
         'drug_name':          m.drug_name or (m.product_id.name if m.product_id else ''),
@@ -32,6 +53,8 @@ def _med_dict(m):
         'dispensed_by':       m.dispensed_by.id if m.dispensed_by else None,
         'dispensed_by_name':  m.dispensed_by.name if m.dispensed_by else '',
         'dispensed_at':       str(m.dispensed_at) if m.dispensed_at else None,
+        'dispense_picking_id': m.dispense_picking_id.id if m.dispense_picking_id else None,
+        'dispense_picking_name': m.dispense_picking_id.name if m.dispense_picking_id else '',
     }
 
 
@@ -50,11 +73,33 @@ class MedicationOrderController(http.Controller):
             body = json.loads(request.httprequest.data or '{}')
         except json.JSONDecodeError:
             return _json({'error': 'invalid JSON'}, 400)
+
         if not body.get('drug_name') and not body.get('product_id'):
             return _json({'error': 'drug_name or product_id is required'}, 400)
+
+        visit = request.env['saycare.visit'].sudo().browse(visit_id)
+        if not visit.exists():
+            return _json({'error': 'visit not found'}, 404)
+
+        patient_id = body.get('patient_id') or visit.patient_id.id
+        if not patient_id:
+            return _json({'error': 'visit has no patient'}, 400)
+
+        prescribed_by = body.get('prescribed_by')
+        if not prescribed_by and visit.doctor_id:
+            prescribed_by = visit.doctor_id.id
+
+        if not prescribed_by:
+            employee = request.env['hr.employee'].sudo().search(
+                [('user_id', '=', request.env.user.id)],
+                limit=1,
+            )
+            if employee:
+                prescribed_by = employee.id
+
         vals = {
-            'visit_id':      visit_id,
-            'patient_id':    body.get('patient_id'),
+            'visit_id':      visit.id,
+            'patient_id':    patient_id,
             'product_id':    body.get('product_id'),
             'drug_name':     body.get('drug_name', ''),
             'dose':          body.get('dose', ''),
@@ -64,9 +109,18 @@ class MedicationOrderController(http.Controller):
             'instructions':  body.get('instructions', ''),
             'quantity':      body.get('quantity', 1.0),
             'uom_id':        body.get('uom_id'),
-            'prescribed_by': body.get('prescribed_by'),
+            'prescribed_by': prescribed_by,
         }
-        rec = request.env['saycare.medication.order'].sudo().create(vals)
+
+        try:
+            rec = request.env['saycare.medication.order'].sudo().create(vals)
+        except Exception as exc:
+            request.env.cr.rollback()
+            return _json({
+                'error': 'failed to create medication order',
+                'details': str(exc),
+            }, 400)
+
         return _json(_med_dict(rec), 201)
 
     @http.route('/saycare/api/visit/<int:visit_id>/medications/<int:med_id>/cancel',
@@ -90,21 +144,74 @@ class MedicationOrderController(http.Controller):
         med = request.env['saycare.medication.order'].sudo().browse(med_id)
         if not med.exists() or med.visit_id.id != visit_id:
             return _json({'error': 'medication order not found'}, 404)
-        if med.state != 'active':
-            return _json({'error': 'only active orders can be dispensed'}, 400)
+
         try:
             body = json.loads(request.httprequest.data or '{}')
         except json.JSONDecodeError:
             body = {}
-        med.write({
-            'state':        'dispensed',
-            'dispensed_by': body.get('dispensed_by'),
-            'dispensed_at': DT.now(),
-        })
 
-        if med.product_id and med.quantity:
+        picking = False
+        picking_id = body.get('picking_id')
+        if picking_id:
+            try:
+                picking = request.env['stock.picking'].sudo().browse(int(picking_id))
+            except (TypeError, ValueError):
+                return _json({'error': 'invalid picking_id'}, 400)
+
+            if not picking.exists():
+                return _json({'error': 'dispense picking not found'}, 404)
+            if picking.state != 'done':
+                return _json({'error': 'dispense picking must be validated first'}, 400)
+
+        # Retry-safe behavior: return the already-dispensed record instead of
+        # creating another stock movement or failing the whole user workflow.
+        if med.state == 'dispensed':
+            if (
+                picking
+                and med.dispense_picking_id
+                and med.dispense_picking_id.id != picking.id
+            ):
+                return _json(
+                    {'error': 'medication is already linked to another dispense picking'},
+                    409,
+                )
+
+            if picking and not med.dispense_picking_id:
+                med.write({'dispense_picking_id': picking.id})
+
+            return _json(_med_dict(med))
+
+        if med.state != 'active':
+            return _json({'error': 'only active orders can be dispensed'}, 400)
+
+        employee = request.env['hr.employee'].sudo().search(
+            [('user_id', '=', request.env.user.id)],
+            limit=1,
+        )
+
+        vals = {
+            'state': 'dispensed',
+            'dispensed_at': DT.now(),
+        }
+
+        if employee:
+            vals['dispensed_by'] = employee.id
+        elif body.get('dispensed_by'):
+            # Transitional fallback for users not yet linked to hr.employee.
+            vals['dispensed_by'] = body.get('dispensed_by')
+
+        if picking:
+            vals['dispense_picking_id'] = picking.id
+
+        med.write(vals)
+
+        # Legacy compatibility only: callers that do not provide picking_id
+        # retain the previous stock-move behavior. The active SayCare Pharmacy
+        # flow provides picking_id and therefore never moves stock twice.
+        if not picking and med.product_id and med.quantity:
             warehouse = request.env['stock.warehouse'].sudo().search(
-                [('company_id', '=', request.env.company.id)], limit=1
+                [('company_id', '=', request.env.company.id)],
+                limit=1,
             )
             move = request.env['stock.move'].sudo().create({
                 'name':             med.drug_name or med.product_id.name,
@@ -200,7 +307,7 @@ class PharmacyDirectOrderController(http.Controller):
             'patient': {
                 'id':     patient.id,
                 'name':   patient.name,
-                'mrn':    patientgetattr(patient, 'mrn', '') or '',
+                'mrn':    getattr(patient, 'mrn', '') or '',
                 'mobile': patient.phone or '',
             },
             'orders': orders,

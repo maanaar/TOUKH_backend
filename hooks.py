@@ -86,7 +86,7 @@ def _fix_journal_names(env):
 
     income_account = env['account.account'].sudo().search([
         ('account_type', 'in', ['income', 'income_other']),
-        ('company_ids', 'in', company.id),
+        ('company_ids', '=', company.id),
     ], limit=1)
 
     for fin_class, correct_name, code in FINANCIAL_JOURNALS:
