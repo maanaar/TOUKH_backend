@@ -169,6 +169,8 @@ def _admission_request_dict(r):
             'maxStayDays':           r.max_stay_days or 0,
             'admissionNotes':        r.admission_notes or '',
         },
+        'rejectionReason':        r.rejection_reason or '',
+        'rejectedAt':             _dt_iso(r.rejected_at),
     }
 
 
@@ -231,5 +233,15 @@ class AdmissionRequestController(http.Controller):
         rec = request.env[self._model].sudo().browse(rec_id)
         if not rec.exists():
             return _json({'error': 'admission request not found'}, 404)
-        rec.write({'status': 'cancelled'})
+        body, err = _load_body()
+        if err:
+            return err
+        reason = (body.get('reason') or '').strip()
+        if not reason:
+            return _json({'error': 'سبب الرفض مطلوب'}, 400)
+        rec.write({
+            'status': 'cancelled',
+            'rejection_reason': reason,
+            'rejected_at': fields.Datetime.now(),
+        })
         return _json(_admission_request_dict(rec))
