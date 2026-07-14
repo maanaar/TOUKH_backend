@@ -54,3 +54,10 @@ class SaycareMedicationOrder(models.Model):
     # ── Dispensed ─────────────────────────────────────────────────────────────
     dispensed_by = fields.Many2one('hr.employee', string='Dispensed By')
     dispensed_at = fields.Datetime(string='Dispensed At')
+    dispense_picking_id = fields.Many2one(
+        'stock.picking',
+        string='Dispense Picking',
+        readonly=True,
+        copy=False,
+        ondelete='set null',
+    )

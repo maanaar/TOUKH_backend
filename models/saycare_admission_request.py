@@ -88,6 +88,10 @@ class SaycareAdmissionRequest(models.Model):
     admission_notes  = fields.Text(string='ملاحظات القبول')
     admitted_at      = fields.Datetime(string='وقت القبول', copy=False, readonly=True)
 
+    # ── Rejection (set only via the reject action) ─────────────────────────
+    rejection_reason = fields.Text(string='سبب الرفض')
+    rejected_at      = fields.Datetime(string='وقت الرفض', copy=False, readonly=True)
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:

@@ -33,33 +33,68 @@
           </group>
         </page>
 
-        <page string="التصنيف" name="sc_classification">
-          <group>
-            <group string="التصنيف">
-              <field name="group_id"   string="المجموعة"/>
-              <field name="usage_type_ids" widget="many2many_tags" string="نوع الاستخدام"/>
+        <!-- ── Tab: بيانات الدواء ── -->
+        <page string="بيانات الدواء" name="sc_drug_data">
+          <group string="متشابهات الدواء" name="drug_similarities">
+            <div class="d-flex align-items-center gap-3">
+              <label for="is_look_alike"/>
+              <field name="is_look_alike" widget="boolean_toggle"/>
+              <label for="is_sound_alike" class="ms-4"/>
+              <field name="is_sound_alike" widget="boolean_toggle"/>
+              <label for="is_high_concentration" class="ms-4"/>
+              <field name="is_high_concentration" widget="boolean_toggle"/>
+              <label for="is_hazardous" class="ms-4"/>
+              <field name="is_hazardous" widget="boolean_toggle"/>
+            </div>
+          </group>
+
+          <group string="المعلومات الدوائية" name="drug_info">
+            <group>
+              <field name="generic_name"/>
+              <field name="dosage_form"/>
+              <field name="medicine_concentration"/>
+              <field name="primary_route"/>
+              <field name="secondary_route"/>
+            </group>
+            <group>
+              <field name="atc_code"/>
+              <field name="dispensing_category"/>
+              <field name="usual_dose"/>
+              <field name="max_daily_dose"/>
             </group>
           </group>
-        </page>
 
-        <!-- ── Tab: الأسعار ── -->
-        <page string="الأسعار الجبرية" name="sc_prices">
-          <group>
-            <group string="السعر الجبرى">
+          <group string="الاستخدام في الحمل والرضاعة" name="pregnancy_lactation_group" col="6">
+            <field name="pregnancy_category"/>
+            <field name="lactation_use"/>
+            <field name="pediatric_use"/>
+          </group>
+
+          <group string="التحذيرات والتفاعلات" name="warnings_interactions">
+            <group>
+              <field name="contraindications" placeholder="مثال: فرط الحساسية للمادة الفعالة..."/>
+              <field name="side_effects" placeholder="مثال: غثيان، طفح جلدي نادر..."/>
+            </group>
+            <group>
+              <field name="special_warnings" placeholder="مثال: الحذر في قصور الكلى..."/>
+              <field name="drug_interactions" placeholder="مثال: يزيد من تأثير مضادات التختر..."/>
+            </group>
+          </group>
+
+          <group string="التصنيف والأسعار والتخزين" name="sc_classification_prices_storage">
+            <group string="التصنيف" name="sc_classification_sub">
+              <field name="group_id" string="المجموعة"/>
+              <field name="usage_type_ids" widget="many2many_tags" string="نوع الاستخدام"/>
+            </group>
+            <group string="الأسعار الجبرية" name="sc_prices_sub">
               <field name="forced_price_currency_id" invisible="1"/>
               <field name="forced_price"
                      widget="monetary"
                      options="{'currency_field': 'forced_price_currency_id'}"
                      string="السعر الجبرى"/>
             </group>
-          </group>
-        </page>
-
-        <!-- ── Tab: المخزون والتخزين ── -->
-        <page string="المخزون والتخزين" name="sc_storage">
-          <group>
-            <group string="التخزين">
-              <field name="needs_refrigeration"/>
+            <group string="المخزون والتخزين" name="sc_storage_sub">
+              <field name="needs_refrigeration" string="يحتاج الى تبريد"/>
               <field name="storage_temp"
                      invisible="not needs_refrigeration"
                      string="درجة الحرارة (°C)"/>
@@ -70,18 +105,6 @@
             <i class="fa fa-snowflake-o me-1"/>
             ملاحظة: يجب أن تكون درجة الحرارة من <strong>2</strong> إلى <strong>8</strong> درجة مئوية
           </div>
-        </page>
-
-        <!-- ── Tab: بيانات الدواء ── -->
-        <page string="بيانات الدواء" name="sc_drug_data">
-          <group>
-            <group string="متشابهات">
-              <field name="similarity_type" widget="badge"/>
-            </group>
-            <group string="طريقة الإعطاء">
-              <field name="secondary_route" string="طريقة الإعطاء الثانوية"/>
-            </group>
-          </group>
         </page>
 
       </notebook>

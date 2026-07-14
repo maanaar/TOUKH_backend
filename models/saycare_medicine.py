@@ -93,12 +93,44 @@ class ProductTemplateMedicine(models.Model):
     )
 
     # ── 5  متشابهات ─────────────────────────────────────────────────────────────
-    similarity_type = fields.Selection([
-        ('look_alike',         'متشابه فى الشكل'),
-        ('sound_alike',        'متشابه فى النطق'),
-        ('high_concentration', 'عالى التركيز'),
-        ('hazardous',          'مادة خطرة'),
-    ], string='متشابهات')
+    is_look_alike         = fields.Boolean(string='متشابه في الشكل')
+    is_sound_alike        = fields.Boolean(string='متشابه في النطق')
+    is_high_concentration = fields.Boolean(string='عالي التركيز')
+    is_hazardous          = fields.Boolean(string='مادة خطرة')
+
+    # ── 6  المعلومات الدوائية ──────────────────────────────────────────────────
+    generic_name = fields.Char(string='المادة الفعالة (Generic Name)')
+    dosage_form  = fields.Selection([
+        ('tablet',      'أقراص'),
+        ('capsule',     'كبسولات'),
+        ('syrup',       'شراب'),
+        ('suspension',  'معلق'),
+        ('injection',   'حقن'),
+        ('ointment',    'مرهم'),
+        ('cream',       'كريم'),
+        ('gel',         'جل'),
+        ('drops',       'قطرة'),
+        ('spray',       'بخاخ'),
+        ('suppository', 'تحاميل/لبوس'),
+        ('inhaler',     'مستنشق'),
+        ('powder',      'بودرة'),
+    ], string='الشكل الصيدلاني')
+    medicine_concentration = fields.Char(string='التركيز / الجرعة')
+    
+    primary_route = fields.Selection([
+        ('oral',        'فموي'),
+        ('iv',          'وريدي'),
+        ('im',          'عضلي'),
+        ('sc',          'تحت الجلد'),
+        ('topical',     'موضعي'),
+        ('inhalation',  'استنشاق'),
+        ('sublingual',  'تحت اللسان'),
+        ('rectal',      'مستقيمي'),
+        ('ophthalmic',  'عيني'),
+        ('otic',        'أذني'),
+        ('nasal',       'أنفي'),
+        ('transdermal', 'عبر الجلد'),
+    ], string='طريقة الإعطاء الأساسية')
 
     # ── بيانات الدواء — طريقة الإعطاء الثانوية ──────────────────────────────────
     secondary_route = fields.Selection([
@@ -115,6 +147,42 @@ class ProductTemplateMedicine(models.Model):
         ('nasal',       'أنفي'),
         ('transdermal', 'عبر الجلد'),
     ], string='طريقة الإعطاء الثانوية')
+
+    atc_code            = fields.Char(string='الفئة الدوائية (ATC Code)')
+    dispensing_category = fields.Selection([
+        ('rx',         'بوصفة طبية (Rx)'),
+        ('otc',        'بدون وصفة طبية (OTC)'),
+        ('controlled', 'جدول / خاضع للرقابة (Controlled)'),
+    ], string='تصنيف الصرف')
+    usual_dose     = fields.Char(string='الجرعة المعتادة')
+    max_daily_dose = fields.Char(string='الحد الأقصى للجرعة اليومية')
+
+    # ── 7  الاستخدام في الحمل والرضاعة ─────────────────────────────────────────
+    pregnancy_category = fields.Selection([
+        ('a', 'تصنيف A'),
+        ('b', 'تصنيف B'),
+        ('c', 'تصنيف C'),
+        ('d', 'تصنيف D'),
+        ('x', 'تصنيف X'),
+    ], string='تصنيف الحمل (FDA)')
+    lactation_use = fields.Selection([
+        ('safe',            'آمن'),
+        ('caution',         'يستخدم بحذر'),
+        ('unsafe',          'غير آمن / تجنبه'),
+        ('contraindicated', 'موانع استخدام مطلقة'),
+    ], string='الاستخدام أثناء الرضاعة')
+    pediatric_use = fields.Selection([
+        ('safe',            'آمن'),
+        ('caution',         'يستخدم بحذر'),
+        ('unsafe',          'غير آمن / تجنبه'),
+        ('contraindicated', 'موانع استخدام مطلقة'),
+    ], string='الاستخدام في الأطفال')
+
+    # ── 8  التحذيرات والتفاعلات ───────────────────────────────────────────────
+    contraindications = fields.Text(string='موانع الاستخدام')
+    special_warnings  = fields.Text(string='التحذيرات الخاصة')
+    side_effects      = fields.Text(string='الآثار الجانبية الشائعة')
+    drug_interactions = fields.Text(string='التفاعلات الدوائية')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
