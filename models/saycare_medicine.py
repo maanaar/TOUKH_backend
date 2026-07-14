@@ -93,6 +93,12 @@ class ProductTemplateMedicine(models.Model):
     )
 
     # ── 5  متشابهات ─────────────────────────────────────────────────────────────
+    similarity_type = fields.Selection([
+        ('look_alike',         'متشابه فى الشكل'),
+        ('sound_alike',        'متشابه فى النطق'),
+        ('high_concentration', 'عالى التركيز'),
+        ('hazardous',          'مادة خطرة'),
+    ], string='متشابهات')
     is_look_alike         = fields.Boolean(string='متشابه في الشكل')
     is_sound_alike        = fields.Boolean(string='متشابه في النطق')
     is_high_concentration = fields.Boolean(string='عالي التركيز')
