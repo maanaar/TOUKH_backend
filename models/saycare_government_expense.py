@@ -149,6 +149,53 @@ class SaycareGovernmentExpenseDecision(models.Model):
     ], string='الحالة', default='جاري', required=True)
     notes = fields.Text('ملاحظات')
 
+    # اسم المستخدم الفعلي اللى أنشأ القرار من واجهة التطبيق — بيختلف عن
+    # create_uid لأن كل طلبات الـ API بتتنفذ تحت نفس حساب أودو التقني.
+    created_by_name = fields.Char('أنشأه', copy=False)
+
+    # رقم صفحة واحد لكل مريض — كل قرارات نفس المريض، وكل الخدمات/المعاملات
+    # المضافة عليها، بتشترك في نفس الرقم بدل ما كل قرار/خدمة ياخد رقم صفحة
+    # مستقل (اللي كان بيسبب استهلاك أرقام الصفحات بسرعة من غير داعي). الفريدة
+    # بقت على مستوى المريض مش على مستوى القرار نفسه (شوف _check_page_no).
+    page_no = fields.Integer('رقم الصفحة', copy=False)
+
+    def init(self):
+        # كانت فريدة على مستوى القرار — دلوقتي ممكن كذا قرار لنفس المريض
+        # يشتركوا في نفس الرقم قصداً، فمينفعش تفضل الفريدة دي على قاعدة
+        # البيانات؛ الفحص بقى بايثوني (بيستثني قرارات نفس المريض) في
+        # _check_page_no تحت.
+        self.env.cr.execute("""
+            DROP INDEX IF EXISTS saycare_gov_expense_decision_page_no_uniq
+        """)
+
+    @api.model
+    def _resolve_page_no_for_patient(self, patient_id):
+        """Reuse an existing page number already assigned to another decision
+        of the same patient; otherwise mint a fresh one."""
+        if patient_id:
+            sibling = self.sudo().search([
+                ('patient_id', '=', patient_id),
+                ('page_no', '>', 0),
+            ], limit=1)
+            if sibling:
+                return sibling.page_no
+        return self._next_page_no()
+
+    @api.constrains('page_no', 'patient_id')
+    def _check_page_no(self):
+        for rec in self:
+            if not rec.page_no:
+                continue
+            if rec.page_no <= 0:
+                raise ValidationError('رقم الصفحة يجب أن يكون رقماً صحيحاً أكبر من صفر')
+            conflict = self.sudo().search_count([
+                ('page_no', '=', rec.page_no),
+                ('id', '!=', rec.id),
+                ('patient_id', '!=', rec.patient_id.id if rec.patient_id else False),
+            ])
+            if conflict:
+                raise ValidationError('رقم الصفحة مستخدم بالفعل لمريض آخر')
+
     patient_id = fields.Many2one(
         'res.partner', string='المريض',
         domain=[('is_patient', '=', True)],
@@ -179,6 +226,11 @@ class SaycareGovernmentExpenseDecision(models.Model):
         string='خصم المؤسسة', digits=(12, 2), default=60.0,
     )
 
+    @api.model
+    def _next_page_no(self):
+        last = self.sudo().search([('page_no', '>', 0)], order='page_no desc', limit=1)
+        return (last.page_no + 1) if last else 1
+
     @api.model_create_multi
     def create(self, vals_list):
         settings = self.env['saycare.government.expense.settings'].sudo().search([], limit=1)
@@ -186,7 +238,21 @@ class SaycareGovernmentExpenseDecision(models.Model):
         for vals in vals_list:
             if 'deduction_amount' not in vals:
                 vals['deduction_amount'] = default_deduction
-        return super().create(vals_list)
+            if not vals.get('page_no'):
+                vals['page_no'] = self._resolve_page_no_for_patient(vals.get('patient_id'))
+        records = super().create(vals_list)
+        # لو المريض عنده قرارات تانية لسه من غير رقم صفحة (اتسجلت قبل الميزة
+        # دي)، نديهم نفس رقم القرار الجديد عشان كل قرارات نفس المريض تتساوى.
+        for rec in records:
+            if rec.patient_id and rec.page_no:
+                siblings = self.sudo().search([
+                    ('patient_id', '=', rec.patient_id.id),
+                    ('id', '!=', rec.id),
+                    ('page_no', '=', 0),
+                ])
+                if siblings:
+                    siblings.write({'page_no': rec.page_no})
+        return records
 
     # ── Computed summary (reads deduction_amount from the record itself) ──────
     distributable_amount = fields.Float(string='الصافي للتوزيع',  digits=(12, 2), compute='_compute_summary')
@@ -266,6 +332,8 @@ class SaycareGovernmentExpenseDecision(models.Model):
             'deductionAmount': self.deduction_amount or 0.0,
             'status': self.status or 'جاري',
             'notes': self.notes or '',
+            'createdByName': self.created_by_name or self.create_uid.name or '',
+            'pageNo': self.page_no if self.page_no > 0 else None,
             'patient': {
                 'id': self.patient_id.id if self.patient_id else None,
                 'name': self.patient_id.name or '' if self.patient_id else '',
@@ -299,6 +367,8 @@ class SaycareGovernmentExpenseDecision(models.Model):
             'totalAmount': self.total_amount or 0.0,
             'usableRemaining': self.usable_remaining or 0.0,
             'status': self.status or 'جاري',
+            'createdByName': self.created_by_name or self.create_uid.name or '',
+            'pageNo': self.page_no if self.page_no > 0 else None,
             'patient': {
                 'id': self.patient_id.id if self.patient_id else None,
                 'name': self.patient_id.name or '' if self.patient_id else '',
@@ -383,24 +453,12 @@ class SaycareGovernmentExpenseTransaction(models.Model):
     deducted = fields.Float(string='المخصوم فعلياً', digits=(12, 2), compute='_compute_deducted', store=True)
 
     def init(self):
+        # رقم الصفحة بقى بيتشارك بين كل معاملات نفس القرار (شايف page_no على
+        # الـ decision نفسه) — الفريدة اتنقلت هناك، فمينفعش تفضل هنا فريدة
+        # على مستوى الترانزاكشن لأن كذا معاملة هيبقى ليهم نفس الرقم قصداً.
         self.env.cr.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS
-                saycare_gov_expense_transaction_page_no_uniq
-            ON saycare_government_expense_transaction (page_no)
-            WHERE page_no IS NOT NULL AND page_no > 0
+            DROP INDEX IF EXISTS saycare_gov_expense_transaction_page_no_uniq
         """)
-
-    @api.constrains('page_no')
-    def _check_page_no(self):
-        for rec in self:
-            if rec.page_no <= 0:
-                raise ValidationError('رقم الصفحة يجب أن يكون رقماً صحيحاً أكبر من صفر')
-            duplicate = self.sudo().search_count([
-                ('page_no', '=', rec.page_no),
-                ('id', '!=', rec.id),
-            ])
-            if duplicate:
-                raise ValidationError('رقم الصفحة مستخدم بالفعل')
 
     @api.depends('parts_json')
     def _compute_deducted(self):
@@ -418,9 +476,10 @@ class SaycareGovernmentExpenseTransaction(models.Model):
                 parts = json.loads(self.parts_json)
             except Exception:
                 pass
+        page_no = self.decision_id.page_no if self.decision_id and self.decision_id.page_no else self.page_no
         return {
             'id': self.id,
-            'pageNo': self.page_no if self.page_no > 0 else None,
+            'pageNo': page_no if page_no and page_no > 0 else None,
             'referenceNo': self.reference_no or '',
             'date': str(self.date) if self.date else '',
             'itemType': self.item_type or 'service',

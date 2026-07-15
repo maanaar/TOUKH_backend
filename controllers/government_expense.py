@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
-from psycopg2 import IntegrityError
 from odoo import fields, http
-from odoo.exceptions import ValidationError
 from odoo.http import request
 from .utils import _json
 
@@ -39,6 +37,13 @@ def _decision_vals(body, env):
         vals['status'] = body['status'] or 'جاري'
     if 'notes' in body:
         vals['notes'] = body['notes'] or ''
+    if 'createdByName' in body:
+        vals['created_by_name'] = body['createdByName'] or ''
+    if 'pageNo' in body and body['pageNo']:
+        try:
+            vals['page_no'] = int(body['pageNo'])
+        except (TypeError, ValueError):
+            pass
     if 'allowedClinics' in body:
         spec_ids = []
         for clinic_data in (body['allowedClinics'] or []):
@@ -185,6 +190,8 @@ class GovernmentExpenseController(http.Controller):
         vals = _decision_vals(body, env)
         if not vals.get('name') or not vals.get('number'):
             return _json({'error': 'name and number are required'}, status=400)
+        if not vals.get('created_by_name'):
+            vals['created_by_name'] = env.user.name
         rec = env['saycare.government.expense.decision'].create(vals)
         return _json(rec._to_dict())
 
@@ -219,21 +226,17 @@ class GovernmentExpenseController(http.Controller):
         if not decision.exists():
             return _json({'error': 'decision not found'}, status=404)
         body = _parse_body()
-        page_no_raw = body.get('pageNo')
-        if page_no_raw in (None, ''):
-            return _json({'error': 'أدخل رقم الصفحة'}, status=400)
-        try:
-            if isinstance(page_no_raw, bool):
-                raise ValueError
-            page_no = int(str(page_no_raw).strip())
-        except (TypeError, ValueError):
-            return _json({'error': 'رقم الصفحة يجب أن يكون رقماً صحيحاً'}, status=400)
-        if page_no <= 0:
-            return _json({'error': 'رقم الصفحة يجب أن يكون أكبر من صفر'}, status=400)
+
+        # رقم الصفحة بقى واحد ثابت لكل قرارات المريض كلها — كل الخدمات اللي
+        # بتتضاف على أي قرار للمريض ده (من الصيدلية أو المحاسبة) بتاخد نفس
+        # الرقم تلقائياً. لو القرار قديم ولسه معندوش رقم، نجيبه من قرار تاني
+        # لنفس المريض لو موجود، أو نديله واحد جديد ونثبته.
+        if not decision.page_no:
+            patient_id = decision.patient_id.id if decision.patient_id else False
+            decision.write({'page_no': decision._resolve_page_no_for_patient(patient_id)})
+        page_no = decision.page_no
 
         transaction_model = env['saycare.government.expense.transaction']
-        if transaction_model.sudo().search_count([('page_no', '=', page_no)]):
-            return _json({'error': 'رقم الصفحة مستخدم بالفعل'}, status=409)
 
         vals = {
             'decision_id': decision.id,
@@ -252,11 +255,7 @@ class GovernmentExpenseController(http.Controller):
             'touches_future_month': bool(body.get('touchesFutureMonth')),
             'notes': body.get('notes') or '',
         }
-        try:
-            with env.cr.savepoint():
-                txn = transaction_model.create(vals)
-        except (ValidationError, IntegrityError):
-            return _json({'error': 'رقم الصفحة مستخدم بالفعل'}, status=409)
+        txn = transaction_model.create(vals)
 
         # Return the full updated decision so frontend can sync in one shot
         return _json({'transaction': txn._to_dict(), 'decision': decision._to_dict()})
@@ -271,6 +270,25 @@ class GovernmentExpenseController(http.Controller):
         txn.unlink()
         decision = env['saycare.government.expense.decision'].browse(decision_id)
         return _json({'ok': True, 'decision': decision._to_dict() if decision.exists() else {}})
+
+    @http.route('/saycare/api/government-expense/next-page-no',
+                type='http', auth='user', methods=['GET'], cors=CORS, csrf=False)
+    def next_page_no(self, decision_id='', **kw):
+        # رقم الصفحة بقى ثابت لكل قرارات المريض كلها (كل خدماتها وكل قراراته
+        # بتشترك في نفس الرقم). لو اتبعت decision_id: نرجع رقم القرار المثبت
+        # عليه بالفعل، ولو لسه معندوش نجيبه من قرار تاني لنفس المريض أو نديله
+        # واحد جديد ونثبته. من غير decision_id (المسار القديم) بنرجع بس
+        # معاينة للرقم الجاي من غير ما نثبته.
+        env = request.env
+        if decision_id:
+            decision = env['saycare.government.expense.decision'].sudo().browse(int(decision_id))
+            if decision.exists():
+                if not decision.page_no:
+                    patient_id = decision.patient_id.id if decision.patient_id else False
+                    decision.write({'page_no': decision._resolve_page_no_for_patient(patient_id)})
+                return _json({'next_page_no': decision.page_no})
+        decision_model = env['saycare.government.expense.decision'].sudo()
+        return _json({'next_page_no': decision_model._next_page_no()})
 
     @http.route('/saycare/api/government-expense/settings',
                 type='http', auth='user', methods=['GET'], cors=CORS, csrf=False)

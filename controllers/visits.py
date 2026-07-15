@@ -49,6 +49,7 @@ def _visit_dict(v, full=False):
         'specialty_id':    v.specialty_id.id if v.specialty_id else None,
         'specialty_name':  v.specialty_id.name if v.specialty_id else '',
         'notes':           v.notes or '',
+        'createdByName':   v.created_by_name or v.create_uid.name or '',
         'services': [{
             'id':              s.id,
             'name':            s.name,
@@ -139,6 +140,7 @@ class VisitController(http.Controller):
             'financial_notes':   body.get('financial_notes', ''),
             'employee_id_no':    body.get('employee_id', ''),
             'department':        body.get('department', ''),
+            'created_by_name':   body.get('createdByName') or request.env.user.name,
         }
         service_ids = body.get('service_ids', [])
         if service_ids:
@@ -439,6 +441,7 @@ class ClinicBookingController(http.Controller):
             'payment_method':  body.get('payment_method', 'cash'),
             'chief_complaint': body.get('chief_complaint', ''),
             'notes':           body.get('notes', ''),
+            'created_by_name': body.get('createdByName') or request.env.user.name,
         }
         if specialty_id:
             visit_vals['specialty_id'] = int(specialty_id)

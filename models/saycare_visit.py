@@ -87,6 +87,10 @@ class SaycareVisit(models.Model):
     employee_id_no     = fields.Char(string='الرقم الوظيفي')
     department         = fields.Char(string='الإدارة / القسم')
 
+    # اسم المستخدم الفعلي اللى سجل الزيارة من واجهة التطبيق — بيختلف عن
+    # create_uid لأن كل طلبات الـ API بتتنفذ تحت نفس حساب أودو التقني.
+    created_by_name = fields.Char('أنشأه', copy=False)
+
     invoice_id  = fields.Many2one('account.move', string='Invoice', ondelete='set null')
 
     service_ids = fields.Many2many(
