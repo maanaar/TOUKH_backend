@@ -694,6 +694,242 @@ class SaycareInpatientNursingAssessment(models.Model):
         string='توقيع الممرضة (المحاليل الوريدية)',
     )
 
+    # ── Blood glucose / insulin monitoring (متابعة قياس نسبة السكر) ─────────
+
+    bg_diagnosis = fields.Char(
+        string='التشخيص (متابعة السكر)',
+    )
+
+    bg_date = fields.Date(
+        string='تاريخ قياس السكر',
+    )
+
+    bg_time = fields.Char(
+        string='وقت قياس السكر',
+    )
+
+    bg_level = fields.Float(
+        string='نسبة سكر الدم',
+        digits=(6, 2),
+    )
+
+    bg_oral = fields.Boolean(
+        string='بالفم (Oral)',
+        default=False,
+    )
+
+    bg_insulin_type = fields.Char(
+        string='نوع الأنسولين',
+    )
+
+    bg_dose_units = fields.Float(
+        string='الجرعة (وحدات)',
+        digits=(6, 2),
+    )
+
+    bg_route = fields.Selection(
+        [
+            ('sc', 'تحت الجلد'),
+            ('iv', 'وريدي'),
+            ('im', 'عضلي'),
+            ('other', 'أخرى'),
+        ],
+        string='طريقة الإعطاء',
+    )
+
+    bg_site = fields.Selection(
+        [
+            ('front_right_arm', 'الذراع الأيمن (أمامي)'),
+            ('front_left_arm', 'الذراع الأيسر (أمامي)'),
+            ('abdomen_upper_right', 'أعلى يمين البطن'),
+            ('abdomen_upper_left', 'أعلى يسار البطن'),
+            ('abdomen_lower_right', 'أسفل يمين البطن'),
+            ('abdomen_lower_left', 'أسفل يسار البطن'),
+            ('front_right_thigh', 'الفخذ الأيمن (أمامي)'),
+            ('front_left_thigh', 'الفخذ الأيسر (أمامي)'),
+            ('back_right_arm', 'الذراع الأيمن (خلفي)'),
+            ('back_left_arm', 'الذراع الأيسر (خلفي)'),
+            ('back_right_hip', 'الأرداف/الفخذ الأيمن (خلفي)'),
+            ('back_left_hip', 'الأرداف/الفخذ الأيسر (خلفي)'),
+        ],
+        string='المكان (موقع الحقن)',
+    )
+
+    bg_urine_acetone = fields.Selection(
+        [
+            ('negative', 'سلبي'),
+            ('trace', 'أثر'),
+            ('small', 'بسيط (+1)'),
+            ('moderate', 'متوسط (+2)'),
+            ('large', 'كبير (+3)'),
+        ],
+        string='الأسيتون في البول',
+    )
+
+    bg_signature_id = fields.Many2one(
+        'hr.employee',
+        string='التوقيع (متابعة السكر)',
+    )
+
+    bg_notes = fields.Text(
+        string='ملاحظات متابعة السكر',
+    )
+
+    # ── ICU lab results flow sheet ───────────────────────────────────────────
+
+    icu_lab_date = fields.Date(
+        string='تاريخ نتائج المعمل',
+    )
+
+    icu_lab_wbc = fields.Float(string='WBCs', digits=(8, 2))
+    icu_lab_rbc = fields.Float(string='RBCs', digits=(8, 2))
+    icu_lab_hb = fields.Float(string='Hb (gm%)', digits=(8, 2))
+    icu_lab_hct = fields.Float(string='Hct (%)', digits=(8, 2))
+    icu_lab_platelets = fields.Float(string='Platelets', digits=(8, 2))
+
+    icu_lab_pt = fields.Float(string='PT', digits=(8, 2))
+    icu_lab_pc = fields.Float(string='PC', digits=(8, 2))
+    icu_lab_inr = fields.Float(string='INR', digits=(8, 2))
+    icu_lab_ptt = fields.Float(string='PTT', digits=(8, 2))
+
+    icu_lab_total_protein = fields.Float(string='Total Protein', digits=(8, 2))
+    icu_lab_albumin = fields.Float(string='Albumin (mg%)', digits=(8, 2))
+    icu_lab_t_bilirubin = fields.Float(string='T. Bilirubin', digits=(8, 2))
+    icu_lab_d_bilirubin = fields.Float(string='D. Bilirubin', digits=(8, 2))
+    icu_lab_alt_sgpt = fields.Float(string='ALT (SGPT)', digits=(8, 2))
+    icu_lab_ast_sgot = fields.Float(string='AST (SGOT)', digits=(8, 2))
+    icu_lab_alp = fields.Float(string='ALP', digits=(8, 2))
+
+    icu_lab_urea = fields.Float(string='Urea', digits=(8, 2))
+    icu_lab_creatinine = fields.Float(string='Creat (mg%)', digits=(8, 2))
+    icu_lab_uric_acid = fields.Float(string='Uric Acid (mg)', digits=(8, 2))
+
+    icu_lab_na = fields.Float(string='Na+ (meq/l)', digits=(8, 2))
+    icu_lab_k = fields.Float(string='K+ (meq/l)', digits=(8, 2))
+    icu_lab_ca = fields.Float(string='Ca++', digits=(8, 2))
+    icu_lab_mg = fields.Float(string='Mg++', digits=(8, 2))
+    icu_lab_po4 = fields.Float(string='PO4', digits=(8, 2))
+
+    icu_lab_cpk = fields.Float(string='CPK', digits=(8, 2))
+    icu_lab_cpk_mb = fields.Float(string='CPK-MB', digits=(8, 2))
+    icu_lab_ldh = fields.Float(string='LDH', digits=(8, 2))
+    icu_lab_troponin = fields.Float(string='Troponin', digits=(8, 2))
+
+    icu_lab_cholesterol = fields.Float(string='Cholesterol', digits=(8, 2))
+    icu_lab_triglycerides = fields.Float(string='Triglycerides', digits=(8, 2))
+    icu_lab_ldl = fields.Float(string='LDL', digits=(8, 2))
+    icu_lab_hdl = fields.Float(string='HDL', digits=(8, 2))
+
+    icu_lab_ph = fields.Float(string='pH', digits=(4, 2))
+    icu_lab_pco2 = fields.Float(string='PCO2', digits=(8, 2))
+    icu_lab_o2_sat = fields.Float(string='O2 Sat', digits=(8, 2))
+    icu_lab_hco3 = fields.Float(string='HCO3', digits=(8, 2))
+
+    icu_lab_other_notes = fields.Text(
+        string='نتائج معملية أخرى / ملاحظات',
+    )
+
+    # ── Pressure ulcer follow up (متابعة قرح الفراش) ─────────────────────────
+
+    pu_discovery_date = fields.Date(
+        string='تاريخ اكتشاف القرحة',
+    )
+
+    pu_location = fields.Selection(
+        [
+            ('head', 'الرأس'),
+            ('shoulder', 'الكتف'),
+            ('sacrum', 'العجز (أسفل الظهر)'),
+            ('buttock', 'الأرداف'),
+            ('heel', 'الكعب'),
+            ('other', 'أخرى'),
+        ],
+        string='مكان القرحة',
+    )
+
+    pu_grade = fields.Selection(
+        [
+            ('stage1', 'المرحلة الأولى (احمرار الجلد)'),
+            ('stage2', 'المرحلة الثانية (إصابة الجلد)'),
+            ('stage3', 'المرحلة الثالثة (امتداد الإصابة حتى الطبقة الثانية والأنسجة)'),
+            ('stage4', 'المرحلة الرابعة (إصابة الجلد والأنسجة وصولاً للعظم)'),
+        ],
+        string='درجة القرحة',
+    )
+
+    pu_position = fields.Selection(
+        [
+            ('front', 'الوضع الأمامي (على البطن)'),
+            ('back', 'الوضع الخلفي (على الظهر)'),
+            ('semi_sitting', 'نصف جالس'),
+            ('right_side', 'النوم على الجانب الأيمن'),
+            ('left_side', 'النوم على الجانب الأيسر'),
+        ],
+        string='وضعية نوم المريض',
+    )
+
+    pu_nurse_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع التمريض (متابعة قرح الفراش)',
+    )
+
+    pu_turning_chart_placed = fields.Boolean(
+        string='وضع نموذج خريطة التقليب',
+        default=False,
+    )
+
+    pu_pressure_avoided = fields.Boolean(
+        string='عدم الضغط على منطقة القرحة',
+        default=False,
+    )
+
+    pu_area_clean_dry = fields.Boolean(
+        string='المحافظة على مكان القرحة نظيف وجاف',
+        default=False,
+    )
+
+    pu_air_mattress = fields.Boolean(
+        string='وضع مرتبة هوائية',
+        default=False,
+    )
+
+    pu_wound_cleaned_saline = fields.Boolean(
+        string='تنظيف الجرح بمحلول ملح وتجفيفه جيداً',
+        default=False,
+    )
+
+    pu_antibiotic_used = fields.Boolean(
+        string='استعمال مضاد حيوي (حسب أوامر الطبيب)',
+        default=False,
+    )
+
+    pu_sterile_gauze_changed = fields.Boolean(
+        string='وضع شاش معقم يتغير مرتين يومياً',
+        default=False,
+    )
+
+    pu_color_notes = fields.Char(
+        string='لون القرحة',
+    )
+
+    pu_discharge_type = fields.Char(
+        string='نوع الإفرازات',
+    )
+
+    pu_infection_signs_reported = fields.Boolean(
+        string='تم إبلاغ الطبيب بعلامات العدوى',
+        default=False,
+    )
+
+    pu_care_plan = fields.Text(
+        string='خطة الرعاية التمريضية',
+    )
+
+    pu_repositioning_education = fields.Boolean(
+        string='تثقيف المريض/الأهل لتجنب قرح الفراش',
+        default=False,
+    )
+
     @api.depends('weight_kg', 'height_cm')
     def _compute_bmi(self):
         for rec in self:
