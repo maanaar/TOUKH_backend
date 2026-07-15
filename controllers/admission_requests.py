@@ -81,6 +81,8 @@ _REQUEST_FIELD_MAP = {
     'expectedAdmissionDate':   ('expected_admission_date', _to_date_str),
     'expectedDischargeDate':   ('expected_discharge_date', _to_date_str),
     'maxStayDays':             ('max_stay_days', _int_or_zero),
+    'visitId':                 ('visit_id', _int_or_false),
+    'worklistStage':           ('worklist_stage', str),
 }
 
 # admissionDetails.* -> (odoo field, caster) — applied on top of _REQUEST_FIELD_MAP
@@ -171,6 +173,8 @@ def _admission_request_dict(r):
         },
         'rejectionReason':        r.rejection_reason or '',
         'rejectedAt':             _dt_iso(r.rejected_at),
+        'visitId':                r.visit_id.id if r.visit_id else None,
+        'worklistStage':          r.worklist_stage or 'booked',
     }
 
 
@@ -186,6 +190,13 @@ class AdmissionRequestController(http.Controller):
             domain.append(('status', '=', status))
         records = request.env[self._model].sudo().search(domain, order='create_date desc')
         return _json([_admission_request_dict(r) for r in records])
+
+    @http.route('/saycare/api/admission-requests/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_one(self, rec_id, **kw):
+        rec = request.env[self._model].sudo().browse(rec_id)
+        if not rec.exists():
+            return _json({'error': 'admission request not found'}, 404)
+        return _json(_admission_request_dict(rec))
 
     @http.route('/saycare/api/admission-requests', type='http', auth='user', methods=['POST'], csrf=False)
     def create_request(self, **kw):
@@ -225,6 +236,7 @@ class AdmissionRequestController(http.Controller):
         vals.update(_map_body_to_vals(body.get('admissionDetails') or {}, _ADMISSION_DETAILS_FIELD_MAP))
         vals['status'] = 'admitted'
         vals['admitted_at'] = fields.Datetime.now()
+        vals['worklist_stage'] = 'admission_done'
         rec.write(vals)
         return _json(_admission_request_dict(rec))
 
