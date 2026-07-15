@@ -467,6 +467,233 @@ class SaycareInpatientNursingAssessment(models.Model):
         string='ملاحظات التمريض عند الاستلام',
     )
 
+    # ── Vital signs monitoring chart (نموذج العلامات الحيوية) ───────────────
+
+    vsc_date = fields.Date(
+        string='تاريخ تسجيل العلامات الحيوية',
+    )
+
+    vsc_time = fields.Char(
+        string='ساعة تسجيل العلامات الحيوية',
+    )
+
+    vsc_pulse = fields.Integer(
+        string='النبض',
+    )
+
+    vsc_blood_pressure = fields.Char(
+        string='ضغط الدم',
+    )
+
+    vsc_temperature = fields.Float(
+        string='درجة الحرارة',
+        digits=(5, 2),
+    )
+
+    vsc_respiration = fields.Integer(
+        string='التنفس',
+    )
+
+    vsc_score = fields.Integer(
+        string='الدرجة (النتيجة الإجمالية)',
+    )
+
+    vsc_notes = fields.Text(
+        string='ملاحظات العلامات الحيوية',
+    )
+
+    vsc_signature_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع (العلامات الحيوية)',
+    )
+
+    # ── Once-only medication prescription & administration ──────────────────
+
+    once_med_doctor_id = fields.Many2one(
+        'hr.employee',
+        string='الطبيب المعالج',
+    )
+
+    once_med_diagnosis = fields.Char(
+        string='التشخيص',
+    )
+
+    once_med_date = fields.Date(
+        string='تاريخ إعطاء العلاج',
+    )
+
+    once_med_time = fields.Char(
+        string='وقت إعطاء العلاج',
+    )
+
+    once_med_name = fields.Char(
+        string='اسم الدواء وتركيزه',
+    )
+
+    once_med_form = fields.Selection(
+        [
+            ('tablet', 'أقراص'),
+            ('capsule', 'كبسولات'),
+            ('injection', 'حقن'),
+            ('syrup', 'شراب'),
+            ('ampoule', 'أمبولات'),
+            ('suppository', 'تحاميل'),
+            ('cream', 'كريم'),
+            ('drops', 'قطرات'),
+            ('inhaler', 'بخاخ'),
+            ('other', 'أخرى'),
+        ],
+        string='الشكل الدوائي',
+    )
+
+    once_med_dosage = fields.Char(
+        string='الجرعة/التكرار/المدة',
+    )
+
+    once_med_route = fields.Selection(
+        [
+            ('oral', 'فموي'),
+            ('iv', 'وريدي'),
+            ('im', 'عضلي'),
+            ('sc', 'تحت الجلد'),
+            ('sublingual', 'تحت اللسان'),
+            ('topical', 'موضعي'),
+            ('rectal', 'شرجي'),
+            ('inhalation', 'استنشاق'),
+            ('other', 'أخرى'),
+        ],
+        string='طريقة الإعطاء',
+    )
+
+    once_med_instructions = fields.Text(
+        string='تعليمات الدواء',
+    )
+
+    once_med_pharmacist_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع الصيدلي',
+    )
+
+    once_med_admin_time = fields.Char(
+        string='وقت الإعطاء',
+    )
+
+    once_med_nurse_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع الممرضة (وصف وإعطاء علاج مرة واحدة)',
+    )
+
+    # ── Fluid balance (خريطة السوائل) ────────────────────────────────────────
+
+    fluid_balance_diagnosis = fields.Char(
+        string='التشخيص (ICD-11)',
+    )
+
+    fluid_balance_date = fields.Date(
+        string='تاريخ ميزان السوائل',
+    )
+
+    fluid_balance_nurse_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع التمريض (ميزان السوائل)',
+    )
+
+    fluid_balance_oral_intake = fields.Float(
+        string='إجمالي السوائل الداخلة بالفم',
+        digits=(8, 2),
+    )
+
+    fluid_balance_iv_intake = fields.Float(
+        string='إجمالي السوائل الداخلة بالوريد',
+        digits=(8, 2),
+    )
+
+    fluid_balance_total_intake = fields.Float(
+        string='إجمالي السوائل الداخلة',
+        compute='_compute_fluid_balance',
+        store=True,
+        digits=(8, 2),
+    )
+
+    fluid_balance_urine_output = fields.Float(
+        string='إجمالي البول',
+        digits=(8, 2),
+    )
+
+    fluid_balance_drain_output = fields.Float(
+        string='إجمالي الدرنقة',
+        digits=(8, 2),
+    )
+
+    fluid_balance_total_output = fields.Float(
+        string='إجمالي السوائل الخارجة',
+        compute='_compute_fluid_balance',
+        store=True,
+        digits=(8, 2),
+    )
+
+    fluid_balance_result = fields.Float(
+        string='توازن السوائل',
+        compute='_compute_fluid_balance',
+        store=True,
+        digits=(8, 2),
+    )
+
+    # ── IV fluids infusion (وصف وإعطاء محاليل وريدية) ────────────────────────
+
+    iv_infusion_datetime = fields.Datetime(
+        string='تاريخ وساعة وصف المحلول',
+    )
+
+    iv_infusion_solution_name = fields.Char(
+        string='اسم المحلول',
+    )
+
+    iv_infusion_volume = fields.Float(
+        string='حجم المحلول',
+        digits=(8, 2),
+    )
+
+    iv_infusion_additives = fields.Char(
+        string='الإضافات',
+    )
+
+    iv_infusion_rate = fields.Char(
+        string='المعدل',
+    )
+
+    iv_infusion_line = fields.Char(
+        string='اللاين',
+    )
+
+    iv_infusion_instructions = fields.Text(
+        string='تعليمات المحلول',
+    )
+
+    iv_infusion_doctor_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع الطبيب (المحاليل الوريدية)',
+    )
+
+    iv_infusion_pharmacist_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع الصيدلي (المحاليل الوريدية)',
+    )
+
+    iv_infusion_admin_datetime = fields.Datetime(
+        string='تاريخ ووقت إعطاء المحلول',
+    )
+
+    iv_infusion_admin_volume = fields.Float(
+        string='الحجم المعطى',
+        digits=(8, 2),
+    )
+
+    iv_infusion_nurse_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع الممرضة (المحاليل الوريدية)',
+    )
+
     @api.depends('weight_kg', 'height_cm')
     def _compute_bmi(self):
         for rec in self:
@@ -475,3 +702,19 @@ class SaycareInpatientNursingAssessment(models.Model):
                 rec.bmi = rec.weight_kg / (height_m * height_m)
             else:
                 rec.bmi = 0.0
+
+    @api.depends(
+        'fluid_balance_oral_intake', 'fluid_balance_iv_intake',
+        'fluid_balance_urine_output', 'fluid_balance_drain_output',
+    )
+    def _compute_fluid_balance(self):
+        for rec in self:
+            rec.fluid_balance_total_intake = (
+                rec.fluid_balance_oral_intake + rec.fluid_balance_iv_intake
+            )
+            rec.fluid_balance_total_output = (
+                rec.fluid_balance_urine_output + rec.fluid_balance_drain_output
+            )
+            rec.fluid_balance_result = (
+                rec.fluid_balance_total_intake - rec.fluid_balance_total_output
+            )
