@@ -190,6 +190,110 @@ class ProductTemplateMedicine(models.Model):
     side_effects      = fields.Text(string='الآثار الجانبية الشائعة')
     drug_interactions = fields.Text(string='التفاعلات الدوائية')
 
+    # ── 9  التصنيف (شاشة الأصناف — عام) ────────────────────────────────────────
+    name_en        = fields.Char(string='الاسم الإنجليزي')
+    main_category  = fields.Selection([
+        ('drugs',       'أدوية'),
+        ('consumables', 'مستلزمات'),
+        ('solutions',   'محاليل'),
+        ('devices',     'أجهزة'),
+    ], string='التصنيف الرئيسي')
+    sub_category   = fields.Selection([
+        ('cold',        'أدوية البرد والأنفلونزا'),
+        ('pain',        'مسكنات الألم'),
+        ('antibiotics', 'مضادات حيوية'),
+        ('cardiac',     'قلب وأوعية'),
+    ], string='التصنيف الفرعي')
+    use_types      = fields.Char(string='نوع الاستخدام (شاشة الأصناف)',
+                                  help='قيم مفصولة بفاصلة: pharmacy, ward, lab, radiology')
+    department     = fields.Char(string='القسم المسؤول')
+    is_critical    = fields.Boolean(string='صنف حرج')
+    needs_approval = fields.Boolean(string='يحتاج موافقة خاصة')
+
+    # ── 10  خصائص الصنف ────────────────────────────────────────────────────────
+    can_dispense           = fields.Boolean(string='قابل للصرف', default=True)
+    show_pharmacy          = fields.Boolean(string='يظهر في الصيدلية')
+    show_warehouse         = fields.Boolean(string='يظهر في المخزن')
+    show_purchase_req      = fields.Boolean(string='يظهر في طلبات الشراء')
+    show_internal_transfer = fields.Boolean(string='يظهر في طلبات الصرف الداخلي')
+    needs_tracking         = fields.Boolean(string='يحتاج تتبع')
+    has_expiry             = fields.Boolean(string='له تاريخ صلاحية')
+    allow_fractions        = fields.Boolean(string='يسمح بالكسر')
+    allow_partial          = fields.Boolean(string='يسمح بالصرف الجزئي')
+
+    # ── 11  الأسعار ────────────────────────────────────────────────────────────
+    tax_purchase     = fields.Char(string='ضريبة الشراء')
+    tax_sale         = fields.Char(string='ضريبة البيع')
+    currency         = fields.Char(string='العملة (شاشة الأصناف)')
+    price_include_tax = fields.Boolean(string='السعر شامل الضريبة')
+
+    # ── 12  الشركة والمورد ─────────────────────────────────────────────────────
+    manufacturer     = fields.Many2one('res.partner', string='الشركة المصنعة')
+    origin_country   = fields.Char(string='بلد المنشأ')
+    purchase_policy  = fields.Selection([
+        ('on_order', 'شراء عند الطلب'),
+        ('on_stock', 'الحفاظ على المخزون'),
+    ], string='سياسة الشراء')
+    min_purchase_qty = fields.Integer(string='أقل كمية شراء')
+
+    # ── 13  المخزون والتخزين (شاشة الأصناف) ────────────────────────────────────
+    default_warehouse = fields.Char(string='المخزن الافتراضي')
+    storage_location  = fields.Char(string='موقع التخزين')
+    bin_location      = fields.Char(string='Bin / Shelf / Rack')
+    dispense_method   = fields.Selection([
+        ('fefo', 'FEFO (الأقرب صلاحية)'),
+        ('fifo', 'FIFO (الأقدم أولاً)'),
+        ('lifo', 'LIFO'),
+    ], string='طريقة الصرف')
+    reorder_point  = fields.Integer(string='حد إعادة الطلب')
+    safety_stock   = fields.Integer(string='حد الأمان')
+    min_qty        = fields.Integer(string='الكمية الدنيا')
+    max_qty        = fields.Integer(string='الكمية القصوى')
+    sc_heat        = fields.Boolean(string='حساس للحرارة')
+    sc_light       = fields.Boolean(string='حساس للضوء')
+    sc_dry         = fields.Boolean(string='يحتاج مكان جاف')
+    sc_fragile     = fields.Boolean(string='قابل للكسر')
+    sc_flammable   = fields.Boolean(string='قابل للاشتعال')
+    sc_sterile     = fields.Boolean(string='يحتاج تعقيم')
+    expiry_months  = fields.Integer(string='مدة الصلاحية (شهر)')
+
+    # ── 14  الربط التشغيلي ─────────────────────────────────────────────────────
+    op_purchase_req      = fields.Boolean(string='يظهر في طلبات الشراء (تشغيلي)')
+    op_dispense_req       = fields.Boolean(string='يظهر في طلبات الصرف')
+    op_internal_transfer  = fields.Boolean(string='يظهر في التحويل الداخلي')
+    op_pharmacy           = fields.Boolean(string='يظهر في الصيدلية (تشغيلي)')
+    op_clinics            = fields.Boolean(string='يظهر في العيادات')
+    op_lab                = fields.Boolean(string='يظهر في المعمل')
+    op_radiology          = fields.Boolean(string='يظهر في الأشعة')
+    op_physiotherapy      = fields.Boolean(string='يظهر في العلاج الطبيعي')
+    op_dashboard          = fields.Boolean(string='يظهر في Dashboard المخزون')
+    op_dispense_approval  = fields.Boolean(string='يحتاج اعتماد عند الصرف')
+    op_transfer_approval  = fields.Boolean(string='يحتاج اعتماد عند التحويل')
+    op_dept_dispense      = fields.Boolean(string='يسمح بالصرف للأقسام')
+    op_custody_dispense   = fields.Boolean(string='يسمح بالصرف للعهدة')
+    op_consumed_on_use    = fields.Boolean(string='يستهلك عند الاستخدام')
+
+    # ── 15  المحاسبة (معلوماتي فقط — لا يرتبط بمحرك المحاسبة الفعلي) ───────────
+    cost_center      = fields.Char(string='Cost Center')
+    analytic_account = fields.Char(string='Analytic Account')
+    acc_inventory    = fields.Char(string='حساب المخزون')
+    acc_expense      = fields.Char(string='حساب المصروف')
+    acc_cogs         = fields.Char(string='حساب تكلفة البضاعة')
+    acc_income       = fields.Char(string='حساب الإيراد')
+
+    # ── 16  المرفقات والملاحظات ────────────────────────────────────────────────
+    notes_internal  = fields.Text(string='ملاحظات داخلية')
+    notes_warehouse = fields.Text(string='ملاحظات للمخزن')
+    notes_user      = fields.Text(string='ملاحظات للمستخدم')
+    pack_units_json  = fields.Text(string='وحدات التعبئة (JSON)')
+    attachments_json = fields.Text(string='مرفقات الصنف (JSON)')
+    suppliers_json   = fields.Text(string='الموردون (JSON)',
+                                    help='قائمة موردين نصية بسيطة من شاشة الأصناف — لا ترتبط بسجلات res.partner فعلية')
+
+    # ── 17  بيانات الخدمة ──────────────────────────────────────────────────────
+    service_duration = fields.Char(string='مدة الخدمة')
+    bookable         = fields.Boolean(string='إمكانية الحجز / الربط بمواعيد')
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  stock.move — Q Sant (كمية المرسلة)

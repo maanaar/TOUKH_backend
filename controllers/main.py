@@ -12,6 +12,158 @@ def http_response(data, status=200):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  شاشة الأصناف والأدوية (/unit/inventory/items) — field mapping
+#
+#  The frontend form (ItemFormView + TabGeneralData/TabDrugData/TabServiceData)
+#  uses its own key names for a few fields that already exist on product.template
+#  under different names (added earlier for the native Odoo medicine tabs), and
+#  a few enum values that don't line up 1:1. ITEMS_FIELD_ALIASES translates the
+#  frontend's key to the real backend field; ITEMS_VALUE_TRANSFORMS additionally
+#  remaps values where the two sides don't share the same vocabulary.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ITEMS_FIELD_ALIASES = {
+    'drug_generic':         'generic_name',
+    'drug_form':             'dosage_form',
+    'drug_strength':        'medicine_concentration',
+    'drug_route':            'primary_route',
+    'drug_route_secondary': 'secondary_route',
+    'drug_atc':              'atc_code',
+    'drug_rx':               'dispensing_category',
+    'drug_usual_dose':      'usual_dose',
+    'drug_max_dose':         'max_daily_dose',
+    'drug_contraindications': 'contraindications',
+    'drug_warnings':         'special_warnings',
+    'drug_side_effects':    'side_effects',
+    'sc_refrigeration':      'needs_refrigeration',
+    'sc_hazardous':          'is_hazardous',
+}
+
+# Simple flat fields the items form collects that map 1:1 by name onto
+# product.template (added in models/saycare_medicine.py).
+ITEMS_SIMPLE_FIELDS = [
+    'name_en',
+    'main_category', 'sub_category', 'department', 'is_critical', 'needs_approval',
+    'can_dispense', 'show_pharmacy', 'show_warehouse', 'show_purchase_req',
+    'show_internal_transfer', 'needs_tracking', 'has_expiry', 'allow_fractions',
+    'allow_partial',
+    'tax_purchase', 'tax_sale', 'currency', 'price_include_tax',
+    'origin_country', 'purchase_policy', 'min_purchase_qty',
+    'default_warehouse', 'storage_location', 'bin_location', 'dispense_method',
+    'reorder_point', 'safety_stock', 'min_qty', 'max_qty',
+    'sc_heat', 'sc_light', 'sc_dry', 'sc_fragile', 'sc_flammable', 'sc_sterile',
+    'expiry_months', 'storage_temp',
+    'op_purchase_req', 'op_dispense_req', 'op_internal_transfer', 'op_pharmacy',
+    'op_clinics', 'op_lab', 'op_radiology', 'op_physiotherapy', 'op_dashboard',
+    'op_dispense_approval', 'op_transfer_approval', 'op_dept_dispense',
+    'op_custody_dispense', 'op_consumed_on_use',
+    'cost_center', 'analytic_account', 'acc_inventory', 'acc_expense',
+    'acc_cogs', 'acc_income',
+    'notes_internal', 'notes_warehouse', 'notes_user',
+    'forced_price', 'similarity_type', 'drug_interactions',
+    'service_duration', 'bookable',
+]
+
+# Enum values that don't share the same vocabulary between the items form and
+# the (richer) native medicine fields.
+_PREGNANCY_CAT_MAP = {'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd', 'X': 'x'}
+_LACTATION_MAP  = {'safe': 'safe', 'caution': 'caution', 'avoid': 'unsafe'}
+_PEDIATRIC_MAP  = {'approved': 'safe', 'caution': 'caution', 'not_recommended': 'unsafe'}
+
+
+def _apply_items_form_vals(body, vals):
+    """Mutates `vals` in place with every items-form field found in `body`,
+    applying name aliases and enum-value remaps as needed."""
+    for field in ITEMS_SIMPLE_FIELDS:
+        if field in body:
+            vals[field] = body[field]
+
+    for fe_key, be_key in ITEMS_FIELD_ALIASES.items():
+        if fe_key in body:
+            vals[be_key] = body[fe_key]
+
+    if 'use_types' in body:
+        val = body['use_types']
+        vals['use_types'] = ','.join(val) if isinstance(val, list) else (val or '')
+
+    if 'drug_pregnancy_cat' in body:
+        vals['pregnancy_category'] = _PREGNANCY_CAT_MAP.get(body['drug_pregnancy_cat'], body['drug_pregnancy_cat'] or False) or False
+    if 'drug_lactation' in body:
+        vals['lactation_use'] = _LACTATION_MAP.get(body['drug_lactation'], body['drug_lactation'] or False) or False
+    if 'drug_pediatric' in body:
+        vals['pediatric_use'] = _PEDIATRIC_MAP.get(body['drug_pediatric'], body['drug_pediatric'] or False) or False
+
+    for json_field in ('_packUnits', '_suppliers', '_attachments'):
+        if json_field in body:
+            backend_field = {'_packUnits': 'pack_units_json', '_suppliers': 'suppliers_json', '_attachments': 'attachments_json'}[json_field]
+            vals[backend_field] = json.dumps(body[json_field] or [], ensure_ascii=False)
+
+    if 'manufacturer' in body:
+        vals['manufacturer'] = int(body['manufacturer']) if body['manufacturer'] else False
+    if 'group_id' in body:
+        vals['group_id'] = int(body['group_id']) if body['group_id'] else False
+    for uom_field in ('uom_small', 'uom_mediumm', 'uom_largee'):
+        if uom_field in body:
+            vals[uom_field] = int(body[uom_field]) if body[uom_field] else False
+
+    # Integer/float fields sent as '' from empty number inputs would fail write() —
+    # normalize blanks to 0/False instead of letting them through as strings.
+    for int_field in ('min_purchase_qty', 'reorder_point', 'safety_stock',
+                      'min_qty', 'max_qty', 'expiry_months', 'storage_temp'):
+        if int_field in vals and vals[int_field] in (None, ''):
+            vals[int_field] = 0
+
+
+def _items_form_dict(rec):
+    """Read side — mirrors _apply_items_form_vals(), returning the items-form
+    field names the frontend expects (drug_*, use_types, sc_*, etc.)."""
+    reverse_aliases = {be: fe for fe, be in ITEMS_FIELD_ALIASES.items()}
+    data = {}
+    for field in ITEMS_SIMPLE_FIELDS:
+        data[field] = getattr(rec, field, False) or (0 if field in (
+            'min_purchase_qty', 'reorder_point', 'safety_stock', 'min_qty',
+            'max_qty', 'expiry_months', 'storage_temp',
+        ) else False)
+    for be_key, fe_key in reverse_aliases.items():
+        data[fe_key] = getattr(rec, be_key, False) or False
+
+    data['use_types'] = [v for v in (rec.use_types or '').split(',') if v]
+
+    rev_pregnancy = {v: k for k, v in _PREGNANCY_CAT_MAP.items()}
+    rev_lactation = {v: k for k, v in _LACTATION_MAP.items()}
+    rev_pediatric = {v: k for k, v in _PEDIATRIC_MAP.items()}
+    data['drug_pregnancy_cat'] = rev_pregnancy.get(rec.pregnancy_category, '')
+    data['drug_lactation']     = rev_lactation.get(rec.lactation_use, '')
+    data['drug_pediatric']     = rev_pediatric.get(rec.pediatric_use, '')
+
+    try:
+        data['_packUnits']  = json.loads(rec.pack_units_json) if rec.pack_units_json else []
+    except (ValueError, TypeError):
+        data['_packUnits'] = []
+    try:
+        data['_suppliers'] = json.loads(rec.suppliers_json) if rec.suppliers_json else []
+    except (ValueError, TypeError):
+        data['_suppliers'] = []
+    try:
+        data['_attachments'] = json.loads(rec.attachments_json) if rec.attachments_json else []
+    except (ValueError, TypeError):
+        data['_attachments'] = []
+
+    data['manufacturer']      = rec.manufacturer.id if rec.manufacturer else None
+    data['manufacturer_name'] = rec.manufacturer.name if rec.manufacturer else ''
+    data['group_id']          = rec.group_id.id if rec.group_id else None
+    data['group_name']        = rec.group_id.name if rec.group_id else ''
+    data['uom_small']          = rec.uom_small.id if rec.uom_small else None
+    data['uom_small_name']     = rec.uom_small.name if rec.uom_small else ''
+    data['uom_mediumm']        = rec.uom_mediumm.id if rec.uom_mediumm else None
+    data['uom_mediumm_name']   = rec.uom_mediumm.name if rec.uom_mediumm else ''
+    data['uom_largee']         = rec.uom_largee.id if rec.uom_largee else None
+    data['uom_largee_name']    = rec.uom_largee.name if rec.uom_largee else ''
+
+    return data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  product.category
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -328,6 +480,7 @@ class ProductController(http.Controller):
             'product_variant_ids':      rec.product_variant_ids.ids,
             'product_variant_count':    rec.product_variant_count,
         }
+        data.update(_items_form_dict(rec))
         return http_response(data)
 
 
@@ -1010,6 +1163,9 @@ class ProductCreateController(http.Controller):
             if body.get('image_1920'):
              vals['image_1920'] = body['image_1920']
 
+            # ── شاشة الأصناف والأدوية fields (see helper near top of file) ──
+            _apply_items_form_vals(body, vals)
+
             # ── many2one fields – validate existence ──────────────────────
             m2o_fields = {
                 'categ_id':   'product.category',
@@ -1027,7 +1183,7 @@ class ProductCreateController(http.Controller):
 
             rec = request.env['product.template'].sudo().create(vals)
 
-            return http_response({
+            response = {
                 'id':             rec.id,
                 'name':           rec.name,
                 'default_code':   rec.default_code or '',
@@ -1044,7 +1200,9 @@ class ProductCreateController(http.Controller):
                 'sale_ok':        rec.sale_ok,
                 'purchase_ok':    rec.purchase_ok,
                 'tracking':       rec.tracking,
-            }, 201)
+            }
+            response.update(_items_form_dict(rec))
+            return http_response(response, 201)
 
         except Exception as e:
             return http_response({'error': str(e)}, 500)
@@ -1248,6 +1406,9 @@ class ProductUpdateController(http.Controller):
             if 'image_1920' in body:
              vals['image_1920'] = body['image_1920'] or False
 
+            # ── شاشة الأصناف والأدوية fields (see helper near top of file) ──
+            _apply_items_form_vals(body, vals)
+
             m2o_fields = {
                 'categ_id':  'product.category',
                 'uom_id':    'uom.uom',
@@ -1266,7 +1427,7 @@ class ProductUpdateController(http.Controller):
             if vals:
                 rec.write(vals)
 
-            return http_response({
+            response = {
                 'id':             rec.id,
                 'name':           rec.name,
                 'default_code':   rec.default_code or '',
@@ -1279,7 +1440,9 @@ class ProductUpdateController(http.Controller):
                 'uom_name':       rec.uom_id.name if rec.uom_id else None,
                 'tracking':       rec.tracking,
                 'active':         rec.active,
-            })
+            }
+            response.update(_items_form_dict(rec))
+            return http_response(response)
 
         except Exception as e:
             return http_response({'error': str(e)}, 500)
