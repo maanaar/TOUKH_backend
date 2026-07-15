@@ -209,6 +209,14 @@ class MedicationOrderController(http.Controller):
         # retain the previous stock-move behavior. The active SayCare Pharmacy
         # flow provides picking_id and therefore never moves stock twice.
         if not picking and med.product_id and med.quantity:
+            # A caller may still edit the dispensed quantity without going
+            # through the picking-based flow — honor it here too, falling
+            # back to the originally prescribed quantity.
+            try:
+                dispensed_qty = float(body.get('quantity')) if body.get('quantity') not in (None, '') else med.quantity
+            except (TypeError, ValueError):
+                dispensed_qty = med.quantity
+
             warehouse = request.env['stock.warehouse'].sudo().search(
                 [('company_id', '=', request.env.company.id)],
                 limit=1,
@@ -216,14 +224,14 @@ class MedicationOrderController(http.Controller):
             move = request.env['stock.move'].sudo().create({
                 'name':             med.drug_name or med.product_id.name,
                 'product_id':       med.product_id.id,
-                'product_uom_qty':  med.quantity,
+                'product_uom_qty':  dispensed_qty,
                 'product_uom':      (med.uom_id or med.product_id.uom_id).id,
                 'location_id':      warehouse.lot_stock_id.id,
                 'location_dest_id': request.env.ref('stock.location_production').id,
             })
             move._action_confirm()
             move._action_assign()
-            move.write({'quantity': med.quantity})
+            move.write({'quantity': dispensed_qty})
             move._action_done()
 
         return _json(_med_dict(med))

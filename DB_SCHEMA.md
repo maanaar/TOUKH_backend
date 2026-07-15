@@ -1,15 +1,11 @@
-# SayCare (saycare_odoo_19) - Database Schema Reference
-
-Generated from models/*.py. Table names are the Odoo-derived snake_case of each _name
-(dots -> underscores). Verified against the live SayCare Postgres database.
+# SayCare  - Database Schema Reference
 
 ## New models (own tables)
 
-### Hospital / Ward structure
+### Hospital structure
 
 - hospital.accommodation.grade.type -> hospital_accommodation_grade_type
   name (Char, uniq), sequence, active
-  lookup table for grade names (اقتصادي/عادي/خاص/VIP/ICU), seeded via data XML
 
 - hospital.accommodation.grade -> hospital_accommodation_grade
   code (uniq), name (M2one to hospital.accommodation.grade.type, required), price_per_day,
@@ -69,7 +65,28 @@ Generated from models/*.py. Table names are the Odoo-derived snake_case of each 
 - saycare.medication.order -> saycare_medication_order
   drug_name, dose/frequency/duration, route, quantity, state (active/dispensed/cancelled/on_hold)
   M2one to saycare.visit (cascade), res.partner (restrict), product.product, uom.uom,
-  hr.employee (prescribed/dispensed by)
+  hr.employee (prescribed/dispensed by), stock.picking (dispense_picking_id, set null)
+
+### Admission / internal transfer requests
+
+- saycare.admission.request -> saycare_admission_request
+  Pending queue between OperationBookingPage / OPD and the قبول المريض (admission) screen.
+  source (opd/operation_booking), status (pending_admission/admitted/cancelled)
+  patient snapshot: patient_name, file_number, entry_permit_no, national_id, opd_visit_number,
+    patient_mrn, patient_mobile, age, gender, address
+  payment: payment_type, contract_entity, co_pay_percent, approval_required
+  booking classification: is_inpatient, is_operation, transfer_type, operation_name/reason
+  inpatient targets (set by OperationBookingPage): department_id, floor_id, stay_grade_id,
+    room_id, bed_id
+  clinical: diagnosis, reason, doctor_decision_notes, transfer_decision_reason, booking_datetime,
+    surgeon_id/name, doctor_name, priority, anesthesia_type
+  pre-admission planning: expected_admission_date/discharge_date, max_stay_days
+  references: inpatient_booking_number, operation_booking_number (both from ir.sequence)
+  admission-time only: ward, bed (Char snapshots, not FKs), attending_doctor, admission_date,
+    admission_notes, admitted_at
+  rejection-time only: rejection_reason, rejected_at
+  M2one to res.partner, hospital.inpatient.department, hospital.floor,
+  hospital.accommodation.grade (stay_grade_id), hospital.room, hospital.bed, hr.employee (surgeon_id)
 
 ### Patient background (long-lived, not visit-scoped)
 
@@ -102,6 +119,24 @@ All four: M2one to res.partner (required, cascade, domain is_patient=True).
   medical_role (doctor/nurse/receptionist/pharmacist/lab_tech/rad_tech), doctor_grade,
   license_number; M2one to saycare.specialty
 
+### Geography (Egypt)
+
+- saycare.governorate -> saycare_governorate
+  name (uniq), region, capital, sequence
+  O2M to saycare.city (city_ids)
+
+- saycare.city -> saycare_city
+  name, M2one to saycare.governorate (required, cascade) — مركز/حي under a governorate
+  Seeded via data/saycare.governorate.csv and data/saycare.city.csv
+
+### Refund workflow
+
+- saycare.refund.request -> saycare_refund_request
+  Pending queue: a doctor/nurse flags a visit's invoice for refund; treasury approves it
+  (via the real refund flow in controllers/treasury.py) which deletes the pending request.
+  patient_name, amount, reason, source (doctor/nurse)
+  M2one to saycare.visit (required, cascade), account.move (invoice_id), res.partner
+
 ### Government expense module
 
 - saycare.government.expense.decision -> saycare_government_expense_decision
@@ -128,16 +163,23 @@ All four: M2one to res.partner (required, cascade, domain is_patient=True).
 
 ## Extended existing Odoo models (columns added, no new table)
 
-- res.partner: is_patient, patient_type, x_age_group (compute, not stored), mrn, id_type,
+- res.partner: is_patient, patient_type, x_age_group (compute, not stored), mrn,
+  x_entry_permit_no (unique, digits-only, renamed from entry_permit_no), id_type,
   id_number, name parts, dob, gender, home_phone, occupation, governorate, x_blood_type,
-  financial_class, insurance_company, contract_entity, is_vendor
+  financial_class, insurance_company, contract_entity, is_vendor)
 - account.journal: financial_class
 - account.move: financial_class (related to partner_id.financial_class, stored)
 - insurance.company: provider_type
 - product.pricelist: x_payment_type
 - product.category: is_medicines, medicine_product_count (compute), categ_type, name_ar
 - product.template: group_id, usage_type_ids (M2M), uom_small, forced_price (+currency),
-  needs_refrigeration, storage_temp, similarity_type, secondary_route,
+  needs_refrigeration, storage_temp,
+  similarity_type (legacy single-select) plus is_look_alike/is_sound_alike/
+    is_high_concentration/is_hazardous (newer per-flag booleans, both kept side by side),
+  generic_name, dosage_form, medicine_concentration, primary_route, secondary_route,
+  atc_code, dispensing_category, usual_dose, max_daily_dose,
+  pregnancy_category, lactation_use, pediatric_use,
+  contraindications, special_warnings, side_effects, drug_interactions,
   uom_large/uom_medium (Char, legacy), uom_largee/uom_mediumm (M2one, uom.uom),
   categ_type (related), basket_table_id (O2M to basket.model), basket_service_id
 - stock.move: q_sant
@@ -154,4 +196,5 @@ All four: M2one to res.partner (required, cascade, domain is_patient=True).
 - gov_expense_decision_scans_product_rel: decision <-> product.template (scans)
 - gov_expense_decision_tests_product_rel: decision <-> product.template (tests)
 - gov_expense_decision_specialty_rel: decision <-> saycare.specialty
-- gov_expense_decision_medicine_categ_rel: deci
+- gov_expense_decision_medicine_categ_rel: decision <-> product.category (medicine groups)
+

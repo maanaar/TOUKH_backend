@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
+import datetime
 import json
+
+import pytz
+
 from odoo import http, fields
 from odoo.http import request
 from .utils import _json
@@ -38,6 +42,82 @@ def _to_datetime_str(v):
 
 def _to_date_str(v):
     return v or False
+
+
+def _query_bool(value):
+    normalized = str(value or '').strip().lower()
+
+    if normalized in {
+        '1',
+        'true',
+        'yes',
+        'y',
+        'on',
+    }:
+        return True
+
+    if normalized in {
+        '0',
+        'false',
+        'no',
+        'n',
+        'off',
+    }:
+        return False
+
+    return None
+
+
+def _local_day_bounds_utc(date_value):
+    try:
+        selected_date = fields.Date.to_date(date_value)
+    except (TypeError, ValueError):
+        return None
+
+    if not selected_date:
+        return None
+
+    timezone_name = (
+        request.env.user.tz
+        or request.env.context.get('tz')
+        or 'UTC'
+    )
+
+    try:
+        timezone = pytz.timezone(timezone_name)
+    except pytz.UnknownTimeZoneError:
+        timezone = pytz.UTC
+
+    start_local = timezone.localize(
+        datetime.datetime.combine(
+            selected_date,
+            datetime.time.min,
+        )
+    )
+
+    end_local = timezone.localize(
+        datetime.datetime.combine(
+            selected_date + datetime.timedelta(days=1),
+            datetime.time.min,
+        )
+    )
+
+    start_utc = (
+        start_local
+        .astimezone(pytz.UTC)
+        .replace(tzinfo=None)
+    )
+
+    end_utc = (
+        end_local
+        .astimezone(pytz.UTC)
+        .replace(tzinfo=None)
+    )
+
+    return (
+        fields.Datetime.to_string(start_utc),
+        fields.Datetime.to_string(end_utc),
+    )
 
 
 # JS camelCase key -> (odoo field, caster)
@@ -142,6 +222,9 @@ def _admission_request_dict(r):
         'stayGradeId':            r.stay_grade_id.id if r.stay_grade_id else None,
         'roomId':                 r.room_id.id if r.room_id else None,
         'bedId':                  r.bed_id.id if r.bed_id else None,
+        'departmentName':         r.department_id.display_name if r.department_id else '',
+        'floorName':              r.floor_id.display_name if r.floor_id else '',
+        'stayGradeName':          r.stay_grade_id.display_name if r.stay_grade_id else '',
         'roomName':               r.room_id.display_name if r.room_id else '',
         'bedName':                r.bed_id.display_name if r.bed_id else '',
         'diagnosis':              r.diagnosis or '',
@@ -182,14 +265,77 @@ class AdmissionRequestController(http.Controller):
     _model = 'saycare.admission.request'
 
     @http.route('/saycare/api/admission-requests', type='http', auth='user', methods=['GET'], csrf=False)
-    def list_requests(self, source='', status='', **kw):
+    def list_requests(
+        self,
+        source='',
+        status='',
+        admitted_date='',
+        is_inpatient='',
+        **kw,
+    ):
         domain = []
+
         if source:
             domain.append(('source', '=', source))
+
         if status:
             domain.append(('status', '=', status))
-        records = request.env[self._model].sudo().search(domain, order='create_date desc')
-        return _json([_admission_request_dict(r) for r in records])
+
+        inpatient_filter = _query_bool(is_inpatient)
+
+        if inpatient_filter is not None:
+            domain.append(
+                ('is_inpatient', '=', inpatient_filter)
+            )
+
+        if admitted_date:
+            bounds = _local_day_bounds_utc(admitted_date)
+
+            if not bounds:
+                return _json(
+                    {'error': 'تاريخ القبول غير صحيح'},
+                    400,
+                )
+
+            start_utc, end_utc = bounds
+
+            domain.extend(
+                [
+                    ('admitted_at', '>=', start_utc),
+                    ('admitted_at', '<', end_utc),
+                ]
+            )
+
+        order = (
+            'admitted_at desc, id desc'
+            if status == 'admitted'
+            else 'create_date desc'
+        )
+
+        records = (
+            request.env[self._model]
+            .sudo()
+            .search(domain, order=order)
+        )
+
+        return _json(
+            [
+                _admission_request_dict(record)
+                for record in records
+            ]
+        )
+
+    @http.route('/saycare/api/admission-requests/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_request(self, rec_id, **kw):
+        rec = request.env[self._model].sudo().browse(rec_id)
+
+        if not rec.exists():
+            return _json(
+                {'error': 'حالة الحجز الداخلي غير موجودة'},
+                404,
+            )
+
+        return _json(_admission_request_dict(rec))
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
     def get_one(self, rec_id, **kw):
