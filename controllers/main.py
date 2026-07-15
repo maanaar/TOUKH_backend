@@ -388,11 +388,26 @@ class ProductController(http.Controller):
                 ('categ_id.name_ar', 'ilike', term),
             ]
         if categ_keyword:
-            domain += ['|', '|',
-                ('categ_id.name', 'ilike', categ_keyword),
-                ('categ_id.complete_name', 'ilike', categ_keyword),
-                ('categ_id.name_ar', 'ilike', categ_keyword),
-            ]
+            # فئات زي "أشعة" بتتكتب أحياناً بهاء بدل التاء المربوطة ("الاشعه")
+            # حسب مين دخلها في أودو — نجرب الكلمة زي ما هي وبنسخة بديلة بحرف
+            # مختلف عشان الفئة تتلاقى مهما كانت طريقة كتابتها في قاعدة البيانات.
+            categ_variants = [categ_keyword]
+            if 'ة' in categ_keyword:
+                alt = categ_keyword.replace('ة', 'ه')
+                if alt not in categ_variants:
+                    categ_variants.append(alt)
+            if 'ه' in categ_keyword:
+                alt = categ_keyword.replace('ه', 'ة')
+                if alt not in categ_variants:
+                    categ_variants.append(alt)
+            categ_leaves = []
+            for kw in categ_variants:
+                categ_leaves += [
+                    ('categ_id.name', 'ilike', kw),
+                    ('categ_id.complete_name', 'ilike', kw),
+                    ('categ_id.name_ar', 'ilike', kw),
+                ]
+            domain += ['|'] * (len(categ_leaves) - 1) + categ_leaves
         if product_type:
             domain.append(('type', '=', product_type))
 

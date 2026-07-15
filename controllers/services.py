@@ -36,16 +36,34 @@ def _product_service_dict(p, specialty_id=None, specialty_name=''):
     }
 
 
+def _keyword_variants(keyword):
+    """Arabic category names sometimes get typed with 'ه' instead of the
+    correct 'ة' (or vice versa) depending on who entered them in Odoo — e.g.
+    "الاشعه" vs "الأشعة". Expand the keyword so a single caller-supplied
+    spelling still matches whichever variant actually exists in the DB."""
+    variants = [keyword]
+    if 'ة' in keyword:
+        alt = keyword.replace('ة', 'ه')
+        if alt not in variants:
+            variants.append(alt)
+    if 'ه' in keyword:
+        alt = keyword.replace('ه', 'ة')
+        if alt not in variants:
+            variants.append(alt)
+    return variants
+
+
 def _categs_by_keyword(env, keyword):
     """Return all product.category IDs whose name or complete_name contains keyword."""
-    # Search by direct name match
-    by_name = env['product.category'].sudo().search([('name', 'ilike', keyword)])
-    # Also search by complete_name (full path like "All / اجراءات / ...")
-    try:
-        by_complete = env['product.category'].sudo().search([('complete_name', 'ilike', keyword)])
-    except Exception:
-        by_complete = env['product.category'].sudo()
-    all_categs = by_name | by_complete
+    all_categs = env['product.category'].sudo()
+    for kw in _keyword_variants(keyword):
+        # Search by direct name match
+        all_categs |= env['product.category'].sudo().search([('name', 'ilike', kw)])
+        # Also search by complete_name (full path like "All / اجراءات / ...")
+        try:
+            all_categs |= env['product.category'].sudo().search([('complete_name', 'ilike', kw)])
+        except Exception:
+            pass
     if not all_categs:
         return []
     # Include all child categories
