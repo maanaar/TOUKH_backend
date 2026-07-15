@@ -25,5 +25,6 @@ from . import (
     refund_requests,
     admission_requests,
     inpatient_nursing,
+    nursing_worklist,
     geo,
 )

@@ -812,6 +812,19 @@ class InpatientNursingController(http.Controller):
                 500,
             )
 
+        if (
+            target_status == 'received'
+            and admission.worklist_stage
+            != 'received_by_ward'
+        ):
+            admission.write(
+                {
+                    'worklist_stage': (
+                        'received_by_ward'
+                    ),
+                }
+            )
+
         return _json(
             {
                 'admissionRequest': (
