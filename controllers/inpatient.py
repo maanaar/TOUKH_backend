@@ -289,6 +289,11 @@ class RoomController(http.Controller):
             'capacity':       int(body['capacity']) if body.get('capacity') else 0,
             'room_status':    body.get('room_status', 'available'),
         }
+        # القسم بيتحسب تلقائي من أول قسم مرتبط بالدور، لكن الدور ممكن يكون
+        # فيه أكتر من قسم — فلو الطلب حدد department_id صراحة (مثلاً الغرفة
+        # دي مخصصة لقسم تاني غير اللي هيتحط تلقائي)، نستخدمه.
+        if body.get('department_id'):
+            vals['department_id'] = int(body['department_id'])
         rec = request.env[self._model].sudo().create(vals)
         return _json(_room_dict(rec), 201)
 
@@ -308,6 +313,8 @@ class RoomController(http.Controller):
             vals['capacity'] = int(body['capacity']) if body['capacity'] else 0
         if 'floor_id' in body:
             vals['floor_id'] = int(body['floor_id']) if body['floor_id'] else False
+        if 'department_id' in body:
+            vals['department_id'] = int(body['department_id']) if body['department_id'] else False
         if vals:
             rec.write(vals)
         return _json(_room_dict(rec))
