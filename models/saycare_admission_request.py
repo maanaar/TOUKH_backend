@@ -95,8 +95,13 @@ class SaycareAdmissionRequest(models.Model):
     # ── Nursing worklist ─────────────────────────────────────────────────────
     visit_id = fields.Many2one('saycare.visit', string='الزيارة', copy=False)
     worklist_stage = fields.Selection([
-        ('booked',         'محجوز'),
+        ('booked', 'محجوز'),
         ('admission_done', 'تم القبول'),
+        ('awaiting_nursing', 'بانتظار التمريض'),
+        ('received_by_ward', 'تم الاستلام بالقسم'),
+        ('under_assessment', 'تحت التقييم'),
+        ('ready_for_operation', 'جاهز للعملية'),
+        ('discharge_planning', 'تخطيط الخروج'),
     ], string='مرحلة قائمة التمريض', default='booked', index=True)
 
     @api.model_create_multi
