@@ -24,5 +24,6 @@ from . import (
     government_expense,
     refund_requests,
     admission_requests,
+    inpatient_nursing,
     geo,
 )
