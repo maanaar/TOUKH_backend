@@ -92,6 +92,13 @@ class SaycareAdmissionRequest(models.Model):
     rejection_reason = fields.Text(string='سبب الرفض')
     rejected_at      = fields.Datetime(string='وقت الرفض', copy=False, readonly=True)
 
+    # ── Nursing worklist ─────────────────────────────────────────────────────
+    visit_id = fields.Many2one('saycare.visit', string='الزيارة', copy=False)
+    worklist_stage = fields.Selection([
+        ('booked',         'محجوز'),
+        ('admission_done', 'تم القبول'),
+    ], string='مرحلة قائمة التمريض', default='booked', index=True)
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:

@@ -24,3 +24,13 @@ class SaycareRadOrder(models.Model):
     result_at           = fields.Datetime(string='Result At')
     requested_by        = fields.Many2one('hr.employee', string='Requested By')
     requested_at        = fields.Datetime(string='Requested At', default=fields.Datetime.now)
+
+    # ── Nursing worklist status (distinct from rad `state` above) ─────────────
+    nurse_status = fields.Selection([
+        ('pending',   'معلق'),
+        ('accepted',  'تم القبول'),
+        ('completed', 'مكتمل'),
+        ('held',      'معلّق (متوقف)'),
+    ], string='حالة التمريض', default='pending', index=True)
+    nurse_status_by = fields.Many2one('hr.employee', string='قام بالإجراء (تمريض)')
+    nurse_status_at = fields.Datetime(string='وقت آخر تحديث تمريضي')
