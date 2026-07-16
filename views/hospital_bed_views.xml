@@ -19,6 +19,7 @@
                 <field name="allowed_gender"/>
                 <field name="current_patient_id"/>
                 <field name="last_occupancy_date"/>
+                <field name="has_ventilator" widget="boolean_toggle"/>
                 <field name="active" widget="boolean_toggle"/>
             </list>
         </field>
@@ -44,6 +45,7 @@
                             <field name="allowed_gender"/>
                             <field name="current_patient_id"/>
                             <field name="last_occupancy_date"/>
+                            <field name="has_ventilator"/>
                             <field name="active"/>
                         </group>
                     </group>

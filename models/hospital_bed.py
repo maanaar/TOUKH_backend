@@ -60,5 +60,7 @@ class HospitalBed(models.Model):
     current_patient_id = fields.Many2one("res.partner", string="مريض حاليًا")
     last_occupancy_date = fields.Datetime("تاريخ آخر إشغال")
 
+    has_ventilator = fields.Boolean("جهاز تنفس صناعي", default=False)
+
     active = fields.Boolean("فعال", default=True)
 

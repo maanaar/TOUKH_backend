@@ -163,6 +163,7 @@ _REQUEST_FIELD_MAP = {
     'maxStayDays':             ('max_stay_days', _int_or_zero),
     'visitId':                 ('visit_id', _int_or_false),
     'worklistStage':           ('worklist_stage', str),
+    'isTransfer':              ('is_transfer', bool),
 }
 
 # admissionDetails.* -> (odoo field, caster) — applied on top of _REQUEST_FIELD_MAP
@@ -218,6 +219,7 @@ def _admission_request_dict(r):
         'operationName':          r.operation_name or '',
         'operationReason':        r.operation_reason or '',
         'departmentId':           r.department_id.id if r.department_id else None,
+        'departmentCare':         bool(r.department_id.care) if r.department_id else False,
         'floorId':                r.floor_id.id if r.floor_id else None,
         'stayGradeId':            r.stay_grade_id.id if r.stay_grade_id else None,
         'roomId':                 r.room_id.id if r.room_id else None,
@@ -258,6 +260,7 @@ def _admission_request_dict(r):
         'rejectedAt':             _dt_iso(r.rejected_at),
         'visitId':                r.visit_id.id if r.visit_id else None,
         'worklistStage':          r.worklist_stage or 'booked',
+        'isTransfer':             r.is_transfer,
     }
 
 
@@ -271,6 +274,7 @@ class AdmissionRequestController(http.Controller):
         status='',
         admitted_date='',
         is_inpatient='',
+        care='',
         **kw,
     ):
         domain = []
@@ -287,6 +291,16 @@ class AdmissionRequestController(http.Controller):
             domain.append(
                 ('is_inpatient', '=', inpatient_filter)
             )
+
+        care_filter = _query_bool(care)
+
+        if care_filter is True:
+            domain.append(('department_id.care', '=', True))
+        elif care_filter is False:
+            # records with no department at all are not "care" either
+            domain.append('|')
+            domain.append(('department_id', '=', False))
+            domain.append(('department_id.care', '=', False))
 
         if admitted_date:
             bounds = _local_day_bounds_utc(admitted_date)
@@ -378,12 +392,26 @@ class AdmissionRequestController(http.Controller):
         if err:
             return err
 
+        previous_bed = rec.bed_id
+
         vals = _map_body_to_vals(body.get('requestUpdates') or {}, _REQUEST_FIELD_MAP)
         vals.update(_map_body_to_vals(body.get('admissionDetails') or {}, _ADMISSION_DETAILS_FIELD_MAP))
         vals['status'] = 'admitted'
         vals['admitted_at'] = fields.Datetime.now()
         vals['worklist_stage'] = 'admission_done'
         rec.write(vals)
+
+        # Admitting a patient to a bed must occupy it immediately — the critical-care
+        # and bed-map dashboards read occupancy off hospital.bed, not off this record.
+        if rec.bed_id:
+            if previous_bed and previous_bed.id != rec.bed_id.id:
+                previous_bed.write({'bed_status': 'available', 'current_patient_id': False})
+            rec.bed_id.write({
+                'bed_status':          'occupied',
+                'current_patient_id':  rec.patient_id.id if rec.patient_id else False,
+                'last_occupancy_date': fields.Datetime.now(),
+            })
+
         return _json(_admission_request_dict(rec))
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>/cancel', type='http', auth='user', methods=['POST'], csrf=False)

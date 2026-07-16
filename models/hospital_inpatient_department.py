@@ -43,6 +43,7 @@ class HospitalInpatientDepartment(models.Model):
     active = fields.Boolean("فعال", default=True)
     care = fields.Boolean("رعاية")
     notes = fields.Text("ملاحظات")
+    image = fields.Image("صورة القسم", max_width=1024, max_height=1024)
 
     @api.depends()
     def _compute_counts(self):

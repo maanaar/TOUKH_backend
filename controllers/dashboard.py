@@ -205,7 +205,11 @@ class DashboardController(http.Controller):
         ], key=lambda x: -x['total'])
 
         # ── 5) عدد مرضى قسم الداخلي وفقاً للقسم والفئة المالية ─────────────────────
-        admission_domain = [('status', '=', 'admitted')]
+        # care=true departments are surfaced only in the critical-care dashboard.
+        admission_domain = [
+            ('status', '=', 'admitted'),
+            '|', ('department_id', '=', False), ('department_id.care', '=', False),
+        ]
         if range_start:
             admission_domain.append(('create_date', '>=', str(range_start)))
         if range_end:
@@ -228,6 +232,130 @@ class DashboardController(http.Controller):
             'doctor_completion':        doctor_completion,
             'nursing_completion':       nursing_completion,
             'inpatient_by_department':  inpatient_by_department,
+        })
+
+    @http.route('/saycare/api/dashboard/critical-care', type='http', auth='user', methods=['GET'], csrf=False)
+    def critical_care(self, department_id='', **kw):
+        env = request.env
+
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end   = today_start + timedelta(days=1)
+
+        GENERAL_CONDITION_LABEL = {
+            'stable':           'مستقر',
+            'unstable':         'غير مستقر',
+            'critical':         'حرج',
+            'immediate_review': 'يحتاج مراجعة فورية',
+        }
+
+        Department = env['hospital.inpatient.department'].sudo()
+        Room       = env['hospital.room'].sudo()
+        Bed        = env['hospital.bed'].sudo()
+        Admission  = env['saycare.admission.request'].sudo()
+        Assessment = env['saycare.inpatient.nursing.assessment'].sudo()
+
+        dept_domain = [('care', '=', True), ('active', '=', True)]
+        if department_id:
+            dept_domain.append(('id', '=', int(department_id)))
+        departments = Department.search(dept_domain)
+
+        units = []
+        total_beds = total_occupied = total_critical = 0
+        total_ventilators = total_admissions_today = total_transfers_today = total_pending = 0
+
+        for dept in departments:
+            image_url = f'/web/image/hospital.inpatient.department/{dept.id}/image' if dept.image else ''
+
+            rooms = Room.search([('department_id', '=', dept.id), ('active', '=', True)])
+            beds  = Bed.search([('room_id', 'in', rooms.ids), ('active', '=', True)]) if rooms else Bed.browse()
+
+            bed_total     = len(beds)
+            occupied_beds = beds.filtered(lambda b: b.bed_status == 'occupied')
+            bed_occupied  = len(occupied_beds)
+            bed_available = len(beds.filtered(lambda b: b.bed_status == 'available'))
+            occupancy_pct = round((bed_occupied / bed_total) * 100) if bed_total else 0
+            ventilators_in_use = len(occupied_beds.filtered(lambda b: b.has_ventilator))
+
+            # A care=true department is tracked from the moment a request targets it —
+            # pending_admission cases show up here immediately, not only once admitted.
+            current = Admission.search([
+                ('department_id', '=', dept.id),
+                ('status', 'in', ['admitted', 'pending_admission']),
+            ])
+            assessments = Assessment.search([('admission_request_id', 'in', current.ids)])
+            condition_by_admission = {a.admission_request_id.id: a.general_condition for a in assessments}
+
+            critical_count = sum(
+                1 for a in current if condition_by_admission.get(a.id) == 'critical'
+            )
+            admitted_today = current.filtered(
+                lambda a: a.admitted_at and today_start <= a.admitted_at < today_end
+            )
+            admissions_today = sum(1 for a in admitted_today if not a.is_transfer)
+            transfers_today  = sum(1 for a in admitted_today if a.is_transfer)
+            pending_count = sum(1 for a in current if a.status == 'pending_admission')
+
+            patients = [{
+                'admissionId':            a.id,
+                'patientName':            a.patient_name or a.patient_id.display_name or '—',
+                'patientMrn':             a.patient_mrn or '',
+                'inpatientBookingNumber': a.inpatient_booking_number or '',
+                'roomName':               a.room_id.display_name if a.room_id else '',
+                'bedName':                a.bed_id.display_name if a.bed_id else '—',
+                'attendingDoctor':        a.attending_doctor or a.doctor_name or '',
+                'status':                 a.status or '',
+                'worklistStage':          a.worklist_stage or 'booked',
+                'generalCondition':       condition_by_admission.get(a.id) or '',
+                'generalConditionLabel':  GENERAL_CONDITION_LABEL.get(condition_by_admission.get(a.id), ''),
+                'admissionDate':          str(a.admission_date) if a.admission_date else '',
+                'bookingDateTime':        a.booking_datetime.strftime('%Y-%m-%dT%H:%M') if a.booking_datetime else '',
+            } for a in current]
+
+            units.append({
+                'id':                 dept.id,
+                'code':               dept.code or '',
+                'name':               dept.name_ar or '',
+                'departmentId':       dept.id,
+                'departmentName':     dept.name_ar or '',
+                'departmentImageUrl': image_url,
+                'bedTotal':           bed_total,
+                'bedOccupied':        bed_occupied,
+                'bedAvailable':       bed_available,
+                'occupancyPct':       occupancy_pct,
+                'ventilatorsInUse':   ventilators_in_use,
+                'criticalCount':      critical_count,
+                'admissionsToday':    admissions_today,
+                'transfersToday':     transfers_today,
+                'pendingCount':       pending_count,
+                'patients':           patients,
+            })
+
+            total_beds              += bed_total
+            total_occupied           += bed_occupied
+            total_critical           += critical_count
+            total_ventilators        += ventilators_in_use
+            total_admissions_today   += admissions_today
+            total_transfers_today    += transfers_today
+            total_pending            += pending_count
+
+        units.sort(key=lambda u: -u['occupancyPct'])
+
+        overall_occupancy_pct = round((total_occupied / total_beds) * 100) if total_beds else 0
+
+        return _json({
+            'summary': {
+                'totalUnits':        len(units),
+                'totalBeds':         total_beds,
+                'totalOccupied':     total_occupied,
+                'totalAvailable':    total_beds - total_occupied,
+                'occupancyPct':      overall_occupancy_pct,
+                'ventilatorsInUse':  total_ventilators,
+                'criticalCount':     total_critical,
+                'admissionsToday':   total_admissions_today,
+                'transfersToday':    total_transfers_today,
+                'pendingCount':      total_pending,
+            },
+            'units': units,
         })
 
     @http.route('/saycare/api/dashboard/visits-today', type='http', auth='user', methods=['GET'], csrf=False)
