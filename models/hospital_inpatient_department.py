@@ -41,6 +41,7 @@ class HospitalInpatientDepartment(models.Model):
     head_nurse_id = fields.Many2one("hr.employee", string="التمريض المسؤول")
 
     active = fields.Boolean("فعال", default=True)
+    care = fields.Boolean("رعاية")
     notes = fields.Text("ملاحظات")
 
     @api.depends()
