@@ -2,6 +2,7 @@
 import json
 import logging
 from odoo import fields, http
+from odoo.exceptions import ValidationError
 from odoo.http import request
 from .utils import _json
 
@@ -192,7 +193,11 @@ class GovernmentExpenseController(http.Controller):
             return _json({'error': 'name and number are required'}, status=400)
         if not vals.get('created_by_name'):
             vals['created_by_name'] = env.user.name
-        rec = env['saycare.government.expense.decision'].create(vals)
+        try:
+            with env.cr.savepoint():
+                rec = env['saycare.government.expense.decision'].create(vals)
+        except ValidationError as e:
+            return _json({'error': str(e)}, status=400)
         return _json(rec._to_dict())
 
     @http.route('/saycare/api/government-expense/decisions/<int:decision_id>',
@@ -205,7 +210,11 @@ class GovernmentExpenseController(http.Controller):
         body = _parse_body()
         vals = _decision_vals(body, env)
         if vals:
-            rec.write(vals)
+            try:
+                with env.cr.savepoint():
+                    rec.write(vals)
+            except ValidationError as e:
+                return _json({'error': str(e)}, status=400)
         return _json(rec._to_dict())
 
     @http.route('/saycare/api/government-expense/decisions/<int:decision_id>',

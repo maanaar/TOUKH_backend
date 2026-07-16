@@ -169,9 +169,12 @@ class SaycareGovernmentExpenseDecision(models.Model):
         """)
 
     @api.model
-    def _resolve_page_no_for_patient(self, patient_id):
-        """Reuse an existing page number already assigned to another decision
-        of the same patient; otherwise mint a fresh one."""
+    def _sibling_page_no(self, patient_id):
+        """Look up (without minting) a page number already assigned to
+        another decision of the same patient. Returns 0 if none exists yet —
+        callers that must NOT silently auto-mint (e.g. create() below, where
+        a brand-new patient's number is typed by the finance user) rely on
+        this distinction."""
         if patient_id:
             sibling = self.sudo().search([
                 ('patient_id', '=', patient_id),
@@ -179,7 +182,15 @@ class SaycareGovernmentExpenseDecision(models.Model):
             ], limit=1)
             if sibling:
                 return sibling.page_no
-        return self._next_page_no()
+        return 0
+
+    @api.model
+    def _resolve_page_no_for_patient(self, patient_id):
+        """Reuse an existing page number already assigned to another decision
+        of the same patient; otherwise mint a fresh one. Only for self-healing
+        paths (legacy decisions with no page_no yet, pharmacy transactions)
+        where there is no form for a human to type a number into."""
+        return self._sibling_page_no(patient_id) or self._next_page_no()
 
     @api.constrains('page_no', 'patient_id')
     def _check_page_no(self):
@@ -239,7 +250,12 @@ class SaycareGovernmentExpenseDecision(models.Model):
             if 'deduction_amount' not in vals:
                 vals['deduction_amount'] = default_deduction
             if not vals.get('page_no'):
-                vals['page_no'] = self._resolve_page_no_for_patient(vals.get('patient_id'))
+                # لو المريض عنده قرار تاني بالفعل، ناخد رقمه تلقائي. لو ده أول
+                # قرار للمريض ده، الرقم لازم يتكتب يدوي من شاشة المحاسبة —
+                # مفيش رقم بيتولد لوحده هنا.
+                vals['page_no'] = self._sibling_page_no(vals.get('patient_id'))
+            if not vals.get('page_no'):
+                raise ValidationError('رقم الصفحة مطلوب لأول قرار لهذا المريض')
         records = super().create(vals_list)
         # لو المريض عنده قرارات تانية لسه من غير رقم صفحة (اتسجلت قبل الميزة
         # دي)، نديهم نفس رقم القرار الجديد عشان كل قرارات نفس المريض تتساوى.
