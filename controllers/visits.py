@@ -468,6 +468,7 @@ class ClinicBookingController(http.Controller):
         if visit.service_ids:
             invoice_id = _create_visit_invoice(visit)
             if invoice_id:
+                visit.write({'invoice_id': invoice_id})
                 inv = env['account.move'].sudo().browse(invoice_id)
                 invoice_name = inv.name or ''
 
