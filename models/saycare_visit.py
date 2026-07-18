@@ -17,6 +17,7 @@ class SaycareVisit(models.Model):
     discharge_date = fields.Datetime(string='Discharge Date')
 
     state = fields.Selection([
+        ('pending_payment', 'بانتظار السداد'),
         ('waiting',      'في الانتظار'),
         ('triage',       'قيد التقييم'),
         ('doctor_queue', 'انتظار الطبيب'),

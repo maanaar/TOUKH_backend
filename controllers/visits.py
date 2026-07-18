@@ -10,6 +10,7 @@ from .utils import _json, _patient_dict
 _logger = logging.getLogger(__name__)
 
 VALID_TRANSITIONS = {
+    'pending_payment': ['waiting', 'cancelled'],
     'waiting':      ['triage', 'doctor_queue', 'cancelled'],
     'triage':       ['doctor_queue', 'cancelled'],
     'doctor_queue': ['in_progress', 'cancelled'],
@@ -443,6 +444,13 @@ class ClinicBookingController(http.Controller):
             'notes':           body.get('notes', ''),
             'created_by_name': body.get('createdByName') or request.env.user.name,
         }
+        # Self-registration kiosk books in 'pending_payment' — the visit stays
+        # invisible to nurse/doctor queues (they only ever query specific named
+        # states) until treasury actually collects payment on the invoice
+        # created below, at which point invoices.py's register_payment flips
+        # it to 'waiting'.
+        if body.get('state') in VALID_TRANSITIONS:
+            visit_vals['state'] = body['state']
         if specialty_id:
             visit_vals['specialty_id'] = int(specialty_id)
         if doctor_id:

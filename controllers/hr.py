@@ -230,6 +230,51 @@ class EmployeeController(http.Controller):
             'active':          True,
         })
 
+    @http.route('/api/v1/hr/employees/<int:employee_id>', type='http', auth='user', methods=['PUT'], csrf=False)
+    def update_one(self, employee_id, **kw):
+        """Edit an existing employee's medical role/grade/specialty — creation
+        (create_one above) was previously the only place these could be set,
+        so a doctor added without a grade, or assigned to a specialty later,
+        had no way to get one afterwards."""
+        rec = request.env['hr.employee'].sudo().browse(employee_id)
+        if not rec.exists():
+            return http_response({'error': 'employee not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data)
+        except Exception:
+            return http_response({'error': 'invalid JSON'}, 400)
+
+        VALID_ROLES  = ('doctor', 'nurse', 'receptionist', 'pharmacist', 'lab_tech', 'rad_tech')
+        VALID_GRADES = ('consultant', 'specialist')
+
+        vals = {}
+        if body.get('name'):
+            vals['name'] = str(body['name']).strip()
+        if 'work_email' in body:
+            vals['work_email'] = str(body['work_email'] or '')
+        if 'work_phone' in body:
+            vals['work_phone'] = str(body['work_phone'] or '')
+        if 'medical_role' in body:
+            vals['medical_role'] = body['medical_role'] if body['medical_role'] in VALID_ROLES else False
+        if 'doctor_grade' in body:
+            vals['doctor_grade'] = body['doctor_grade'] if body['doctor_grade'] in VALID_GRADES else False
+        if 'specialty_id' in body:
+            vals['specialty_id'] = int(body['specialty_id']) if body['specialty_id'] else False
+
+        if vals:
+            rec.write(vals)
+
+        return http_response({
+            'id':              rec.id,
+            'name':            rec.name,
+            'work_email':      rec.work_email or '',
+            'work_phone':      rec.work_phone or '',
+            'medical_role':    rec.medical_role or '',
+            'doctor_grade':    rec.doctor_grade or '',
+            'specialty_id':    rec.specialty_id.id if rec.specialty_id else None,
+            'specialty_name':  rec.specialty_id.name if rec.specialty_id else '',
+        })
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  hr.department

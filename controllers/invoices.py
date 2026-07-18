@@ -72,6 +72,11 @@ class InvoiceController(http.Controller):
                 payment = request.env['account.payment'].sudo().search(
                     [('reconciled_invoice_ids', 'in', inv.id)], limit=1
                 )
+                already_paid_visit = request.env['saycare.visit'].sudo().search(
+                    [('invoice_id', '=', inv.id)], limit=1
+                )
+                if already_paid_visit and already_paid_visit.state == 'pending_payment':
+                    already_paid_visit.write({'state': 'waiting'})
                 return _json({'ok': True, 'payment_id': payment.id if payment else None,
                               'payment_state': 'paid', 'amount_residual': 0,
                               'invoice': _invoice_dict(inv)})
@@ -212,6 +217,12 @@ class InvoiceController(http.Controller):
                         (inv.id,)
                     )
                     inv.invalidate_recordset(['payment_state'])
+
+                # Kiosk self-registration books visits as 'pending_payment' so
+                # they stay off the nurse/doctor queues until treasury actually
+                # collects the money — this is the point that releases them.
+                if visit and visit.state == 'pending_payment':
+                    visit.write({'state': 'waiting'})
 
         except Exception as e:
             return _json({'error': str(e)}, 500)
