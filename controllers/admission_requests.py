@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 import datetime
 import json
+import logging
 
 import pytz
 
 from odoo import http, fields
 from odoo.http import request
 from .utils import _json
+
+_logger = logging.getLogger(__name__)
 
 
 def _load_body():
@@ -264,6 +267,40 @@ def _admission_request_dict(r):
     }
 
 
+def _create_operation_booking_appointment(rec):
+    """Mirror an operation-booking admission request onto saycare.appointment so it
+    shows up in "قائمة الحجوزات الداخلي" (/unit/appointments/internal). Runs in the
+    same request as the admission-request creation so the two can't drift apart —
+    best-effort (must never block the admission request itself), so failures are
+    only logged, not raised.
+    """
+    if rec.source != 'operation_booking' or not rec.patient_id or not rec.booking_datetime:
+        return
+
+    try:
+        # A savepoint keeps a failure here (e.g. a DB constraint) from aborting the
+        # whole transaction — the admission request that was just created must
+        # still commit even if this best-effort mirror fails.
+        with request.env.cr.savepoint():
+            booking_dt = rec.booking_datetime
+            start_time = booking_dt.hour + booking_dt.minute / 60.0
+            request.env['saycare.appointment'].sudo().create({
+                'patient_id':    rec.patient_id.id,
+                'date':          booking_dt.date(),
+                'start_time':    start_time,
+                'end_time':      start_time + 0.25,
+                'visit_type':    'inpatient',
+                'doctor_id':     rec.surgeon_id.id if rec.surgeon_id else False,
+                'department_id': rec.department_id.id if rec.department_id else False,
+                'notes':         rec.operation_name if rec.is_operation else (rec.reason or ''),
+            })
+    except Exception:
+        _logger.exception(
+            'failed to mirror operation-booking admission request %s onto saycare.appointment',
+            rec.id,
+        )
+
+
 class AdmissionRequestController(http.Controller):
     _model = 'saycare.admission.request'
 
@@ -368,6 +405,7 @@ class AdmissionRequestController(http.Controller):
 
         vals = _map_body_to_vals(body, _REQUEST_FIELD_MAP)
         rec = request.env[self._model].sudo().create(vals)
+        _create_operation_booking_appointment(rec)
         return _json(_admission_request_dict(rec), 201)
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
