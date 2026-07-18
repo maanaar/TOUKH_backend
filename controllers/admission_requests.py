@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 import datetime
 import json
+import logging
 
 import pytz
 
 from odoo import http, fields
 from odoo.http import request
 from .utils import _json
+
+_logger = logging.getLogger(__name__)
 
 
 def _load_body():
@@ -163,6 +166,7 @@ _REQUEST_FIELD_MAP = {
     'maxStayDays':             ('max_stay_days', _int_or_zero),
     'visitId':                 ('visit_id', _int_or_false),
     'worklistStage':           ('worklist_stage', str),
+    'isTransfer':              ('is_transfer', bool),
 }
 
 # admissionDetails.* -> (odoo field, caster) — applied on top of _REQUEST_FIELD_MAP
@@ -218,6 +222,7 @@ def _admission_request_dict(r):
         'operationName':          r.operation_name or '',
         'operationReason':        r.operation_reason or '',
         'departmentId':           r.department_id.id if r.department_id else None,
+        'departmentCare':         bool(r.department_id.care) if r.department_id else False,
         'floorId':                r.floor_id.id if r.floor_id else None,
         'stayGradeId':            r.stay_grade_id.id if r.stay_grade_id else None,
         'roomId':                 r.room_id.id if r.room_id else None,
@@ -258,7 +263,42 @@ def _admission_request_dict(r):
         'rejectedAt':             _dt_iso(r.rejected_at),
         'visitId':                r.visit_id.id if r.visit_id else None,
         'worklistStage':          r.worklist_stage or 'booked',
+        'isTransfer':             r.is_transfer,
     }
+
+
+def _create_operation_booking_appointment(rec):
+    """Mirror an operation-booking admission request onto saycare.appointment so it
+    shows up in "قائمة الحجوزات الداخلي" (/unit/appointments/internal). Runs in the
+    same request as the admission-request creation so the two can't drift apart —
+    best-effort (must never block the admission request itself), so failures are
+    only logged, not raised.
+    """
+    if rec.source != 'operation_booking' or not rec.patient_id or not rec.booking_datetime:
+        return
+
+    try:
+        # A savepoint keeps a failure here (e.g. a DB constraint) from aborting the
+        # whole transaction — the admission request that was just created must
+        # still commit even if this best-effort mirror fails.
+        with request.env.cr.savepoint():
+            booking_dt = rec.booking_datetime
+            start_time = booking_dt.hour + booking_dt.minute / 60.0
+            request.env['saycare.appointment'].sudo().create({
+                'patient_id':    rec.patient_id.id,
+                'date':          booking_dt.date(),
+                'start_time':    start_time,
+                'end_time':      start_time + 0.25,
+                'visit_type':    'inpatient',
+                'doctor_id':     rec.surgeon_id.id if rec.surgeon_id else False,
+                'department_id': rec.department_id.id if rec.department_id else False,
+                'notes':         rec.operation_name if rec.is_operation else (rec.reason or ''),
+            })
+    except Exception:
+        _logger.exception(
+            'failed to mirror operation-booking admission request %s onto saycare.appointment',
+            rec.id,
+        )
 
 
 class AdmissionRequestController(http.Controller):
@@ -271,6 +311,7 @@ class AdmissionRequestController(http.Controller):
         status='',
         admitted_date='',
         is_inpatient='',
+        care='',
         **kw,
     ):
         domain = []
@@ -287,6 +328,16 @@ class AdmissionRequestController(http.Controller):
             domain.append(
                 ('is_inpatient', '=', inpatient_filter)
             )
+
+        care_filter = _query_bool(care)
+
+        if care_filter is True:
+            domain.append(('department_id.care', '=', True))
+        elif care_filter is False:
+            # records with no department at all are not "care" either
+            domain.append('|')
+            domain.append(('department_id', '=', False))
+            domain.append(('department_id.care', '=', False))
 
         if admitted_date:
             bounds = _local_day_bounds_utc(admitted_date)
@@ -354,6 +405,7 @@ class AdmissionRequestController(http.Controller):
 
         vals = _map_body_to_vals(body, _REQUEST_FIELD_MAP)
         rec = request.env[self._model].sudo().create(vals)
+        _create_operation_booking_appointment(rec)
         return _json(_admission_request_dict(rec), 201)
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
@@ -378,12 +430,26 @@ class AdmissionRequestController(http.Controller):
         if err:
             return err
 
+        previous_bed = rec.bed_id
+
         vals = _map_body_to_vals(body.get('requestUpdates') or {}, _REQUEST_FIELD_MAP)
         vals.update(_map_body_to_vals(body.get('admissionDetails') or {}, _ADMISSION_DETAILS_FIELD_MAP))
         vals['status'] = 'admitted'
         vals['admitted_at'] = fields.Datetime.now()
         vals['worklist_stage'] = 'admission_done'
         rec.write(vals)
+
+        # Admitting a patient to a bed must occupy it immediately — the critical-care
+        # and bed-map dashboards read occupancy off hospital.bed, not off this record.
+        if rec.bed_id:
+            if previous_bed and previous_bed.id != rec.bed_id.id:
+                previous_bed.write({'bed_status': 'available', 'current_patient_id': False})
+            rec.bed_id.write({
+                'bed_status':          'occupied',
+                'current_patient_id':  rec.patient_id.id if rec.patient_id else False,
+                'last_occupancy_date': fields.Datetime.now(),
+            })
+
         return _json(_admission_request_dict(rec))
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>/cancel', type='http', auth='user', methods=['POST'], csrf=False)

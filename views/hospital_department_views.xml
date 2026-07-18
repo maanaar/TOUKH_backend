@@ -14,6 +14,7 @@
                 <field name="head_nurse_id"/>
                 <field name="floor_count"/>
                 <field name="bed_count"/>
+                <field name="care" widget="boolean_toggle"/>
                 <field name="active" widget="boolean_toggle"/>
             </list>
         </field>
@@ -25,6 +26,7 @@
         <field name="arch" type="xml">
             <form string="القسم الداخلي">
                 <sheet>
+                    <field name="image" widget="image" class="oe_avatar"/>
                     <group>
                         <group>
                             <field name="code"/>
@@ -37,6 +39,7 @@
                             <field name="ward_type"/>
                             <field name="floor_count"/>
                             <field name="head_nurse_id"/>
+                            <field name="care"/>
                             <field name="notes"/>
                         </group>
                     </group>

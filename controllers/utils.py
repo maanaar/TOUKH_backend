@@ -8,6 +8,9 @@ def _json(data, status=200):
         json.dumps(data, ensure_ascii=False, default=str),
         status=status,
         mimetype='application/json',
+        # These are live dashboards/lists — never let the browser or an
+        # intermediate proxy serve a stale cached copy of a GET response.
+        headers=[('Cache-Control', 'no-store, no-cache, must-revalidate')],
     )
 
 

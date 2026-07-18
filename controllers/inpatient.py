@@ -17,6 +17,15 @@ def _load_body():
     except json.JSONDecodeError:
         return None, _json({'error': 'invalid JSON'}, 400)
 
+def _query_bool(value):
+    normalized = str(value or '').strip().lower()
+    if normalized in {'1', 'true', 'yes', 'y', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'n', 'off'}:
+        return False
+    return None
+
+
 def _department_dict(r):
     return {
         'id':              r.id,
@@ -32,7 +41,9 @@ def _department_dict(r):
         'floor_count':     r.floor_count,
         'bed_count':       r.bed_count,
         'active':          r.active,
+        'care':            r.care,
         'notes':           r.notes or '',
+        'image_url':       f'/web/image/hospital.inpatient.department/{r.id}/image' if r.image else '',
     }
 
 
@@ -112,6 +123,7 @@ def _bed_dict(r):
         'current_patient_id':   r.current_patient_id.id if r.current_patient_id else None,
         'current_patient_name': r.current_patient_id.display_name if r.current_patient_id else '',
         'last_occupancy_date':  r.last_occupancy_date.isoformat() if r.last_occupancy_date else '',
+        'has_ventilator':       r.has_ventilator,
         'active':               r.active,
     }
 
@@ -120,12 +132,15 @@ class DepartmentController(http.Controller):
     _model = 'hospital.inpatient.department'
 
     @http.route('/saycare/api/departments', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, specialty='', ward_type='', **kw):
+    def get_all(self, specialty='', ward_type='', care='', **kw):
         domain = [('active', '=', True)]
         if specialty:
             domain.append(('main_specialty', '=', specialty))
         if ward_type:
             domain.append(('ward_type', '=', ward_type))
+        care_filter = _query_bool(care)
+        if care_filter is not None:
+            domain.append(('care', '=', care_filter))
         records = request.env[self._model].sudo().search(domain)
         return _json([_department_dict(r) for r in records])
 
@@ -254,7 +269,7 @@ class RoomController(http.Controller):
     _model = 'hospital.room'
 
     @http.route('/saycare/api/rooms', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, floor_id='', department_id='', room_status='', **kw):
+    def get_all(self, floor_id='', department_id='', room_status='', care='', **kw):
         domain = [('active', '=', True)]
         if floor_id:
             domain.append(('floor_id', '=', int(floor_id)))
@@ -262,6 +277,13 @@ class RoomController(http.Controller):
             domain.append(('department_id', '=', int(department_id)))
         if room_status:
             domain.append(('room_status', '=', room_status))
+        care_filter = _query_bool(care)
+        if care_filter is True:
+            domain.append(('department_id.care', '=', True))
+        elif care_filter is False:
+            domain.append('|')
+            domain.append(('department_id', '=', False))
+            domain.append(('department_id.care', '=', False))
         records = request.env[self._model].sudo().search(domain)
         return _json([_room_dict(r) for r in records])
 
@@ -410,7 +432,7 @@ class BedController(http.Controller):
     _model = 'hospital.bed'
 
     @http.route('/saycare/api/beds', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, room_id='', floor_id='', department_id='', bed_status='', grade_id='', **kw):
+    def get_all(self, room_id='', floor_id='', department_id='', bed_status='', grade_id='', care='', **kw):
         domain = [('active', '=', True)]
         if room_id:
             domain.append(('room_id', '=', int(room_id)))
@@ -422,6 +444,13 @@ class BedController(http.Controller):
             domain.append(('bed_status', '=', bed_status))
         if grade_id:
             domain.append(('grade_id', '=', int(grade_id)))
+        care_filter = _query_bool(care)
+        if care_filter is True:
+            domain.append(('department_id.care', '=', True))
+        elif care_filter is False:
+            domain.append('|')
+            domain.append(('department_id', '=', False))
+            domain.append(('department_id.care', '=', False))
         records = request.env[self._model].sudo().search(domain)
         return _json([_bed_dict(r) for r in records])
 
@@ -457,6 +486,8 @@ class BedController(http.Controller):
             vals['current_patient_id'] = int(body['current_patient_id'])
         if body.get('last_occupancy_date'):
             vals['last_occupancy_date'] = body['last_occupancy_date']
+        if 'has_ventilator' in body:
+            vals['has_ventilator'] = bool(body['has_ventilator'])
         rec = request.env[self._model].sudo().create(vals)
         return _json(_bed_dict(rec), 201)
 
@@ -472,6 +503,8 @@ class BedController(http.Controller):
         for f in ('code', 'bed_no', 'bed_status', 'allowed_gender', 'last_occupancy_date', 'active'):
             if f in body:
                 vals[f] = body[f]
+        if 'has_ventilator' in body:
+            vals['has_ventilator'] = bool(body['has_ventilator'])
         for f in ('room_id', 'floor_id', 'department_id', 'grade_id', 'current_patient_id'):
             if f in body:
                 vals[f] = int(body[f]) if body[f] else False

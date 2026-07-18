@@ -31,6 +31,7 @@ class SaycareAppointment(models.Model):
         ('cancelled',  'ملغي'),
     ], string='Status', default='scheduled', index=True)
     visit_id     = fields.Many2one('saycare.visit', string='Visit', ondelete='set null')
+    department_id = fields.Many2one('hospital.inpatient.department', string='القسم')
     notes        = fields.Text(string='Notes')
 
     def create(self, vals_list):

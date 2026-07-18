@@ -33,6 +33,21 @@ class SaycareInpatientNursingAssessment(models.Model):
         index=True,
     )
 
+    department_id = fields.Many2one(
+        'hospital.inpatient.department',
+        string='القسم',
+        related='admission_request_id.department_id',
+        store=True,
+        readonly=True,
+    )
+
+    admission_date = fields.Date(
+        string='تاريخ الدخول',
+        related='admission_request_id.admission_date',
+        store=True,
+        readonly=True,
+    )
+
     status = fields.Selection(
         [
             ('draft', 'مسودة'),
@@ -739,18 +754,35 @@ class SaycareInpatientNursingAssessment(models.Model):
 
     bg_site = fields.Selection(
         [
-            ('front_right_arm', 'الذراع الأيمن (أمامي)'),
-            ('front_left_arm', 'الذراع الأيسر (أمامي)'),
-            ('abdomen_upper_right', 'أعلى يمين البطن'),
-            ('abdomen_upper_left', 'أعلى يسار البطن'),
-            ('abdomen_lower_right', 'أسفل يمين البطن'),
-            ('abdomen_lower_left', 'أسفل يسار البطن'),
-            ('front_right_thigh', 'الفخذ الأيمن (أمامي)'),
-            ('front_left_thigh', 'الفخذ الأيسر (أمامي)'),
-            ('back_right_arm', 'الذراع الأيمن (خلفي)'),
-            ('back_left_arm', 'الذراع الأيسر (خلفي)'),
-            ('back_right_hip', 'الأرداف/الفخذ الأيمن (خلفي)'),
-            ('back_left_hip', 'الأرداف/الفخذ الأيسر (خلفي)'),
+            ('front_left_arm_23', 'الذراع الأيسر (أمامي) 23'),
+            ('front_left_arm_24', 'الذراع الأيسر (أمامي) 24'),
+            ('front_right_arm_21', 'الذراع الأيمن (أمامي) 21'),
+            ('front_right_arm_26', 'الذراع الأيمن (أمامي) 26'),
+            ('abdomen_left_13', 'يسار البطن 13'),
+            ('abdomen_left_18', 'يسار البطن 18'),
+            ('abdomen_center_20', 'وسط البطن 20'),
+            ('abdomen_right_15', 'يمين البطن 15'),
+            ('abdomen_right_17', 'يمين البطن 17'),
+            ('front_left_thigh_25', 'الفخذ الأيسر (أمامي) 25'),
+            ('front_left_thigh_13', 'الفخذ الأيسر (أمامي) 13'),
+            ('front_left_thigh_1', 'الفخذ الأيسر (أمامي) 1'),
+            ('front_right_thigh_26', 'الفخذ الأيمن (أمامي) 26'),
+            ('front_right_thigh_14', 'الفخذ الأيمن (أمامي) 14'),
+            ('front_right_thigh_2', 'الفخذ الأيمن (أمامي) 2'),
+            ('back_left_arm_31', 'الذراع الأيسر (خلفي) 31'),
+            ('back_left_arm_17', 'الذراع الأيسر (خلفي) 17'),
+            ('back_right_arm_32', 'الذراع الأيمن (خلفي) 32'),
+            ('back_right_arm_16', 'الذراع الأيمن (خلفي) 16'),
+            ('back_left_flank_27', 'الخاصرة اليسرى (خلفي) 27'),
+            ('back_left_flank_16', 'الخاصرة اليسرى (خلفي) 16'),
+            ('back_right_flank_30', 'الخاصرة اليمنى (خلفي) 30'),
+            ('back_right_flank_10', 'الخاصرة اليمنى (خلفي) 10'),
+            ('back_left_hip_28', 'الأرداف اليسرى (خلفي) 28'),
+            ('back_left_hip_12', 'الأرداف اليسرى (خلفي) 12'),
+            ('back_left_hip_3', 'الأرداف اليسرى (خلفي) 3'),
+            ('back_right_hip_29', 'الأرداف اليمنى (خلفي) 29'),
+            ('back_right_hip_12', 'الأرداف اليمنى (خلفي) 12'),
+            ('back_right_hip_9', 'الأرداف اليمنى (خلفي) 9'),
         ],
         string='المكان (موقع الحقن)',
     )
@@ -928,6 +960,171 @@ class SaycareInpatientNursingAssessment(models.Model):
     pu_repositioning_education = fields.Boolean(
         string='تثقيف المريض/الأهل لتجنب قرح الفراش',
         default=False,
+    )
+
+    # ── Pain measurement & treatment (قياس الألم وعلاجه) ─────────────────────
+
+    pmt_date = fields.Date(
+        string='تاريخ قياس الألم',
+    )
+
+    pmt_age = fields.Integer(
+        string='السن (قياس الألم)',
+    )
+
+    pmt_time = fields.Char(
+        string='الوقت (قياس الألم)',
+    )
+
+    pmt_scale_method = fields.Selection(
+        [
+            ('numerical', '(A) مقياس رقمي لحدة الألم - للبالغين والمرضى الواعين'),
+            ('wong_baker', '(B) مقياس الوجوه Wong-Baker لحدة الألم'),
+        ],
+        string='طريقة قياس الألم',
+    )
+
+    pmt_pain_measure = fields.Selection(
+        [
+            ('0', '0 - لا ألم (No Pain)'),
+            ('1', '1'),
+            ('2', '2'),
+            ('3', '3'),
+            ('4', '4'),
+            ('5', '5 - ألم متوسط (Moderate Pain)'),
+            ('6', '6'),
+            ('7', '7'),
+            ('8', '8'),
+            ('9', '9'),
+            ('10', '10 - أشد الألم (Worst Possible Pain)'),
+        ],
+        string='مقياس الألم',
+    )
+
+    pmt_pain_location = fields.Selection(
+        [
+            ('right', 'يمين (Right)'),
+            ('left', 'يسار (Left)'),
+            ('both', 'الاثنان (Both)'),
+        ],
+        string='مكان الألم',
+    )
+
+    pmt_pain_type = fields.Selection(
+        [
+            ('aching', 'موجع (Aching)'),
+            ('burning', 'محرق (Burning)'),
+            ('cramping', 'تقلص (Cramping)'),
+            ('crushing', 'سحق (Crushing)'),
+            ('dull', 'كليل (Dull)'),
+            ('numbness', 'تنميل (Numbness)'),
+            ('pins_needles', 'وخز (Pins / Needles)'),
+            ('stabbing', 'طعن (Stabbing)'),
+            ('throbbing', 'نابض (Throbbing)'),
+        ],
+        string='نوع الألم',
+    )
+
+    pmt_intervention_type = fields.Selection(
+        [
+            ('1', '1 = إجراء تداخلي لعلاج الألم (Intervention Pain Relief Procedure)'),
+            ('2', '2 = دوائي (Pharmacological - See Medication Sheet)'),
+            ('3', '3 = بدون أدوية (Non-pharmacological)'),
+        ],
+        string='التدخل العلاجي',
+    )
+
+    pmt_nonpharm_method = fields.Selection(
+        [
+            ('a', 'A - تغيير الوضع (Position Changed)'),
+            ('b', 'B - محاولة الاسترخاء (Relaxation Technique)'),
+            ('c', 'C - تدعيم (Splinting)'),
+            ('d', 'D - شد الانتباه (Distractions)'),
+            ('e', 'E - الموسيقى (Music)'),
+            ('f', 'F - تعليم السيطرة على الألم (Education)'),
+            ('g', 'G - أخرى (Others)'),
+        ],
+        string='طريقة العلاج بدون أدوية',
+    )
+
+    pmt_nonpharm_other_specify = fields.Char(
+        string='تحديد طريقة العلاج الأخرى',
+    )
+
+    pmt_nurse_signature_id = fields.Many2one(
+        'hr.employee',
+        string='توقيع التمريض (قياس الألم)',
+    )
+
+    pmt_notes = fields.Text(
+        string='ملاحظات (قياس الألم)',
+    )
+
+    # ── Nurse observation sheet (ملاحظة ممرضة) ───────────────────────────────
+
+    nurse_obs_admission_permit_no = fields.Char(
+        string='إذن قبول رقم',
+    )
+
+    nurse_obs_referred_from = fields.Char(
+        string='مرسل من',
+    )
+
+    nurse_obs_diagnosis = fields.Char(
+        string='التشخيص (ملاحظة ممرضة)',
+    )
+
+    nurse_obs_specialist_id = fields.Many2one(
+        'hr.employee',
+        string='اسم الاخصائي',
+    )
+
+    nurse_obs_date = fields.Date(
+        string='التاريخ (ملاحظة ممرضة)',
+    )
+
+    nurse_obs_time = fields.Char(
+        string='الساعة (ملاحظة ممرضة)',
+    )
+
+    nurse_obs_note = fields.Text(
+        string='ملاحظة المريض',
+    )
+
+    nurse_obs_signature_id = fields.Many2one(
+        'hr.employee',
+        string='الامضاء (ملاحظة ممرضة)',
+    )
+
+    # ── Nursing care plan (خطة الرعاية التمريضية) ────────────────────────────
+
+    care_plan_datetime = fields.Datetime(
+        string='الوقت/التاريخ (خطة الرعاية)',
+    )
+
+    care_plan_nursing_diagnosis = fields.Text(
+        string='التشخيص التمريضي',
+    )
+
+    care_plan_patient_needs = fields.Text(
+        string='احتياجات المريض',
+    )
+
+    care_plan_actions = fields.Text(
+        string='الإجراءات',
+    )
+
+    care_plan_expected_outcomes = fields.Text(
+        string='النتائج المرجوة',
+    )
+
+    care_plan_time_frame = fields.Char(
+        string='الأطار الزمني',
+    )
+
+    care_plan_signature_id = fields.Many2one(
+        'hr.employee',
+        string='التوقيع (خطة الرعاية التمريضية)',
     )
 
     @api.depends('weight_kg', 'height_cm')

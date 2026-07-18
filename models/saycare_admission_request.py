@@ -92,6 +92,9 @@ class SaycareAdmissionRequest(models.Model):
     rejection_reason = fields.Text(string='سبب الرفض')
     rejected_at      = fields.Datetime(string='وقت الرفض', copy=False, readonly=True)
 
+    # ── Critical care ────────────────────────────────────────────────────────
+    is_transfer = fields.Boolean(string='دخول عن طريق تحويل', default=False)
+
     # ── Nursing worklist ─────────────────────────────────────────────────────
     visit_id = fields.Many2one('saycare.visit', string='الزيارة', copy=False)
     worklist_stage = fields.Selection([

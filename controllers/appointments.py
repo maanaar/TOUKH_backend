@@ -34,14 +34,26 @@ def _appt_dict(a):
         'visit_state':       a.visit_id.state if a.visit_id else None,
         'financial_class':   getattr(a.visit_id, 'financial_class', '') or '' if a.visit_id else '',
         'payment_method':    getattr(a.visit_id, 'payment_method', 'cash') or 'cash' if a.visit_id else 'cash',
+        'department_id':     a.department_id.id if a.department_id else None,
+        'department_name':   a.department_id.display_name if a.department_id else '',
+        'department_care':   bool(a.department_id.care) if a.department_id else False,
         'notes':             a.notes or '',
     }
+
+
+def _query_bool(value):
+    normalized = str(value or '').strip().lower()
+    if normalized in {'1', 'true', 'yes', 'y', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'n', 'off'}:
+        return False
+    return None
 
 
 class AppointmentController(http.Controller):
 
     @http.route('/saycare/api/appointments', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, date='', doctor_id='', specialty_id='', state='', **kw):
+    def get_all(self, date='', doctor_id='', specialty_id='', state='', care='', **kw):
         domain = []
         if date:
             domain.append(('date', '=', date))
@@ -51,6 +63,13 @@ class AppointmentController(http.Controller):
             domain.append(('specialty_id', '=', int(specialty_id)))
         if state:
             domain.append(('state', '=', state))
+        care_filter = _query_bool(care)
+        if care_filter is True:
+            domain.append(('department_id.care', '=', True))
+        elif care_filter is False:
+            domain.append('|')
+            domain.append(('department_id', '=', False))
+            domain.append(('department_id.care', '=', False))
         records = request.env['saycare.appointment'].sudo().search(
             domain, order='date asc, start_time asc'
         )
@@ -81,6 +100,8 @@ class AppointmentController(http.Controller):
             'visit_type':   body.get('visit_type', 'outpatient'),
             'notes':        body.get('notes', ''),
         }
+        if body.get('department_id'):
+            vals['department_id'] = int(body['department_id'])
         rec = request.env['saycare.appointment'].sudo().create(vals)
         return _json(_appt_dict(rec), 201)
 
