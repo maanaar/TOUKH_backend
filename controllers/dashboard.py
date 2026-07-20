@@ -235,11 +235,39 @@ class DashboardController(http.Controller):
         })
 
     @http.route('/saycare/api/dashboard/critical-care', type='http', auth='user', methods=['GET'], csrf=False)
-    def critical_care(self, department_id='', **kw):
+    def critical_care(self, department_id='', date_from='', date_to='', **kw):
         env = request.env
 
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end   = today_start + timedelta(days=1)
+        # No date_from/date_to → unrestricted (matches clinics-overview / visits-today convention).
+        range_start = range_end = None
+        try:
+            if date_from:
+                range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+            if date_to:
+                range_end = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        except ValueError:
+            range_start = range_end = None
+
+        def _effective_dt(a):
+            # The timestamp a record is filtered by: prefer the actual admission moment,
+            # fall back to when it was booked (pending_admission cases have no admitted_at yet).
+            if a.admitted_at:
+                return a.admitted_at
+            if a.booking_datetime:
+                return a.booking_datetime
+            if a.admission_date:
+                return datetime.combine(a.admission_date, datetime.min.time())
+            return None
+
+        def _in_range(a):
+            dt = _effective_dt(a)
+            if not dt:
+                return False
+            if range_start and dt < range_start:
+                return False
+            if range_end and dt > range_end:
+                return False
+            return True
 
         GENERAL_CONDITION_LABEL = {
             'stable':           'مستقر',
@@ -249,7 +277,6 @@ class DashboardController(http.Controller):
         }
 
         Department = env['hospital.inpatient.department'].sudo()
-        Room       = env['hospital.room'].sudo()
         Bed        = env['hospital.bed'].sudo()
         Admission  = env['saycare.admission.request'].sudo()
         Assessment = env['saycare.inpatient.nursing.assessment'].sudo()
@@ -266,8 +293,10 @@ class DashboardController(http.Controller):
         for dept in departments:
             image_url = f'/web/image/hospital.inpatient.department/{dept.id}/image' if dept.image else ''
 
-            rooms = Room.search([('department_id', '=', dept.id), ('active', '=', True)])
-            beds  = Bed.search([('room_id', 'in', rooms.ids), ('active', '=', True)]) if rooms else Bed.browse()
+            # hospital.bed.department_id is chosen manually and is not always the same as
+            # room_id.department_id (a bed can be reassigned to a unit independently of its
+            # physical room) — filter on it directly, matching /saycare/api/beds elsewhere.
+            beds = Bed.search([('department_id', '=', dept.id), ('active', '=', True)])
 
             bed_total     = len(beds)
             occupied_beds = beds.filtered(lambda b: b.bed_status == 'occupied')
@@ -278,27 +307,36 @@ class DashboardController(http.Controller):
 
             # A care=true department is tracked from the moment a request targets it —
             # pending_admission cases show up here immediately, not only once admitted.
-            current = Admission.search([
+            current_all = Admission.search([
                 ('department_id', '=', dept.id),
                 ('status', 'in', ['admitted', 'pending_admission']),
             ])
+            # The unit page's patient list/counts are scoped to the selected date range.
+            current = current_all.filtered(_in_range) if (range_start or range_end) else current_all
+
             assessments = Assessment.search([('admission_request_id', 'in', current.ids)])
             condition_by_admission = {a.admission_request_id.id: a.general_condition for a in assessments}
 
             critical_count = sum(
                 1 for a in current if condition_by_admission.get(a.id) == 'critical'
             )
-            admitted_today = current.filtered(
-                lambda a: a.admitted_at and today_start <= a.admitted_at < today_end
-            )
-            admissions_today = sum(1 for a in admitted_today if not a.is_transfer)
-            transfers_today  = sum(1 for a in admitted_today if a.is_transfer)
+            # Admissions/transfers in the selected period are queried independently of the
+            # live census — a patient admitted and since discharged must still count here,
+            # otherwise the date filter would only ever reflect currently-active patients.
+            admitted_in_range_domain = [('department_id', '=', dept.id), ('admitted_at', '!=', False)]
+            if range_start:
+                admitted_in_range_domain.append(('admitted_at', '>=', str(range_start)))
+            if range_end:
+                admitted_in_range_domain.append(('admitted_at', '<=', str(range_end)))
+            admitted_in_range = Admission.search(admitted_in_range_domain)
+            admissions_today = sum(1 for a in admitted_in_range if not a.is_transfer)
+            transfers_today  = sum(1 for a in admitted_in_range if a.is_transfer)
             pending_count = sum(1 for a in current if a.status == 'pending_admission')
 
             patients = [{
                 'admissionId':            a.id,
                 'patientName':            a.patient_name or a.patient_id.display_name or '—',
-                'patientMrn':             a.patient_mrn or '',
+                'patientMrn':             a.patient_mrn or a.file_number or '',
                 'inpatientBookingNumber': a.inpatient_booking_number or '',
                 'roomName':               a.room_id.display_name if a.room_id else '',
                 'bedName':                a.bed_id.display_name if a.bed_id else '—',
