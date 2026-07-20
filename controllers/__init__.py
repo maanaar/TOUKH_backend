@@ -22,6 +22,7 @@ from . import (
     inpatient,
     stock,
     government_expense,
+    internal_decisions,
     refund_requests,
     admission_requests,
     inpatient_nursing,
