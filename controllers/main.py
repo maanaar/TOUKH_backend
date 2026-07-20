@@ -308,6 +308,7 @@ class ProductController(http.Controller):
                 # ── identity ──────────────────────────────────────────────
                 'id':                       rec.id,
                 'name':                     rec.name,
+                'name_en':                  rec.name_en or '',
                 'default_code':             rec.default_code or '',
                 'barcode':                  rec.barcode or '',
                 'description':              rec.description or '',
@@ -381,8 +382,9 @@ class ProductController(http.Controller):
         """Lightweight product search for dropdowns — returns only the fields needed."""
         domain = [('active', '=', True)]
         if term:
-            domain += ['|', '|', '|',
+            domain += ['|', '|', '|', '|',
                 ('name', 'ilike', term),
+                ('name_en', 'ilike', term),
                 ('default_code', 'ilike', term),
                 ('categ_id.name', 'ilike', term),
                 ('categ_id.name_ar', 'ilike', term),
@@ -421,6 +423,7 @@ class ProductController(http.Controller):
         items = [{
             'id':                rec.id,
             'name':              rec.name,
+            'name_en':           rec.name_en or '',
             'default_code':      rec.default_code or '',
             'categ_id':          rec.categ_id.id if rec.categ_id else None,
             'categ_name':        rec.categ_id.complete_name if rec.categ_id else '',
