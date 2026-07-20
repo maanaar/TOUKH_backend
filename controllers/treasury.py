@@ -200,6 +200,16 @@ class TreasuryController(http.Controller):
             return _json({'error': 'invoice must be posted before refunding'}, 400)
 
         # ── this specific invoice can only be refunded once ───────────────────
+        # Row-lock the invoice for the rest of this transaction before checking:
+        # without this, two concurrent refund requests for the same invoice
+        # (double-click across tabs, a retried request) could both pass the
+        # "already refunded?" check before either one's credit note commits,
+        # producing two credit notes for one invoice. The lock makes the second
+        # request wait until the first transaction commits (or rolls back), by
+        # which point its own check will correctly see the first refund.
+        request.env.cr.execute(
+            "SELECT id FROM account_move WHERE id = %s FOR UPDATE", (inv.id,)
+        )
         already_refunded = request.env['account.move'].sudo().search_count([
             ('reversed_entry_id', '=', inv.id),
             ('move_type', '=', 'out_refund'),
@@ -244,20 +254,119 @@ class TreasuryController(http.Controller):
             'reversed_entry_id':  inv.id,
             'invoice_line_ids':   line_vals,
         })
-        refund.action_post()
 
-        # ── register payment for cash refunds — via the standard Register
-        # Payment wizard (same mechanism invoices.py uses for invoice payments)
-        # so this shows up as a real account.payment, not just a reconciled
-        # manual journal entry.
+        # ── full-refund native reversal ────────────────────────────────────────
+        # Only attempted for a FULL refund (ratio >= 1) of an already-paid
+        # invoice — a partial refund genuinely isn't "reversed", it's still
+        # partially paid, so the invoice correctly stays 'paid'/'partial' there.
+        # Standard Odoo "Reverse" behavior: unreconcile the invoice from its
+        # existing payment first, so the credit note's own auto-reconcile-on-post
+        # links against the INVOICE itself (payment_state -> 'reversed' natively)
+        # instead of against a brand-new payment. That leaves the original
+        # payment's own line orphaned (money already in hand, unmatched to
+        # anything) — which then gets refunded back out via a fresh outbound
+        # payment reconciled against that orphaned line.
         #
-        # action_post() above may have already auto-reconciled this credit
-        # note against the original invoice's own receivable line (e.g. when
-        # that invoice was never actually paid — there's nothing to hand back
-        # in cash, the credit note just voids it). In that case amount_residual
-        # is already 0 and there is nothing left to register a payment for.
-        # ───────────────────────────────────────────────────────────────────
-        if method == 'cash' and refund.amount_residual:
+        # The unreconcile + post + reconcile + verify sequence is wrapped in a
+        # SINGLE savepoint so it's all-or-nothing: if anything doesn't behave
+        # the way a normal Odoo accounting setup would (unexpected reconciliation
+        # shape, missing method on this Odoo version, etc.), the entire attempt
+        # rolls back together — including the unreconcile step — leaving the
+        # invoice exactly as it was (still reconciled/paid with its original
+        # payment) instead of half-broken, and we fall through to the
+        # already-proven-safe path below.
+        orphaned_payment_lines = request.env['account.move.line']
+        native_reversal_done = False
+        if ratio >= 1.0 and inv.payment_state == 'paid':
+            try:
+                with request.env.cr.savepoint():
+                    inv_ar_lines = inv.line_ids.filtered(
+                        lambda l: l.account_id.account_type == 'asset_receivable' and l.reconciled
+                    )
+                    if not inv_ar_lines:
+                        raise ValueError('no reconciled receivable line found on invoice')
+
+                    full_recs = inv_ar_lines.full_reconcile_id
+                    group = full_recs.reconciled_line_ids if full_recs else inv_ar_lines
+                    candidate_orphans = group - inv_ar_lines
+                    group.remove_move_reconcile()
+
+                    refund.action_post()
+                    inv.invalidate_recordset()
+                    if inv.payment_state != 'reversed':
+                        # action_post()'s own auto-reconcile didn't catch it —
+                        # finish the job manually against the now-open invoice line.
+                        credit_ar = refund.line_ids.filtered(
+                            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                        )
+                        inv_ar_open = inv.line_ids.filtered(
+                            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                        )
+                        if credit_ar and inv_ar_open:
+                            (credit_ar | inv_ar_open).reconcile()
+                        inv.invalidate_recordset()
+                    if inv.payment_state != 'reversed':
+                        raise ValueError('native reversal did not settle as expected')
+
+                    orphaned_payment_lines = candidate_orphans
+                    native_reversal_done = True
+            except Exception:
+                orphaned_payment_lines = request.env['account.move.line']
+                native_reversal_done = False
+                refund.invalidate_recordset()
+
+        if not native_reversal_done and refund.state != 'posted':
+            refund.action_post()
+
+        # ── give the cash back ──────────────────────────────────────────────
+        # Two different situations end up here:
+        #  - Native reversal succeeded: the credit note is already fully spent
+        #    reconciling with the invoice, so refund.amount_residual is 0 — the
+        #    money to hand back is sitting on the now-orphaned original payment
+        #    line instead, refunded via a fresh outbound payment reconciled
+        #    against THAT.
+        #  - Native reversal wasn't attempted/didn't hold: falls back to the
+        #    original behavior — register a payment directly against the
+        #    credit note itself (its own amount_residual).
+        if method == 'cash' and native_reversal_done and orphaned_payment_lines:
+            cash_journal = request.env['account.journal'].sudo().search([
+                ('type', '=', 'cash'),
+                ('company_id', '=', refund.company_id.id),
+            ], limit=1)
+            if not cash_journal:
+                cash_journal = request.env['account.journal'].sudo().search([
+                    ('type', 'in', ['bank', 'cash']),
+                    ('company_id', '=', refund.company_id.id),
+                ], limit=1)
+            if cash_journal:
+                refund_payment = request.env['account.payment'].sudo().create({
+                    'payment_type': 'outbound',
+                    'partner_type': 'customer',
+                    'partner_id':   inv.partner_id.id,
+                    'amount':       amount,
+                    'journal_id':   cash_journal.id,
+                    'date':         today,
+                    'memo':         reason or f'استرداد نقدي من {inv.name}',
+                })
+                refund_payment.action_post()
+                new_pay_ar = refund_payment.move_id.line_ids.filtered(
+                    lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                )
+                open_orphans = orphaned_payment_lines.filtered(lambda l: not l.reconciled)
+                if new_pay_ar and open_orphans:
+                    (new_pay_ar | open_orphans).reconcile()
+        elif method == 'cash' and refund.amount_residual:
+            # ── register payment for cash refunds — via the standard Register
+            # Payment wizard (same mechanism invoices.py uses for invoice payments)
+            # so this shows up as a real account.payment, not just a reconciled
+            # manual journal entry.
+            #
+            # action_post() above may have already auto-reconciled this credit
+            # note against the original invoice's own receivable line (e.g. when
+            # that invoice was never actually paid — there's nothing to hand back
+            # in cash, the credit note just voids it). In that case amount_residual
+            # is already 0 and there is nothing left to register a payment for.
+            # ───────────────────────────────────────────────────────────────────
             cash_journal = request.env['account.journal'].sudo().search([
                 ('type', '=', 'cash'),
                 ('company_id', '=', refund.company_id.id),
