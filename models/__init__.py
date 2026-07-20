@@ -22,6 +22,7 @@ from . import (
     hospital_accommodation_grade,
     hospital_bed,
     saycare_government_expense,
+    saycare_internal_decision,
     saycare_refund_request,
     saycare_admission_request,
     saycare_inpatient_nursing_assessment,
