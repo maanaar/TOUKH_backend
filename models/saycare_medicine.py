@@ -191,7 +191,7 @@ class ProductTemplateMedicine(models.Model):
     drug_interactions = fields.Text(string='التفاعلات الدوائية')
 
     # ── 9  التصنيف (شاشة الأصناف — عام) ────────────────────────────────────────
-    name_en        = fields.Char(string='الاسم الإنجليزي')
+    name_en        = fields.Char(string='english name')
     main_category  = fields.Selection([
         ('drugs',       'أدوية'),
         ('consumables', 'مستلزمات'),

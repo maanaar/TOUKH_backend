@@ -309,6 +309,8 @@ class ProductController(http.Controller):
                 'id':                       rec.id,
                 'name':                     rec.name,
                 'name_en':                  rec.name_en or '',
+                'generic_name':             rec.generic_name or '',
+                'medicine_concentration':   rec.medicine_concentration or '',
                 'default_code':             rec.default_code or '',
                 'barcode':                  rec.barcode or '',
                 'description':              rec.description or '',
