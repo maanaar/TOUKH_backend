@@ -122,6 +122,14 @@ class ResPartnerPatient(models.Model):
         help='تحديد هذا الحقل يجعل الشريك يظهر في قائمة الشركة المصنّعة',
     )
 
+    @api.onchange('first_name', 'second_name', 'third_name', 'last_name')
+    def _onchange_patient_name_parts(self):
+        full_name = ' '.join(p for p in (
+            self.first_name, self.second_name, self.third_name, self.last_name,
+        ) if p)
+        if full_name:
+            self.name = full_name
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:

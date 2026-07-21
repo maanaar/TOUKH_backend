@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       المرضى (Patients) — quick registration screen on res.partner
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <record id="view_saycare_patient_list" model="ir.ui.view">
+    <field name="name">saycare.patient.list</field>
+    <field name="model">res.partner</field>
+    <field name="arch" type="xml">
+      <list string="المرضى">
+        <field name="name" string="الاسم رباعي"/>
+        <field name="mrn" string="MRN / رقم الملف الطبي" class="fw-bold"/>
+        <field name="patient_type" string="الجنسية" widget="badge"
+               decoration-info="patient_type == 'normal'"
+               decoration-warning="patient_type == 'foreigner'"
+               decoration-danger="patient_type == 'unknown'"
+               decoration-muted="patient_type == 'baby'"/>
+        <field name="id_number" string="الرقم القومي / رقم الباسبور"/>
+        <field name="phone" string="رقم الموبايل" widget="phone"/>
+        <field name="governorate" string="المحافظة"/>
+        <field name="city" string="المدينة / المركز"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_saycare_patient_form" model="ir.ui.view">
+    <field name="name">saycare.patient.form</field>
+    <field name="model">res.partner</field>
+    <field name="arch" type="xml">
+      <form string="مريض">
+        <sheet>
+          <field name="name" invisible="1"/>
+
+          <div class="oe_title">
+            <label for="first_name" string="الاسم رباعي"/>
+            <h1 class="d-flex flex-wrap gap-2">
+              <field name="first_name"  class="oe_inline" placeholder="الاسم الأول"/>
+              <field name="second_name" class="oe_inline" placeholder="الاسم الثاني"/>
+              <field name="third_name"  class="oe_inline" placeholder="الاسم الثالث"/>
+              <field name="last_name"   class="oe_inline" placeholder="اسم العائلة"/>
+            </h1>
+          </div>
+
+          <group>
+            <group string="بيانات الهوية">
+              <field name="mrn" string="MRN / رقم الملف الطبي" readonly="1" class="fw-bold text-primary"/>
+              <field name="patient_type" string="الجنسية" widget="radio" options="{'horizontal': true}"/>
+              <field name="id_number" string="الرقم القومي / رقم الباسبور"
+                     placeholder="أدخل الرقم القومي أو رقم الباسبور"/>
+            </group>
+            <group string="التواصل والعنوان">
+              <field name="phone" string="رقم الموبايل" widget="phone"/>
+              <field name="governorate" string="المحافظة"/>
+              <field name="city"        string="المدينة / المركز"/>
+              <field name="street"      string="العنوان" colspan="2"
+                     placeholder="العنوان بالتفصيل..."/>
+            </group>
+          </group>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_saycare_patient" model="ir.actions.act_window">
+    <field name="name">المرضى</field>
+    <field name="res_model">res.partner</field>
+    <field name="view_mode">list,form</field>
+    <field name="domain">[('is_patient', '=', True)]</field>
+    <field name="context">{'default_is_patient': True}</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiling_face">أضف مريض جديد</p>
+    </field>
+  </record>
+
+  <record id="action_saycare_patient_view_list" model="ir.actions.act_window.view">
+    <field name="sequence">1</field>
+    <field name="view_mode">list</field>
+    <field name="view_id" ref="view_saycare_patient_list"/>
+    <field name="act_window_id" ref="action_saycare_patient"/>
+  </record>
+
+  <record id="action_saycare_patient_view_form" model="ir.actions.act_window.view">
+    <field name="sequence">2</field>
+    <field name="view_mode">form</field>
+    <field name="view_id" ref="view_saycare_patient_form"/>
+    <field name="act_window_id" ref="action_saycare_patient"/>
+  </record>
+
+  <menuitem id="menu_saycare_patient"
+            name="المرضى"
+            parent="menu_saycare_config"
+            action="action_saycare_patient"
+            sequence="5"/>
+
+</odoo>

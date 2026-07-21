@@ -38,6 +38,7 @@
         'views/product_template_inherit.xml',
         'views/partner_inherit.xml',
         'views/saycare_clinic_views.xml',
+        'views/saycare_patient_views.xml',
         'views/hr_employee_inherit.xml',
         'views/account_move_inherit.xml',
         'views/saycare_medicine_views.xml',
