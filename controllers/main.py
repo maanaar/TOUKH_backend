@@ -302,6 +302,7 @@ class ProductController(http.Controller):
             else:
                 domain = [('id', '=', 0)]  # unknown location — no products, not "all products"
         records = request.env['product.template'].sudo().search(domain)
+        all_uoms = request.env['uom.uom'].sudo().search([])
         data = []
         for rec in records:
             data.append({
@@ -311,6 +312,8 @@ class ProductController(http.Controller):
                 'name_en':                  rec.name_en or '',
                 'generic_name':             rec.generic_name or '',
                 'medicine_concentration':   rec.medicine_concentration or '',
+                'primary_route':            rec.primary_route or '',
+                'primary_route_label':      dict(rec._fields['primary_route'].selection).get(rec.primary_route, ''),
                 'default_code':             rec.default_code or '',
                 'barcode':                  rec.barcode or '',
                 'description':              rec.description or '',
@@ -338,6 +341,19 @@ class ProductController(http.Controller):
                 'uom_medium_name': rec.uom_mediumm.name if rec.uom_mediumm else '',
                 # 'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
                 # 'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
+                # Every unit of measure in the system, selectable for this product —
+                # defaults to product.uom_id. Price is list_price converted through
+                # uom.uom._compute_price against the product's base uom_id; units that
+                # don't share a reference with uom_id (a different measurement family)
+                # keep the unconverted list_price since their factors aren't comparable.
+                'uom_options': [{
+                    'id':    uom.id,
+                    'name':  uom.name,
+                    'price': (
+                        rec.uom_id._compute_price(rec.list_price, uom)
+                        if rec.uom_id._has_common_reference(uom) else rec.list_price
+                    ),
+                } for uom in all_uoms] if rec.uom_id else [],
                 # ── pricing ───────────────────────────────────────────────
                 'list_price':               rec.list_price,
                 'standard_price':           rec.standard_price,

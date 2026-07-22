@@ -11,7 +11,8 @@
     <field name="arch" type="xml">
       <list string="المرضى">
         <field name="name" string="الاسم رباعي"/>
-        <field name="mrn" string="MRN / رقم الملف الطبي" class="fw-bold"/>
+        <field name="mrn" string="MRN" class="fw-bold"/>
+        <field name="x_file_number" string="رقم الملف الطبي" class="fw-bold"/>
         <field name="patient_type" string="الجنسية" widget="badge"
                decoration-info="patient_type == 'normal'"
                decoration-warning="patient_type == 'foreigner'"
@@ -45,7 +46,8 @@
 
           <group>
             <group string="بيانات الهوية">
-              <field name="mrn" string="MRN / رقم الملف الطبي" readonly="1" class="fw-bold text-primary"/>
+              <field name="mrn" string="MRN" readonly="1" class="fw-bold text-primary"/>
+              <field name="x_file_number" string="رقم الملف الطبي"/>
               <field name="patient_type" string="الجنسية" widget="radio" options="{'horizontal': true}"/>
               <field name="id_number" string="الرقم القومي / رقم الباسبور"
                      placeholder="أدخل الرقم القومي أو رقم الباسبور"/>

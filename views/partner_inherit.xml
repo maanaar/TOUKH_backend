@@ -21,7 +21,7 @@
       <xpath expr="//sheet/group[1]" position="after">
         <group string="بيانات المريض" name="patient_main_fields">
           <group>
-            <field name="mrn"       string="Medical File"/>
+            <field name="mrn"       string="MRN"/>
             <field name="dob"       string="Birth Date"/>
             <field name="gender"    string="Gender"/>
             <field name="id_type"   string="Identity Type"/>
@@ -40,7 +40,8 @@
 
           <group string="الهوية">
             <group>
-              <field name="mrn"       string="رقم الملف الطبي (MRN)" readonly="1"/>
+              <field name="mrn"         string="MRN" readonly="1"/>
+              <field name="x_file_number" string="رقم الملف الطبي"/>
               <field name="id_type"   string="نوع الهوية"/>
               <field name="id_number" string="رقم الهوية / جواز السفر"/>
             </group>

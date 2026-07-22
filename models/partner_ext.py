@@ -31,6 +31,9 @@ class ResPartnerPatient(models.Model):
     # ── Medical Record Number ─────────────────────────────────────────────────
     mrn = fields.Char(string='MRN', copy=False, index=True)
 
+    # ── Medical File Number ───────────────────────────────────────────────────
+    x_file_number = fields.Char(string='رقم الملف الطبي', copy=False, index=True)
+
     # ── Inpatient entry permit (إذن الدخول) ────────────────────────────────────
     x_entry_permit_no = fields.Char(string='إذن الدخول', copy=False, index=True)
 

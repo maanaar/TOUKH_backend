@@ -25,7 +25,7 @@ class SaycareAdmissionRequest(models.Model):
 
     # ── Patient snapshot ──────────────────────────────────────────────────────
     patient_name    = fields.Char(string='اسم المريض')
-    file_number     = fields.Char(string='رقم الملف')
+    x_file_number     = fields.Char(string='رقم الملف')
     entry_permit_no = fields.Char(string='إذن الدخول')
     national_id     = fields.Char(string='الرقم القومي')
     opd_visit_number = fields.Char(string='رقم زيارة الخارجي')
