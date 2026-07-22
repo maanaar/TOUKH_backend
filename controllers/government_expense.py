@@ -208,13 +208,74 @@ class GovernmentExpenseController(http.Controller):
         if not rec.exists():
             return _json({'error': 'not found'}, status=404)
         body = _parse_body()
-        vals = _decision_vals(body, env)
-        if vals:
+
+        requested_page_no = None
+        if 'pageNo' in body:
             try:
-                with env.cr.savepoint():
+                requested_page_no = int(
+                    body.get('pageNo')
+                )
+            except (TypeError, ValueError):
+                return _json(
+                    {
+                        'error': (
+                            'رقم الصفحة يجب أن يكون '
+                            'رقماً صحيحاً أكبر من صفر'
+                        ),
+                    },
+                    status=400,
+                )
+
+            if requested_page_no <= 0:
+                return _json(
+                    {
+                        'error': (
+                            'رقم الصفحة يجب أن يكون '
+                            'رقماً صحيحاً أكبر من صفر'
+                        ),
+                    },
+                    status=400,
+                )
+
+        vals = _decision_vals(body, env)
+        vals.pop('page_no', None)
+
+        try:
+            with env.cr.savepoint():
+                if vals:
                     rec.write(vals)
-            except ValidationError as e:
-                return _json({'error': str(e)}, status=400)
+
+                if requested_page_no is not None:
+                    if rec.patient_id:
+                        patient_decisions = env[
+                            'saycare.government.expense.decision'
+                        ].search([
+                            (
+                                'patient_id',
+                                '=',
+                                rec.patient_id.id,
+                            ),
+                        ])
+                    else:
+                        patient_decisions = rec
+
+                    # رقم الصفحة قاعدة على مستوى المريض:
+                    # تحديث قرار واحد يحدث كل قرارات المريض
+                    # ومعاملاتها القديمة في نفس العملية.
+                    patient_decisions.write({
+                        'page_no': requested_page_no,
+                    })
+                    patient_decisions.mapped(
+                        'transaction_ids'
+                    ).write({
+                        'page_no': requested_page_no,
+                    })
+        except ValidationError as e:
+            return _json(
+                {'error': str(e)},
+                status=400,
+            )
+
         return _json(rec._to_dict())
 
     @http.route('/saycare/api/government-expense/decisions/<int:decision_id>',
