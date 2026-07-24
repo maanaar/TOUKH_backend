@@ -31,6 +31,9 @@ class ResPartnerPatient(models.Model):
     # ── Medical Record Number ─────────────────────────────────────────────────
     mrn = fields.Char(string='MRN', copy=False, index=True)
 
+    # ── Medical File Number ───────────────────────────────────────────────────
+    x_file_number = fields.Char(string='رقم الملف الطبي', copy=False, index=True)
+
     # ── Inpatient entry permit (إذن الدخول) ────────────────────────────────────
     x_entry_permit_no = fields.Char(string='إذن الدخول', copy=False, index=True)
 
@@ -121,6 +124,14 @@ class ResPartnerPatient(models.Model):
         default=False,
         help='تحديد هذا الحقل يجعل الشريك يظهر في قائمة الشركة المصنّعة',
     )
+
+    @api.onchange('first_name', 'second_name', 'third_name', 'last_name')
+    def _onchange_patient_name_parts(self):
+        full_name = ' '.join(p for p in (
+            self.first_name, self.second_name, self.third_name, self.last_name,
+        ) if p)
+        if full_name:
+            self.name = full_name
 
     @api.model_create_multi
     def create(self, vals_list):
