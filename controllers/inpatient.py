@@ -112,6 +112,7 @@ def _bed_dict(r):
         'bed_no':               r.bed_no or '',
         'room_id':              r.room_id.id if r.room_id else None,
         'room_name':            r.room_id.display_name if r.room_id else '',
+        'room_type':            r.room_id.room_type if r.room_id else '',
         'floor_id':             r.floor_id.id if r.floor_id else None,
         'floor_name':           r.floor_id.display_name if r.floor_id else '',
         'department_id':        r.department_id.id if r.department_id else None,
@@ -278,7 +279,8 @@ class RoomController(http.Controller):
         if room_status:
             domain.append(('room_status', '=', room_status))
         if room_type:
-            domain.append(('room_type', '=', room_type))
+            types = [t.strip() for t in room_type.split(',') if t.strip()]
+            domain.append(('room_type', 'in', types) if len(types) > 1 else ('room_type', '=', types[0]))
         care_filter = _query_bool(care)
         if care_filter is True:
             domain.append(('department_id.care', '=', True))
@@ -447,7 +449,8 @@ class BedController(http.Controller):
         if grade_id:
             domain.append(('grade_id', '=', int(grade_id)))
         if room_type:
-            domain.append(('room_id.room_type', '=', room_type))
+            types = [t.strip() for t in room_type.split(',') if t.strip()]
+            domain.append(('room_id.room_type', 'in', types) if len(types) > 1 else ('room_id.room_type', '=', types[0]))
         care_filter = _query_bool(care)
         if care_filter is True:
             domain.append(('department_id.care', '=', True))

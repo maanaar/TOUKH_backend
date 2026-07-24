@@ -73,3 +73,15 @@ access_saycare_inpatient_nursing_icu_lab_entry_user,saycare.inpatient.nursing.ic
 access_saycare_inpatient_nursing_icu_lab_entry_admin,saycare.inpatient.nursing.icu.lab.entry admin,model_saycare_inpatient_nursing_icu_lab_entry,base.group_system,1,1,1,1
 access_saycare_inpatient_nursing_pressure_ulcer_entry_user,saycare.inpatient.nursing.pressure.ulcer.entry user,model_saycare_inpatient_nursing_pressure_ulcer_entry,base.group_user,1,1,1,0
 access_saycare_inpatient_nursing_pressure_ulcer_entry_admin,saycare.inpatient.nursing.pressure.ulcer.entry admin,model_saycare_inpatient_nursing_pressure_ulcer_entry,base.group_system,1,1,1,1
+
+access_saycare_resuscitation_user,saycare.resuscitation user,model_saycare_resuscitation,,1,1,1,0
+access_saycare_resuscitation_admin,saycare.resuscitation admin,model_saycare_resuscitation,base.group_system,1,1,1,1
+access_saycare_resuscitation_vital_user,saycare.resuscitation.vital user,model_saycare_resuscitation_vital,,1,1,1,0
+access_saycare_resuscitation_vital_admin,saycare.resuscitation.vital admin,model_saycare_resuscitation_vital,base.group_system,1,1,1,1
+access_saycare_resuscitation_timeline_user,saycare.resuscitation.timeline user,model_saycare_resuscitation_timeline,,1,1,1,0
+access_saycare_resuscitation_timeline_admin,saycare.resuscitation.timeline admin,model_saycare_resuscitation_timeline,base.group_system,1,1,1,1
+
+access_saycare_doctor_assessment_user,saycare.doctor.assessment user,model_saycare_doctor_assessment,,1,1,1,0
+access_saycare_doctor_assessment_admin,saycare.doctor.assessment admin,model_saycare_doctor_assessment,base.group_system,1,1,1,1
+access_saycare_doctor_assessment_request_user,saycare.doctor.assessment.request user,model_saycare_doctor_assessment_request,,1,1,1,0
+access_saycare_doctor_assessment_request_admin,saycare.doctor.assessment.request admin,model_saycare_doctor_assessment_request,base.group_system,1,1,1,1

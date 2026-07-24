@@ -28,4 +28,6 @@ from . import (
     saycare_inpatient_nursing_assessment,
     saycare_inpatient_nursing_sheets,
     saycare_geo,
+    saycare_resuscitation,
+    saycare_doctor_assessment,
 )

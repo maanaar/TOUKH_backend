@@ -29,4 +29,6 @@ from . import (
     inpatient_nursing_sheets,
     nursing_worklist,
     geo,
+    resuscitation,
+    doctor_assessment,
 )
