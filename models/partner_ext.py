@@ -126,7 +126,10 @@ class ResPartnerPatient(models.Model):
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get('is_patient') and not vals.get('mrn'):
-                vals['mrn'] = self._next_mrn()
+                if vals.get('patient_type') == 'unknown':
+                    vals['mrn'] = self._next_unknown_mrn()
+                else:
+                    vals['mrn'] = self._next_mrn()
         return super().create(vals_list)
 
     def _next_mrn(self):
@@ -139,3 +142,9 @@ class ResPartnerPatient(models.Model):
             if m:
                 return f'MRN{int(m.group(1)) + 1:06d}'
         return self.env['ir.sequence'].next_by_code('saycare.patient.mrn') or 'MRN000001'
+
+    def _next_unknown_mrn(self):
+        # Unidentified ER patients get a distinct UNKN-#### placeholder MRN so
+        # they're never confused with a real MRN — once staff later identify
+        # the patient, the record is updated with their real MRN/identity.
+        return self.env['ir.sequence'].next_by_code('saycare.patient.mrn.unknown') or 'UNKN-0001'

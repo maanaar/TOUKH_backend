@@ -32,6 +32,8 @@ def _appt_dict(a):
         'state':             a.state,
         'visit_id':          a.visit_id.id if a.visit_id else None,
         'visit_state':       a.visit_id.state if a.visit_id else None,
+        'visit_name':        a.visit_id.name if a.visit_id else '',
+        'visit_admission_date': str(a.visit_id.admission_date) if a.visit_id and a.visit_id.admission_date else None,
         'financial_class':   getattr(a.visit_id, 'financial_class', '') or '' if a.visit_id else '',
         'payment_method':    getattr(a.visit_id, 'payment_method', 'cash') or 'cash' if a.visit_id else 'cash',
         'department_id':     a.department_id.id if a.department_id else None,

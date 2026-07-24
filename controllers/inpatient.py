@@ -269,7 +269,7 @@ class RoomController(http.Controller):
     _model = 'hospital.room'
 
     @http.route('/saycare/api/rooms', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, floor_id='', department_id='', room_status='', care='', **kw):
+    def get_all(self, floor_id='', department_id='', room_status='', room_type='', care='', **kw):
         domain = [('active', '=', True)]
         if floor_id:
             domain.append(('floor_id', '=', int(floor_id)))
@@ -277,6 +277,8 @@ class RoomController(http.Controller):
             domain.append(('department_id', '=', int(department_id)))
         if room_status:
             domain.append(('room_status', '=', room_status))
+        if room_type:
+            domain.append(('room_type', '=', room_type))
         care_filter = _query_bool(care)
         if care_filter is True:
             domain.append(('department_id.care', '=', True))
@@ -432,7 +434,7 @@ class BedController(http.Controller):
     _model = 'hospital.bed'
 
     @http.route('/saycare/api/beds', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, room_id='', floor_id='', department_id='', bed_status='', grade_id='', care='', **kw):
+    def get_all(self, room_id='', floor_id='', department_id='', bed_status='', grade_id='', room_type='', care='', **kw):
         domain = [('active', '=', True)]
         if room_id:
             domain.append(('room_id', '=', int(room_id)))
@@ -444,6 +446,8 @@ class BedController(http.Controller):
             domain.append(('bed_status', '=', bed_status))
         if grade_id:
             domain.append(('grade_id', '=', int(grade_id)))
+        if room_type:
+            domain.append(('room_id.room_type', '=', room_type))
         care_filter = _query_bool(care)
         if care_filter is True:
             domain.append(('department_id.care', '=', True))

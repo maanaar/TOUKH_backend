@@ -36,6 +36,18 @@ def _visit_dict(v, full=False):
         'payment_method':  v.payment_method  or 'cash',
         'chief_complaint': v.chief_complaint or '',
         'triage_notes':    v.triage_notes or '',
+        'arrival_mode':        v.arrival_mode or '',
+        'companion_name':      v.companion_name or '',
+        'consciousness_level': v.consciousness_level or '',
+        'skin_color':          v.skin_color or '',
+        'allergy_status':      v.allergy_status or '',
+        'neuro_response':      v.neuro_response or '',
+        'pain_scale':          v.pain_scale or 0,
+        'triage_color':        v.triage_color or '',
+        'room_id':             v.room_id.id if v.room_id else None,
+        'room_name':           v.room_id.room_no if v.room_id else '',
+        'bed_id':              v.bed_id.id if v.bed_id else None,
+        'bed_name':            v.bed_id.code if v.bed_id else '',
         'admission_date':  str(v.admission_date) if v.admission_date else None,
         'discharge_date':  str(v.discharge_date) if v.discharge_date else None,
         'patient_id':          v.patient_id.id if v.patient_id else None,
@@ -124,9 +136,12 @@ class VisitController(http.Controller):
             'financial_class': body.get('financial_class', ''),
             'payment_method':  body.get('payment_method', 'cash'),
             'chief_complaint': body.get('chief_complaint', ''),
+            'arrival_mode':    body.get('arrival_mode', ''),
+            'companion_name':  body.get('companion_name', ''),
             'specialty_id':    body.get('specialty_id'),
             'doctor_id':       body.get('doctor_id'),
             'notes':           body.get('notes', ''),
+            **({'admission_date': body['admission_date']} if body.get('admission_date') else {}),
             # financial details
             'decision_no':       body.get('decision_no', ''),
             'expiry_date':       body.get('expiry_date') or False,
@@ -351,6 +366,22 @@ class VisitController(http.Controller):
             vals['triage_notes'] = body['triage_notes']
         if body.get('chief_complaint'):
             vals['chief_complaint'] = body['chief_complaint']
+        if body.get('consciousness_level'):
+            vals['consciousness_level'] = body['consciousness_level']
+        if body.get('skin_color'):
+            vals['skin_color'] = body['skin_color']
+        if body.get('allergy_status'):
+            vals['allergy_status'] = body['allergy_status']
+        if body.get('neuro_response'):
+            vals['neuro_response'] = body['neuro_response']
+        if body.get('pain_scale') is not None:
+            vals['pain_scale'] = body['pain_scale']
+        if body.get('triage_color'):
+            vals['triage_color'] = body['triage_color']
+        if body.get('room_id'):
+            vals['room_id'] = body['room_id']
+        if body.get('bed_id'):
+            vals['bed_id'] = body['bed_id']
         if new_state == 'done':
             vals['discharge_date'] = DT.now()
         v.write(vals)

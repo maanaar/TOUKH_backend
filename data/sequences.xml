@@ -9,6 +9,14 @@
             <field name="number_next">1</field>
             <field name="number_increment">1</field>
         </record>
+        <record id="seq_saycare_visit_emergency" model="ir.sequence">
+            <field name="name">Emergency Visit</field>
+            <field name="code">saycare.visit.emergency</field>
+            <field name="prefix">ER-%(year)s-</field>
+            <field name="padding">6</field>
+            <field name="number_next">1</field>
+            <field name="number_increment">1</field>
+        </record>
         <record id="seq_saycare_appointment" model="ir.sequence">
             <field name="name">Appointment</field>
             <field name="code">saycare.appointment</field>
@@ -22,6 +30,14 @@
             <field name="code">saycare.patient.mrn</field>
             <field name="prefix">MRN</field>
             <field name="padding">6</field>
+            <field name="number_next">1</field>
+            <field name="number_increment">1</field>
+        </record>
+        <record id="seq_patient_mrn_unknown" model="ir.sequence">
+            <field name="name">Unknown Patient MRN</field>
+            <field name="code">saycare.patient.mrn.unknown</field>
+            <field name="prefix">UNKN-</field>
+            <field name="padding">4</field>
             <field name="number_next">1</field>
             <field name="number_increment">1</field>
         </record>

@@ -18,6 +18,7 @@ class SaycareVitalSigns(models.Model):
         ('slow',   'بطيء'),
     ], string='Respiratory Type', default='normal')
     o2_saturation    = fields.Float(string='O2 Saturation (%)')
+    random_glucose   = fields.Float(string='سكر عشوائي')
     weight           = fields.Float(string='Weight (kg)')
     height           = fields.Float(string='Height (cm)')
     bmi              = fields.Float(string='BMI', compute='_compute_bmi', store=True)

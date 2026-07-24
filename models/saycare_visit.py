@@ -58,6 +58,52 @@ class SaycareVisit(models.Model):
     chief_complaint = fields.Char(string='Chief Complaint')
     triage_notes    = fields.Text(string='Triage Notes')
 
+    # ── Emergency reception fields ─────────────────────────────────────────────
+    arrival_mode = fields.Selection([
+        ('walk_in',   'مشياً'),
+        ('ambulance', 'إسعاف'),
+        ('police',    'شرطة'),
+        ('referral',  'تحويل'),
+    ], string='طريقة الوصول')
+    companion_name = fields.Char(string='اسم المرافق')
+
+    # ── Triage assessment fields ────────────────────────────────────────────────
+    consciousness_level = fields.Selection([
+        ('alert',        'واعي ومتنبه'),
+        ('voice',        'يستجيب للصوت'),
+        ('pain',         'يستجيب للألم'),
+        ('unresponsive', 'غير مستجيب'),
+    ], string='درجة الوعي')
+    skin_color = fields.Selection([
+        ('normal',     'طبيعي'),
+        ('pale',       'شاحب'),
+        ('cyanotic',   'مزرق'),
+        ('flushed',    'محمر'),
+        ('jaundiced',  'مصفر'),
+    ], string='لون الجلد')
+    allergy_status = fields.Selection([
+        ('none',    'لا توجد حساسية معروفة'),
+        ('present', 'توجد حساسية'),
+        ('unknown', 'غير معروف'),
+    ], string='الحساسية')
+    neuro_response = fields.Selection([
+        ('normal',       'طبيعية'),
+        ('voice',        'يستجيب للصوت'),
+        ('pain',         'يستجيب للألم'),
+        ('unresponsive', 'غير مستجيب'),
+    ], string='الاستجابة العصبية')
+    pain_scale = fields.Integer(string='مقياس الألم')
+    triage_color = fields.Selection([
+        ('red',    'أحمر'),
+        ('yellow', 'أصفر'),
+        ('green',  'أخضر'),
+        ('blue',   'أزرق'),
+        ('white',  'أبيض'),
+    ], string='تصنيف الفرز')
+
+    room_id = fields.Many2one('hospital.room', string='الغرفة')
+    bed_id  = fields.Many2one('hospital.bed', string='السرير')
+
     medication_order_ids = fields.One2many('saycare.medication.order', 'visit_id',
                                            string='Medication Orders')
     vital_sign_ids       = fields.One2many('saycare.vital.signs',    'visit_id',
@@ -114,5 +160,6 @@ class SaycareVisit(models.Model):
     def create(self, vals_list):
         for vals in (vals_list if isinstance(vals_list, list) else [vals_list]):
             if vals.get('name', 'New') == 'New':
-                vals['name'] = self.env['ir.sequence'].next_by_code('saycare.visit') or 'New'
+                seq_code = 'saycare.visit.emergency' if vals.get('visit_type') == 'emergency' else 'saycare.visit'
+                vals['name'] = self.env['ir.sequence'].next_by_code(seq_code) or 'New'
         return super().create(vals_list)
