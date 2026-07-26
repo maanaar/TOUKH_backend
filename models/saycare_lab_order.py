@@ -11,6 +11,9 @@ class SaycareLabOrder(models.Model):
     visit_id     = fields.Many2one('saycare.visit',  ondelete='cascade',  index=True)
     patient_id   = fields.Many2one('res.partner',    ondelete='restrict', index=True,
                                    domain=[('is_patient', '=', True)])
+    service_id   = fields.Many2one('saycare.service', string='Service',
+                                   ondelete='set null', index=True)
+    request_group = fields.Char(string='Request Group', index=True, copy=False)
     test_name    = fields.Char(string='Test Name', required=True)
     test_code    = fields.Char(string='Test Code')
     priority     = fields.Selection([
