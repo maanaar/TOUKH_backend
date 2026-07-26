@@ -11,6 +11,7 @@ _logger = logging.getLogger(__name__)
 
 VALID_TRANSITIONS = {
     'pending_payment': ['waiting', 'cancelled'],
+    'diagnostic':      ['done', 'cancelled'],
     'waiting':      ['triage', 'doctor_queue', 'cancelled'],
     'triage':       ['doctor_queue', 'cancelled'],
     'doctor_queue': ['in_progress', 'cancelled'],
@@ -32,6 +33,8 @@ def _visit_dict(v, full=False):
         'name':            v.name or '',
         'state':           v.state,
         'visit_type':      v.visit_type or '',
+        'request_source':   v.request_source or 'reception',
+        'diagnostic_type':  v.diagnostic_type or '',
         'financial_class': v.financial_class or '',
         'payment_method':  v.payment_method  or 'cash',
         'chief_complaint': v.chief_complaint or '',
@@ -133,6 +136,8 @@ class VisitController(http.Controller):
         vals = {
             'patient_id':      body['patient_id'],
             'visit_type':      body.get('visit_type', 'outpatient'),
+            'request_source':   body.get('request_source', 'reception'),
+            'diagnostic_type':  body.get('diagnostic_type') or False,
             'financial_class': body.get('financial_class', ''),
             'payment_method':  body.get('payment_method', 'cash'),
             'chief_complaint': body.get('chief_complaint', ''),

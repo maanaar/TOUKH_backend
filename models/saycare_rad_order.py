@@ -10,6 +10,9 @@ class SaycareRadOrder(models.Model):
     visit_id            = fields.Many2one('saycare.visit',  ondelete='cascade',  index=True)
     patient_id          = fields.Many2one('res.partner',    ondelete='restrict', index=True,
                                           domain=[('is_patient', '=', True)])
+    service_id          = fields.Many2one('saycare.service', string='Service',
+                                          ondelete='set null', index=True)
+    request_group       = fields.Char(string='Request Group', index=True, copy=False)
     study_type          = fields.Char(string='Study Type', required=True)
     body_part           = fields.Char(string='Body Part')
     clinical_indication = fields.Text(string='Clinical Indication')

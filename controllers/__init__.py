@@ -6,6 +6,7 @@ from . import (
     patients,
     specialties,
     visits,
+    diagnostic_bookings,
     queues,
     vitals,
     clinical_notes,

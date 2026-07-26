@@ -18,7 +18,8 @@ class SaycareVisit(models.Model):
 
     state = fields.Selection([
         ('pending_payment', 'بانتظار السداد'),
-        ('waiting',      'في الانتظار'),
+        ('diagnostic',      'خدمة تشخيصية'),
+        ('waiting',         'في الانتظار'),
         ('triage',       'قيد التقييم'),
         ('doctor_queue', 'انتظار الطبيب'),
         ('in_progress',  'قيد الفحص'),
@@ -32,6 +33,18 @@ class SaycareVisit(models.Model):
         ('emergency',    'طوارئ'),
         ('consultation', 'استشارة'),
     ], string='نوع الزيارة', default='outpatient')
+
+    request_source = fields.Selection([
+        ('reception',         'الاستقبال'),
+        ('doctor',            'الطبيب'),
+        ('lab',               'المعمل'),
+        ('external_services', 'الخدمات الخارجية'),
+    ], string='مصدر الطلب', default='reception', index=True)
+
+    diagnostic_type = fields.Selection([
+        ('lab', 'تحاليل'),
+        ('rad', 'أشعة'),
+    ], string='نوع الخدمة التشخيصية', index=True)
 
     specialty_id = fields.Many2one('saycare.specialty', string='Specialty')
     doctor_id    = fields.Many2one('hr.employee', string='Doctor',
