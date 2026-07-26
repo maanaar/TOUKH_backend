@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import re
 from odoo import models, fields, api
 from odoo.exceptions import ValidationError
 
@@ -144,15 +143,12 @@ class ResPartnerPatient(models.Model):
         return super().create(vals_list)
 
     def _next_mrn(self):
-        last = self.search(
-            [('is_patient', '=', True), ('mrn', '!=', False)],
-            order='id desc', limit=1,
-        )
-        if last and last.mrn:
-            m = re.search(r'(\d+)$', last.mrn)
-            if m:
-                return f'MRN{int(m.group(1)) + 1:06d}'
-        return self.env['ir.sequence'].next_by_code('saycare.patient.mrn') or 'MRN000001'
+        # ir.sequence is the only atomic source here — reading the "last"
+        # patient's MRN and incrementing it in Python (the old approach) is a
+        # race: two near-simultaneous creates can both read the same "last"
+        # record and compute the same next MRN, producing real duplicates
+        # (confirmed in production data before this fix).
+        return self.env['ir.sequence'].sudo().next_by_code('saycare.patient.mrn') or 'MRN000001'
 
     def _next_unknown_mrn(self):
         # Unidentified ER patients get a distinct UNKN-#### placeholder MRN so
