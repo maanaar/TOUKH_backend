@@ -17,6 +17,14 @@
             <field name="number_next">1</field>
             <field name="number_increment">1</field>
         </record>
+        <record id="seq_saycare_visit_emergency_unknown" model="ir.sequence">
+            <field name="name">Emergency Visit - Unknown Patient</field>
+            <field name="code">saycare.visit.emergency.unknown</field>
+            <field name="prefix">UNKN-%(year)s-</field>
+            <field name="padding">6</field>
+            <field name="number_next">1</field>
+            <field name="number_increment">1</field>
+        </record>
         <record id="seq_saycare_appointment" model="ir.sequence">
             <field name="name">Appointment</field>
             <field name="code">saycare.appointment</field>

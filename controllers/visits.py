@@ -179,6 +179,10 @@ class VisitController(http.Controller):
         if dup:
             if service_ids:
                 dup.write({'service_ids': [(6, 0, service_ids)]})
+            if body.get('appointment_id'):
+                appt = request.env['saycare.appointment'].sudo().browse(body['appointment_id'])
+                if appt.exists() and not appt.visit_id:
+                    appt.write({'visit_id': dup.id, 'state': 'arrived'})
             # If this is a secondary clinic (skip_invoice), remove any old invoice
             if body.get('skip_invoice'):
                 old_inv = dup.invoice_id

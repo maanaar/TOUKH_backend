@@ -160,6 +160,10 @@ class SaycareVisit(models.Model):
     def create(self, vals_list):
         for vals in (vals_list if isinstance(vals_list, list) else [vals_list]):
             if vals.get('name', 'New') == 'New':
-                seq_code = 'saycare.visit.emergency' if vals.get('visit_type') == 'emergency' else 'saycare.visit'
+                seq_code = 'saycare.visit'
+                if vals.get('visit_type') == 'emergency':
+                    patient = self.env['res.partner'].browse(vals['patient_id']) if vals.get('patient_id') else None
+                    is_unknown = bool(patient and patient.patient_type == 'unknown')
+                    seq_code = 'saycare.visit.emergency.unknown' if is_unknown else 'saycare.visit.emergency'
                 vals['name'] = self.env['ir.sequence'].next_by_code(seq_code) or 'New'
         return super().create(vals_list)
