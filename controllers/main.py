@@ -2470,6 +2470,62 @@ class DashboardController(http.Controller):
 #  route prefix: /api/v1/purchase/cr-requisitions
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _cr_attachment_list(attachments):
+    return [{
+        'id':   a.id,
+        'name': a.name,
+        'url':  f'/web/content/{a.id}?download=true',
+    } for a in attachments]
+
+
+def _build_cr_requisition_vals(body, vals=None):
+    vals = vals if vals is not None else {}
+    if body.get('employee_id'):
+        employee = request.env['hr.employee'].sudo().browse(int(body['employee_id']))
+        if employee.exists():
+            vals['employee_id'] = employee.id
+    for field in ('reason_for_requisition', 'request_action',
+                  'requisition_date', 'requisition_deadline'):
+        if body.get(field):
+            vals[field] = body[field]
+    if body.get('department_id'):
+        dept = request.env['hr.department'].sudo().browse(int(body['department_id']))
+        if dept.exists():
+            vals['department_id'] = dept.id
+    if body.get('requisition_responsible'):
+        user = request.env['res.users'].sudo().browse(int(body['requisition_responsible']))
+        if user.exists():
+            vals['requisition_responsible'] = user.id
+    return vals
+
+
+def _build_cr_line_vals(lines):
+    line_vals_list = []
+    for i, line in enumerate(lines):
+        if not line.get('product_id'):
+            raise ValueError(f'lines[{i}]: product_id is required')
+        product = request.env['product.product'].sudo().browse(int(line['product_id']))
+        if not product.exists():
+            raise ValueError(f'lines[{i}]: product_id not found')
+
+        qty = float(line.get('qty', line.get('quantity', 1)))
+        line_val = {
+            'product_id': product.id,
+            'quantity':   qty,
+        }
+
+        if line.get('partner_id'):
+            partner = request.env['res.partner'].sudo().browse(int(line['partner_id']))
+            if partner.exists():
+                line_val['vendor_ids'] = [(4, partner.id)]
+
+        if line.get('request_action') or line.get('requisition_type'):
+            line_val['request_action'] = line.get('request_action') or line.get('requisition_type')
+
+        line_vals_list.append((0, 0, line_val))
+    return line_vals_list
+
+
 class CrRequisitionController(http.Controller):
 
     @http.route('/api/v1/purchase/cr-requisitions', type='http', auth='user', methods=['GET'], csrf=False)
@@ -2524,6 +2580,8 @@ class CrRequisitionController(http.Controller):
                     'internal_transfer_count':      internal_transfer_count,
                     'company_id':                   rec.company_id.id if rec.company_id else None,
                     'company_name':                 rec.company_id.name if rec.company_id else None,
+                    'request_document_ids':         _cr_attachment_list(rec.request_document_ids),
+                    'approval_document_ids':        _cr_attachment_list(rec.approval_document_ids),
                 })
             return http_response(data)
         except Exception as e:
@@ -2599,6 +2657,8 @@ class CrRequisitionController(http.Controller):
                 'internal_transfer_count':      internal_transfer_count,
                 'company_id':                   rec.company_id.id if rec.company_id else None,
                 'company_name':                 rec.company_id.name if rec.company_id else None,
+                'request_document_ids':        _cr_attachment_list(rec.request_document_ids),
+                'approval_document_ids':       _cr_attachment_list(rec.approval_document_ids),
                 'lines':                        lines,
             }
             return http_response(data)
@@ -2624,13 +2684,72 @@ class CrRequisitionUpdateController(http.Controller):
                 loc = request.env['stock.location'].sudo().browse(int(body['destination_location_id']))
                 if loc.exists():
                     vals['destination_location_id'] = loc.id
+
+            vals = _build_cr_requisition_vals(body, vals)
+
+            if body.get('lines'):
+                try:
+                    vals['requisition_lines'] = [(5, 0, 0)] + _build_cr_line_vals(body['lines'])
+                except ValueError as e:
+                    return http_response({'error': str(e)}, 400)
+
             if vals:
                 rec.write(vals)
             return http_response({
                 'id':                       rec.id,
+                'name':                     rec.name,
+                'state':                    rec.state,
                 'source_location_id':       rec.source_location_id.id if rec.source_location_id else None,
                 'destination_location_id':  rec.destination_location_id.id if rec.destination_location_id else None,
             })
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+_CR_ATTACHMENT_FIELDS = {
+    'request':  'request_document_ids',
+    'approval': 'approval_document_ids',
+}
+
+
+class CrRequisitionAttachmentController(http.Controller):
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/attachments', type='http', auth='user', methods=['POST'], csrf=False)
+    def add_attachment(self, rec_id, **kw):
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            body = json.loads(request.httprequest.data or '{}')
+            field = _CR_ATTACHMENT_FIELDS.get(body.get('field'))
+            if not field:
+                return http_response({'error': "field must be 'request' or 'approval'"}, 400)
+            data = body.get('data')
+            if not data:
+                return http_response({'error': 'data (base64) is required'}, 400)
+            attachment = request.env['ir.attachment'].sudo().create({
+                'name':      body.get('name') or 'attachment',
+                'datas':     data,
+                'mimetype':  body.get('mimetype') or False,
+                'res_model': 'material.purchase.requisition',
+                'res_id':    rec.id,
+            })
+            rec[field] = [(4, attachment.id)]
+            return http_response(_cr_attachment_list(rec[field]), 201)
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/purchase/cr-requisitions/<int:rec_id>/attachments/<int:attachment_id>', type='http', auth='user', methods=['DELETE'], csrf=False)
+    def remove_attachment(self, rec_id, attachment_id, **kw):
+        try:
+            rec = request.env['material.purchase.requisition'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            field = _CR_ATTACHMENT_FIELDS.get(kw.get('field'))
+            if not field:
+                return http_response({'error': "field must be 'request' or 'approval'"}, 400)
+            rec[field] = [(3, attachment_id)]
+            return http_response(_cr_attachment_list(rec[field]))
         except Exception as e:
             return http_response({'error': str(e)}, 500)
 
@@ -2651,50 +2770,13 @@ class CrRequisitionCreateController(http.Controller):
             if not employee.exists():
                 return http_response({'error': 'employee_id not found'}, 400)
 
-            vals = {'employee_id': employee.id}
+            vals = _build_cr_requisition_vals(body, {'employee_id': employee.id})
 
-            for field in ('reason_for_requisition', 'request_action',
-                          'requisition_date', 'requisition_deadline'):
-                if body.get(field):
-                    vals[field] = body[field]
+            try:
+                vals['requisition_lines'] = _build_cr_line_vals(body['lines'])
+            except ValueError as e:
+                return http_response({'error': str(e)}, 400)
 
-            if body.get('department_id'):
-                dept = request.env['hr.department'].sudo().browse(int(body['department_id']))
-                if dept.exists():
-                    vals['department_id'] = dept.id
-
-            if body.get('requisition_responsible'):
-                user = request.env['res.users'].sudo().browse(int(body['requisition_responsible']))
-                if user.exists():
-                    vals['requisition_responsible'] = user.id
-
-            VALID_TYPES = ('purchase_order', 'internal_transfer', 'purchase order', 'internal picking')
-            line_vals_list = []
-            for i, line in enumerate(body['lines']):
-                if not line.get('product_id'):
-                    return http_response({'error': f'lines[{i}]: product_id is required'}, 400)
-                product = request.env['product.product'].sudo().browse(int(line['product_id']))
-                if not product.exists():
-                    return http_response({'error': f'lines[{i}]: product_id not found'}, 400)
-
-                qty = float(line.get('qty', line.get('quantity', 1)))
-                line_val = {
-                    'product_id': product.id,
-                    'quantity':   qty,
-                }
-
-                if line.get('partner_id'):
-                    partner = request.env['res.partner'].sudo().browse(int(line['partner_id']))
-                    if partner.exists():
-                        line_val['vendor_ids'] = [(4, partner.id)]
-
-                if line.get('request_action') or line.get('requisition_type'):
-                    val = line.get('request_action') or line.get('requisition_type')
-                    line_val['request_action'] = val
-
-                line_vals_list.append((0, 0, line_val))
-
-            vals['requisition_lines'] = line_vals_list
             rec = request.env['material.purchase.requisition'].sudo().create(vals)
 
             return http_response({
