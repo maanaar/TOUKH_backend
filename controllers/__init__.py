@@ -26,6 +26,7 @@ from . import (
     internal_decisions,
     refund_requests,
     admission_requests,
+    inventory_count_requests,
     inpatient_nursing,
     inpatient_nursing_sheets,
     nursing_worklist,

@@ -25,6 +25,7 @@ from . import (
     saycare_internal_decision,
     saycare_refund_request,
     saycare_admission_request,
+    saycare_inventory_count_request,
     saycare_inpatient_nursing_assessment,
     saycare_inpatient_nursing_sheets,
     saycare_geo,

@@ -45,6 +45,10 @@ access_saycare_gov_expense_settings_admin,saycare_gov_expense_settings_admin,mod
 access_saycare_refund_request_user,saycare.refund.request user,model_saycare_refund_request,,1,1,1,1
 access_saycare_admission_request_user,saycare.admission.request user,model_saycare_admission_request,,1,1,1,0
 access_saycare_admission_request_admin,saycare.admission.request admin,model_saycare_admission_request,base.group_system,1,1,1,1
+access_saycare_inventory_count_request_user,saycare.inventory.count.request user,model_saycare_inventory_count_request,,1,1,1,0
+access_saycare_inventory_count_request_admin,saycare.inventory.count.request admin,model_saycare_inventory_count_request,base.group_system,1,1,1,1
+access_saycare_inventory_count_request_line_user,saycare.inventory.count.request.line user,model_saycare_inventory_count_request_line,,1,1,1,0
+access_saycare_inventory_count_request_line_admin,saycare.inventory.count.request.line admin,model_saycare_inventory_count_request_line,base.group_system,1,1,1,1
 
 access_saycare_governorate_user,saycare.governorate user,model_saycare_governorate,,1,0,0,0
 access_saycare_governorate_admin,saycare.governorate admin,model_saycare_governorate,base.group_system,1,1,1,1
