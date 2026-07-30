@@ -387,6 +387,9 @@ class ProductController(http.Controller):
                 # ── responsible ───────────────────────────────────────────
                 'responsible_id':           rec.responsible_id.id if rec.responsible_id else None,
                 'responsible_name':         rec.responsible_id.name if rec.responsible_id else None,
+                # ── manufacturer ──────────────────────────────────────────
+                'manufacturer_id':          rec.manufacturer.id if rec.manufacturer else None,
+                'manufacturer_name':        rec.manufacturer.name if rec.manufacturer else '',
                 # ── image ─────────────────────────────────────────────────
                 'image_url':                '/web/image/product.template/%d/image_1920' % rec.id if rec.image_1920 else '',
                 # ── product variants ──────────────────────────────────────
