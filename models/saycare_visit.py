@@ -79,6 +79,19 @@ class SaycareVisit(models.Model):
         ('referral',  'تحويل'),
     ], string='طريقة الوصول')
     companion_name = fields.Char(string='اسم المرافق')
+    exit_status = fields.Selection([
+        ('home',              'خروج للمنزل'),
+        ('critical_care',     'حجز بالرعاية'),
+        ('inpatient',         'حجز بالداخلي'),
+        ('operations',        'عمليات'),
+        ('against_advice',    'خروج الحالة على المسؤولية'),
+        ('absconded',         'هروب الحالة'),
+        ('not_reached_3_shifts', 'عدم الوصول للحالة على مدار ثلاث شيفتات'),
+    ], string='حالة خروج المريض')
+
+    # ── Kiosk self-service queue tickets ───────────────────────────────────────
+    reception_number = fields.Char(string='رقم انتظار الاستقبال')
+    queue_number      = fields.Char(string='رقم انتظار العيادة')
 
     # ── Triage assessment fields ────────────────────────────────────────────────
     consciousness_level = fields.Selection([

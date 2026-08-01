@@ -41,6 +41,7 @@ def _visit_dict(v, full=False):
         'triage_notes':    v.triage_notes or '',
         'arrival_mode':        v.arrival_mode or '',
         'companion_name':      v.companion_name or '',
+        'exit_status':         v.exit_status or '',
         'consciousness_level': v.consciousness_level or '',
         'skin_color':          v.skin_color or '',
         'allergy_status':      v.allergy_status or '',
@@ -123,6 +124,38 @@ class VisitListController(http.Controller):
         return _json([_visit_dict(v) for v in records])
 
 
+def _visit_update_vals(body):
+    """Optional visit fields a PUT may update — the same set create() accepts,
+    but with partial-update semantics (only touch a field the caller actually
+    sent, since this same route is also used to just sync service_ids alone)."""
+    vals = {}
+    str_fields = (
+        'visit_type', 'financial_class', 'payment_method', 'chief_complaint',
+        'arrival_mode', 'companion_name', 'exit_status', 'notes',
+        'decision_no', 'covered_services', 'contract_entity', 'co_pay_percent',
+        'admin_letter_no', 'issuing_authority', 'card_number', 'financial_notes',
+        'department',
+    )
+    for key in str_fields:
+        if key in body:
+            vals[key] = body.get(key) or ''
+    if 'diagnostic_type' in body:
+        vals['diagnostic_type'] = body.get('diagnostic_type') or False
+    if 'expiry_date' in body:
+        vals['expiry_date'] = body.get('expiry_date') or False
+    if 'available_balance' in body:
+        vals['available_balance'] = float(body['available_balance']) if body.get('available_balance') else 0.0
+    if 'approval_required' in body:
+        vals['approval_required'] = bool(body.get('approval_required'))
+    if 'employee_id' in body:
+        vals['employee_id_no'] = body.get('employee_id') or ''
+    if body.get('specialty_id'):
+        vals['specialty_id'] = body.get('specialty_id')
+    if body.get('doctor_id'):
+        vals['doctor_id'] = body.get('doctor_id')
+    return vals
+
+
 class VisitController(http.Controller):
 
     @http.route('/saycare/api/visit', type='http', auth='user', methods=['POST'], csrf=False)
@@ -143,6 +176,7 @@ class VisitController(http.Controller):
             'chief_complaint': body.get('chief_complaint', ''),
             'arrival_mode':    body.get('arrival_mode', ''),
             'companion_name':  body.get('companion_name', ''),
+            'exit_status':     body.get('exit_status', ''),
             'specialty_id':    body.get('specialty_id'),
             'doctor_id':       body.get('doctor_id'),
             'notes':           body.get('notes', ''),
@@ -273,7 +307,9 @@ class VisitController(http.Controller):
         service_ids   = body.get('service_ids', [])
         skip_invoice  = bool(body.get('skip_invoice'))
         _logger.info('VISIT UPDATE id=%s skip_invoice=%s', visit_id, skip_invoice)
-        v.write({'service_ids': [(6, 0, service_ids)]})
+        write_vals = {'service_ids': [(6, 0, service_ids)]}
+        write_vals.update(_visit_update_vals(body))
+        v.write(write_vals)
 
         # Cancel + delete old invoice.
         # For skip_invoice visits: always remove the old invoice (it should not exist).
@@ -474,6 +510,38 @@ class ClinicBookingController(http.Controller):
             appt_vals['doctor_id'] = int(doctor_id)
         appt = env['saycare.appointment'].sudo().create(appt_vals)
 
+        # ── kiosk queue tickets ────────────────────────────────────────────────
+        # Reception number is shared across every clinic booked in the same
+        # kiosk session — the caller passes back whatever the first booking
+        # call returned; only the first call (no reception_number in body)
+        # generates a fresh one. Queue number is per-clinic: caller-supplied
+        # letter (A/B/C = this clinic's pick order in the session) + that
+        # specialty's own running count for today. Both are hand-rolled
+        # day-scoped counters (search_count + admission_date range), matching
+        # this addon's existing convention (see _next_invoice_number() in
+        # saycare_internal_decision.py) rather than an ir.sequence — fine for
+        # a non-financial queue ticket, not race-proof under simultaneous kiosks.
+        from odoo.fields import Date as D
+        today = D.today()
+        reception_number = body.get('reception_number')
+        if not reception_number:
+            recv_count = env['saycare.visit'].sudo().search_count([
+                ('reception_number', '!=', False),
+                ('admission_date', '>=', f'{today} 00:00:00'),
+                ('admission_date', '<=', f'{today} 23:59:59'),
+            ])
+            reception_number = f'R-{recv_count + 1:03d}'
+
+        queue_number = None
+        queue_letter = body.get('queue_letter')
+        if queue_letter and specialty_id:
+            spec_count = env['saycare.visit'].sudo().search_count([
+                ('specialty_id', '=', int(specialty_id)),
+                ('admission_date', '>=', f'{today} 00:00:00'),
+                ('admission_date', '<=', f'{today} 23:59:59'),
+            ])
+            queue_number = f'{queue_letter}-{spec_count + 1:03d}'
+
         # ── 4. create visit with services ─────────────────────────────────────
         visit_vals = {
             'patient_id':      patient_id,
@@ -483,6 +551,8 @@ class ClinicBookingController(http.Controller):
             'chief_complaint': body.get('chief_complaint', ''),
             'notes':           body.get('notes', ''),
             'created_by_name': body.get('createdByName') or request.env.user.name,
+            'reception_number': reception_number,
+            'queue_number':     queue_number,
         }
         # Self-registration kiosk books in 'pending_payment' — the visit stays
         # invisible to nurse/doctor queues (they only ever query specific named
@@ -523,6 +593,9 @@ class ClinicBookingController(http.Controller):
             'invoice_id':      invoice_id,
             'invoice_name':    invoice_name,
             'invoice_amount':  invoice_amount,
+            'reception_number': visit.reception_number or '',
+            'queue_number':     visit.queue_number or '',
+            'specialty_name':   visit.specialty_id.name if visit.specialty_id else '',
             'services':        [{'id': s.id, 'name': s.name, 'price': s.price,
                                  'insurance_price': s.insurance_price}
                                 for s in visit.service_ids],
