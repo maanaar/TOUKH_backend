@@ -393,7 +393,12 @@ class ProductController(http.Controller):
                 # uom.uom._compute_price against the product's base uom_id; units that
                 # don't share a reference with uom_id (a different measurement family)
                 # keep the unconverted list_price since their factors aren't comparable.
-                'uom_options': uom_options_for(rec.uom_id),
+                # Only built when location_id is passed (pharmacy dispensing's
+                # stock-filtered fetch, a few dozen products) — the only caller
+                # that reads this field. Skipped for the unfiltered full-catalog
+                # fetch, since a len(all_uoms)-sized list per product there was
+                # blowing up json.dumps() with a MemoryError on larger catalogs.
+                'uom_options': uom_options_for(rec.uom_id) if location_id else [],
                 # ── pricing ───────────────────────────────────────────────
                 'list_price':               rec.list_price,
                 'standard_price':           rec.standard_price,
