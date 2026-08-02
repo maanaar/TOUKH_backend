@@ -132,6 +132,45 @@ class RadOrderController(http.Controller):
             'orders': [_rad_dict(rec) for rec in records],
         }, 201)
 
+    @http.route('/saycare/api/visit/<int:visit_id>/rad-orders', type='http', auth='user', methods=['PUT'], csrf=False)
+    def replace_for_visit(self, visit_id, **kw):
+        """Edit a booking's selected studies before any radiology work has
+        started — replaces the visit's whole saycare.rad.order set wholesale
+        (these are simple line-item-like records, not stateful ones worth
+        diffing individually). Refuses if any existing order for this visit
+        has already moved past 'requested' (scheduled/done), since rewriting
+        those would silently discard real radiology workflow progress."""
+        visit = _resolve_visit(visit_id)
+        if not visit:
+            return _json({'error': 'visit not found'}, 404)
+        try:
+            body = json.loads(request.httprequest.data or '{}')
+        except json.JSONDecodeError:
+            return _json({'error': 'invalid JSON'}, 400)
+
+        orders = body.get('orders', [])
+        if not isinstance(orders, list) or not orders:
+            return _json({'error': 'orders must be a non-empty list'}, 400)
+
+        existing = request.env['saycare.rad.order'].sudo().search([('visit_id', '=', visit_id)])
+        in_progress = existing.filtered(lambda ro: ro.state != 'requested')
+        if in_progress:
+            return _json({'error': 'لا يمكن تعديل الأشعة بعد بدء التنفيذ على بعض الطلبات'}, 409)
+
+        request_group = existing[:1].request_group or f'RAD-{visit.id}-{uuid.uuid4().hex[:10].upper()}'
+        try:
+            vals_list = [_normalise_rad_vals(visit, item, request_group) for item in orders]
+        except (TypeError, ValueError) as exc:
+            return _json({'error': str(exc)}, 400)
+
+        existing.unlink()
+        records = request.env['saycare.rad.order'].sudo().create(vals_list)
+        return _json({
+            'request_group': request_group,
+            'visit_id': visit.id,
+            'orders': [_rad_dict(rec) for rec in records],
+        })
+
     @http.route('/saycare/api/rad-orders', type='http', auth='user', methods=['GET'], csrf=False)
     def get_all(self, state='', study_type='', date='', date_from='', date_to='', patient_id='', request_group='', **kw):
         domain = []
