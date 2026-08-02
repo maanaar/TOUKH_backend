@@ -485,6 +485,9 @@ class ClinicBookingController(http.Controller):
                     'phone':          body.get('mobile', ''),
                     'is_patient':     True,
                     'financial_class': body.get('financial_class', 'cash'),
+                    **({'dob': body['dob']} if body.get('dob') else {}),
+                    **({'gender': body['gender']} if body.get('gender') else {}),
+                    **({'street': body['address']} if body.get('address') else {}),
                 })
             patient_id = patient.id
 
