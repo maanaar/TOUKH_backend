@@ -324,8 +324,34 @@ class ProductController(http.Controller):
             domain += ['|'] * (len(categ_leaves) - 1) + categ_leaves
         records = request.env['product.template'].sudo().search(domain)
         all_uoms = request.env['uom.uom'].sudo().search([])
+
+        # uom_options below used to call _compute_price/_has_common_reference
+        # for every (product, uom) pair — 808 products × 44 uoms = ~35k calls
+        # per request, which is what made this endpoint take 80s+. The price
+        # ratio and compatibility for a given (base_uom, uom) pair don't
+        # depend on the product itself, only on list_price (linear), so they
+        # can be computed once per distinct base uom_id and reused.
+        uom_ratio_cache = {}
+
+        def uom_options_for(base_uom):
+            if not base_uom:
+                return []
+            ratios = uom_ratio_cache.get(base_uom.id)
+            if ratios is None:
+                ratios = [(
+                    uom.id, uom.name,
+                    (uom.factor / base_uom.factor) if base_uom._has_common_reference(uom) else None,
+                ) for uom in all_uoms]
+                uom_ratio_cache[base_uom.id] = ratios
+            return [{
+                'id': uom_id,
+                'name': uom_name,
+                'price': rec_list_price * ratio if ratio is not None else rec_list_price,
+            } for uom_id, uom_name, ratio in ratios]
+
         data = []
         for rec in records:
+            rec_list_price = rec.list_price
             data.append({
                 # ── identity ──────────────────────────────────────────────
                 'id':                       rec.id,
@@ -367,14 +393,7 @@ class ProductController(http.Controller):
                 # uom.uom._compute_price against the product's base uom_id; units that
                 # don't share a reference with uom_id (a different measurement family)
                 # keep the unconverted list_price since their factors aren't comparable.
-                'uom_options': [{
-                    'id':    uom.id,
-                    'name':  uom.name,
-                    'price': (
-                        rec.uom_id._compute_price(rec.list_price, uom)
-                        if rec.uom_id._has_common_reference(uom) else rec.list_price
-                    ),
-                } for uom in all_uoms] if rec.uom_id else [],
+                'uom_options': uom_options_for(rec.uom_id),
                 # ── pricing ───────────────────────────────────────────────
                 'list_price':               rec.list_price,
                 'standard_price':           rec.standard_price,
@@ -412,7 +431,11 @@ class ProductController(http.Controller):
                 'manufacturer_id':          rec.manufacturer.id if rec.manufacturer else None,
                 'manufacturer_name':        rec.manufacturer.name if rec.manufacturer else '',
                 # ── image ─────────────────────────────────────────────────
-                'image_url':                '/web/image/product.template/%d/image_1920' % rec.id if rec.image_1920 else '',
+                # image_128 (a small pre-resized thumbnail) is checked instead
+                # of image_1920 — both are set/unset together, but fetching
+                # the full-resolution blob 808 times just to test truthiness
+                # was a big chunk of this endpoint's cost.
+                'image_url':                '/web/image/product.template/%d/image_1920' % rec.id if rec.image_128 else '',
                 # ── product variants ──────────────────────────────────────
                 'product_variant_ids':      rec.product_variant_ids.ids,
                 'product_variant_count':    rec.product_variant_count,
