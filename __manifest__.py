@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'SayCare-odoo',
-    'version': '19.0.1.0.7',
+    'version': '19.0.1.0.8',
     'summary': 'HTTP REST Endpoints for Inventory, Purchase, Employee Requisition and Clinical HIS',
     'description': """
         Provides HTTP endpoints (returning Python objects as HTTP responses) for:
@@ -33,6 +33,7 @@
     ],
     'data': [
         'security/ir.model.access.csv',
+        'data/department_stock_sequences.xml',
         'data/sequences.xml',
         'views/government_expense_views.xml',
         'views/product_template_inherit.xml',
