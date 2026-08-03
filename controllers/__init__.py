@@ -30,6 +30,7 @@ from . import (
     department_stock_requests,
     inpatient_nursing,
     inpatient_nursing_sheets,
+    critical_care_sheets,
     nursing_worklist,
     geo,
     resuscitation,

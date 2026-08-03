@@ -1,10 +1,49 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
+import pytz
 from odoo import http
 from odoo.http import request
 from .utils import _json
 
 AR_DAYS = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد']
+
+
+def _local_range_bounds_utc(date_from, date_to):
+    """Convert a [date_from, date_to] local-date range (as 'YYYY-MM-DD' strings,
+    inclusive on both ends) into UTC datetime bounds for querying Datetime
+    fields — mirrors the _local_day_bounds_utc convention in
+    admission_requests.py. Datetime fields (e.g. admitted_at) are stored in
+    UTC, so comparing them against naive local-date strings silently shifts
+    or drops records near day boundaries whenever the user's timezone isn't
+    UTC. Returns (start_utc, end_utc) as naive UTC datetimes (end_utc is the
+    exclusive upper bound — start of the day after date_to).
+    """
+    if not date_from and not date_to:
+        return None, None
+
+    timezone_name = (
+        request.env.user.tz
+        or request.env.context.get('tz')
+        or 'UTC'
+    )
+    try:
+        tz = pytz.timezone(timezone_name)
+    except pytz.UnknownTimeZoneError:
+        tz = pytz.UTC
+
+    start_utc = end_utc = None
+
+    if date_from:
+        start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+        start_local = tz.localize(datetime.combine(start_date, datetime.min.time()))
+        start_utc = start_local.astimezone(pytz.UTC).replace(tzinfo=None)
+
+    if date_to:
+        end_date = datetime.strptime(date_to, '%Y-%m-%d').date() + timedelta(days=1)
+        end_local = tz.localize(datetime.combine(end_date, datetime.min.time()))
+        end_utc = end_local.astimezone(pytz.UTC).replace(tzinfo=None)
+
+    return start_utc, end_utc
 
 
 class DashboardController(http.Controller):
@@ -239,35 +278,14 @@ class DashboardController(http.Controller):
         env = request.env
 
         # No date_from/date_to → unrestricted (matches clinics-overview / visits-today convention).
-        range_start = range_end = None
+        # admitted_at/booking_datetime are Datetime fields stored in UTC, so the local
+        # date range must be converted to proper UTC bounds (honoring the user's timezone)
+        # before being compared — a naive local-as-UTC comparison silently drops or shifts
+        # records near day boundaries.
         try:
-            if date_from:
-                range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
-            if date_to:
-                range_end = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            range_start, range_end = _local_range_bounds_utc(date_from, date_to)
         except ValueError:
             range_start = range_end = None
-
-        def _effective_dt(a):
-            # The timestamp a record is filtered by: prefer the actual admission moment,
-            # fall back to when it was booked (pending_admission cases have no admitted_at yet).
-            if a.admitted_at:
-                return a.admitted_at
-            if a.booking_datetime:
-                return a.booking_datetime
-            if a.admission_date:
-                return datetime.combine(a.admission_date, datetime.min.time())
-            return None
-
-        def _in_range(a):
-            dt = _effective_dt(a)
-            if not dt:
-                return False
-            if range_start and dt < range_start:
-                return False
-            if range_end and dt > range_end:
-                return False
-            return True
 
         GENERAL_CONDITION_LABEL = {
             'stable':           'مستقر',
@@ -307,12 +325,32 @@ class DashboardController(http.Controller):
 
             # A care=true department is tracked from the moment a request targets it —
             # pending_admission cases show up here immediately, not only once admitted.
-            current_all = Admission.search([
+            # When a date range is selected, the patient list/counts are scoped to it:
+            # admitted cases are matched on admitted_at, pending (not-yet-admitted) cases
+            # on booking_datetime since they have no admitted_at yet.
+            base_domain = [
                 ('department_id', '=', dept.id),
                 ('status', 'in', ['admitted', 'pending_admission']),
-            ])
-            # The unit page's patient list/counts are scoped to the selected date range.
-            current = current_all.filtered(_in_range) if (range_start or range_end) else current_all
+            ]
+            if range_start or range_end:
+                admitted_domain = base_domain + [('admitted_at', '!=', False)]
+                if range_start:
+                    admitted_domain.append(('admitted_at', '>=', str(range_start)))
+                if range_end:
+                    admitted_domain.append(('admitted_at', '<', str(range_end)))
+
+                pending_domain = base_domain + [
+                    ('admitted_at', '=', False),
+                    ('booking_datetime', '!=', False),
+                ]
+                if range_start:
+                    pending_domain.append(('booking_datetime', '>=', str(range_start)))
+                if range_end:
+                    pending_domain.append(('booking_datetime', '<', str(range_end)))
+
+                current = Admission.search(admitted_domain) | Admission.search(pending_domain)
+            else:
+                current = Admission.search(base_domain)
 
             assessments = Assessment.search([('admission_request_id', 'in', current.ids)])
             condition_by_admission = {a.admission_request_id.id: a.general_condition for a in assessments}
@@ -327,7 +365,7 @@ class DashboardController(http.Controller):
             if range_start:
                 admitted_in_range_domain.append(('admitted_at', '>=', str(range_start)))
             if range_end:
-                admitted_in_range_domain.append(('admitted_at', '<=', str(range_end)))
+                admitted_in_range_domain.append(('admitted_at', '<', str(range_end)))
             admitted_in_range = Admission.search(admitted_in_range_domain)
             admissions_today = sum(1 for a in admitted_in_range if not a.is_transfer)
             transfers_today  = sum(1 for a in admitted_in_range if a.is_transfer)
@@ -336,7 +374,7 @@ class DashboardController(http.Controller):
             patients = [{
                 'admissionId':            a.id,
                 'patientName':            a.patient_name or a.patient_id.display_name or '—',
-                'patientMrn':             a.patient_mrn or a.file_number or '',
+                'patientMrn':             a.patient_mrn or a.x_file_number or '',
                 'inpatientBookingNumber': a.inpatient_booking_number or '',
                 'roomName':               a.room_id.display_name if a.room_id else '',
                 'bedName':                a.bed_id.display_name if a.bed_id else '—',

@@ -303,6 +303,14 @@ class ProductController(http.Controller):
                 domain = [('id', '=', 0)]  # unknown location — no products, not "all products"
         records = request.env['product.template'].sudo().search(domain)
         all_uoms = request.env['uom.uom'].sudo().search([])
+        # أدوية is a checkbox on product.category — checking it on a parent
+        # category (e.g. "أدوية") marks every product under it, including
+        # sub-categories, as a medicine, so resolve via child_of rather than
+        # an exact categ_id match.
+        medicine_roots = request.env['product.category'].sudo().search([('is_medicines', '=', True)])
+        medicine_categ_ids = set(
+            request.env['product.category'].sudo().search([('id', 'child_of', medicine_roots.ids)]).ids
+        ) if medicine_roots else set()
         data = []
         for rec in records:
             data.append({
@@ -328,6 +336,7 @@ class ProductController(http.Controller):
                 'categ_id':                 rec.categ_id.id if rec.categ_id else None,
                 'categ_name':               rec.categ_id.complete_name if rec.categ_id else None,
                 'categ_name_ar':            rec.categ_id.name_ar if rec.categ_id else None,
+                'is_medicines':             rec.categ_id.id in medicine_categ_ids if rec.categ_id else False,
                 'active':                   rec.active,
                 'sale_ok':                  rec.sale_ok,
                 'purchase_ok':              rec.purchase_ok,

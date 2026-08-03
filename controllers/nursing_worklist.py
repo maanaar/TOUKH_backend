@@ -111,7 +111,7 @@ class NursingWorklistController(http.Controller):
 
         patient = {
             'patientName':            admission.patient_name or '',
-            'patientMrn':             admission.patient_mrn or admission.file_number or '',
+            'patientMrn':             admission.patient_mrn or admission.x_file_number or '',
             'inpatientBookingNumber': admission.inpatient_booking_number or '',
             'operationBookingNumber': admission.operation_booking_number or '',
             'ward':                   admission.ward or '',
