@@ -34,6 +34,7 @@
     'data': [
         'security/ir.model.access.csv',
         'data/department_stock_sequences.xml',
+        'data/main_warehouse_receipt_sequences.xml',
         'data/sequences.xml',
         'views/government_expense_views.xml',
         'views/product_template_inherit.xml',

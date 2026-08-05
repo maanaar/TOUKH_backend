@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="seq_saycare_main_warehouse_receipt" model="ir.sequence">
+        <field name="name">Main Warehouse Inspection</field>
+        <field name="code">saycare.main.warehouse.receipt</field>
+        <field name="prefix">MWR/%(range_year)s/</field>
+        <field name="padding">5</field>
+        <field name="use_date_range">True</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
+    <record id="seq_saycare_main_warehouse_addition" model="ir.sequence">
+        <field name="name">Main Warehouse Addition</field>
+        <field name="code">saycare.main.warehouse.addition</field>
+        <field name="prefix">MWA/%(range_year)s/</field>
+        <field name="padding">5</field>
+        <field name="use_date_range">True</field>
+        <field name="company_id" eval="False"/>
+    </record>
+</odoo>

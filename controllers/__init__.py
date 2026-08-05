@@ -28,6 +28,7 @@ from . import (
     admission_requests,
     inventory_count_requests,
     department_stock_requests,
+    main_warehouse_receipts,
     inpatient_nursing,
     inpatient_nursing_sheets,
     critical_care_sheets,
