@@ -97,6 +97,10 @@ class SaycareAdmissionRequest(models.Model):
 
     # ── Nursing worklist ─────────────────────────────────────────────────────
     visit_id = fields.Many2one('saycare.visit', string='الزيارة', copy=False)
+    mirrored_appointment_id = fields.Many2one(
+        'saycare.appointment', string='الموعد المرتبط', copy=False,
+        help='الموعد اللي بيتعرض في قائمة الحجوزات الداخلي — بيتزامن تلقائيًا عند تعديل الحجز',
+    )
     worklist_stage = fields.Selection([
         ('booked', 'محجوز'),
         ('admission_done', 'تم القبول'),

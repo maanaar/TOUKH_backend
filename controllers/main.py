@@ -290,7 +290,7 @@ class UomController(http.Controller):
 class ProductController(http.Controller):
 
     @http.route('/api/v1/products', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, location_id='', **kw):
+    def get_all(self, location_id='', categ_keyword='', **kw):
         domain = []
         if location_id:
             loc = request.env['stock.location'].sudo().browse(int(location_id))
@@ -301,8 +301,54 @@ class ProductController(http.Controller):
                 domain = [('id', 'in', quants.mapped('product_id.product_tmpl_id').ids)]
             else:
                 domain = [('id', '=', 0)]  # unknown location — no products, not "all products"
+        if categ_keyword:
+            # نفس أسلوب search_lite: مطابقة الاسم بتسامح مع اختلاف الهاء/التاء
+            # المربوطة، وعلى complete_name كمان عشان يشمل كل الفئات الفرعية
+            # تحت الفئة المطلوبة (زي فئات الأدوية الفرعية تحت "Medications").
+            categ_variants = [categ_keyword]
+            if 'ة' in categ_keyword:
+                alt = categ_keyword.replace('ة', 'ه')
+                if alt not in categ_variants:
+                    categ_variants.append(alt)
+            if 'ه' in categ_keyword:
+                alt = categ_keyword.replace('ه', 'ة')
+                if alt not in categ_variants:
+                    categ_variants.append(alt)
+            categ_leaves = []
+            for kw2 in categ_variants:
+                categ_leaves += [
+                    ('categ_id.name', 'ilike', kw2),
+                    ('categ_id.complete_name', 'ilike', kw2),
+                    ('categ_id.name_ar', 'ilike', kw2),
+                ]
+            domain += ['|'] * (len(categ_leaves) - 1) + categ_leaves
         records = request.env['product.template'].sudo().search(domain)
         all_uoms = request.env['uom.uom'].sudo().search([])
+
+        # uom_options below used to call _compute_price/_has_common_reference
+        # for every (product, uom) pair — 808 products × 44 uoms = ~35k calls
+        # per request, which is what made this endpoint take 80s+. The price
+        # ratio and compatibility for a given (base_uom, uom) pair don't
+        # depend on the product itself, only on list_price (linear), so they
+        # can be computed once per distinct base uom_id and reused.
+        uom_ratio_cache = {}
+
+        def uom_options_for(base_uom):
+            if not base_uom:
+                return []
+            ratios = uom_ratio_cache.get(base_uom.id)
+            if ratios is None:
+                ratios = [(
+                    uom.id, uom.name,
+                    (uom.factor / base_uom.factor) if base_uom._has_common_reference(uom) else None,
+                ) for uom in all_uoms]
+                uom_ratio_cache[base_uom.id] = ratios
+            return [{
+                'id': uom_id,
+                'name': uom_name,
+                'price': rec_list_price * ratio if ratio is not None else rec_list_price,
+            } for uom_id, uom_name, ratio in ratios]
+
         # أدوية is a checkbox on product.category — checking it on a parent
         # category (e.g. "أدوية") marks every product under it, including
         # sub-categories, as a medicine, so resolve via child_of rather than
@@ -313,6 +359,7 @@ class ProductController(http.Controller):
         ) if medicine_roots else set()
         data = []
         for rec in records:
+            rec_list_price = rec.list_price
             data.append({
                 # ── identity ──────────────────────────────────────────────
                 'id':                       rec.id,
@@ -355,14 +402,12 @@ class ProductController(http.Controller):
                 # uom.uom._compute_price against the product's base uom_id; units that
                 # don't share a reference with uom_id (a different measurement family)
                 # keep the unconverted list_price since their factors aren't comparable.
-                'uom_options': [{
-                    'id':    uom.id,
-                    'name':  uom.name,
-                    'price': (
-                        rec.uom_id._compute_price(rec.list_price, uom)
-                        if rec.uom_id._has_common_reference(uom) else rec.list_price
-                    ),
-                } for uom in all_uoms] if rec.uom_id else [],
+                # Only built when location_id is passed (pharmacy dispensing's
+                # stock-filtered fetch, a few dozen products) — the only caller
+                # that reads this field. Skipped for the unfiltered full-catalog
+                # fetch, since a len(all_uoms)-sized list per product there was
+                # blowing up json.dumps() with a MemoryError on larger catalogs.
+                'uom_options': uom_options_for(rec.uom_id) if location_id else [],
                 # ── pricing ───────────────────────────────────────────────
                 'list_price':               rec.list_price,
                 'standard_price':           rec.standard_price,
@@ -400,7 +445,11 @@ class ProductController(http.Controller):
                 'manufacturer_id':          rec.manufacturer.id if rec.manufacturer else None,
                 'manufacturer_name':        rec.manufacturer.name if rec.manufacturer else '',
                 # ── image ─────────────────────────────────────────────────
-                'image_url':                '/web/image/product.template/%d/image_1920' % rec.id if rec.image_1920 else '',
+                # image_128 (a small pre-resized thumbnail) is checked instead
+                # of image_1920 — both are set/unset together, but fetching
+                # the full-resolution blob 808 times just to test truthiness
+                # was a big chunk of this endpoint's cost.
+                'image_url':                '/web/image/product.template/%d/image_1920' % rec.id if rec.image_128 else '',
                 # ── product variants ──────────────────────────────────────
                 'product_variant_ids':      rec.product_variant_ids.ids,
                 'product_variant_count':    rec.product_variant_count,

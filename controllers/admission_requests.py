@@ -199,6 +199,7 @@ def _dt_iso(v, with_time=True):
 def _admission_request_dict(r):
     return {
         'id':                     r.id,
+        'mirroredAppointmentId':  r.mirrored_appointment_id.id if r.mirrored_appointment_id else None,
         'patientId':              r.patient_id.id if r.patient_id else None,
         'source':                 r.source or '',
         'status':                 r.status or '',
@@ -284,7 +285,7 @@ def _create_operation_booking_appointment(rec):
         with request.env.cr.savepoint():
             booking_dt = rec.booking_datetime
             start_time = booking_dt.hour + booking_dt.minute / 60.0
-            request.env['saycare.appointment'].sudo().create({
+            appt = request.env['saycare.appointment'].sudo().create({
                 'patient_id':    rec.patient_id.id,
                 'date':          booking_dt.date(),
                 'start_time':    start_time,
@@ -294,9 +295,37 @@ def _create_operation_booking_appointment(rec):
                 'department_id': rec.department_id.id if rec.department_id else False,
                 'notes':         rec.operation_name if rec.is_operation else (rec.reason or ''),
             })
+            rec.mirrored_appointment_id = appt.id
     except Exception:
         _logger.exception(
             'failed to mirror operation-booking admission request %s onto saycare.appointment',
+            rec.id,
+        )
+
+
+def _sync_operation_booking_appointment(rec):
+    """Keep the mirrored saycare.appointment (see _create_operation_booking_appointment)
+    in sync when an operation-booking admission request is edited — otherwise
+    "قائمة الحجوزات الداخلي" keeps showing the stale date/doctor/department from
+    whenever the request was first created. Best-effort, same as create's mirror."""
+    if rec.source != 'operation_booking' or not rec.mirrored_appointment_id or not rec.booking_datetime:
+        return
+    try:
+        with request.env.cr.savepoint():
+            booking_dt = rec.booking_datetime
+            start_time = booking_dt.hour + booking_dt.minute / 60.0
+            rec.mirrored_appointment_id.write({
+                'patient_id':    rec.patient_id.id if rec.patient_id else rec.mirrored_appointment_id.patient_id.id,
+                'date':          booking_dt.date(),
+                'start_time':    start_time,
+                'end_time':      start_time + 0.25,
+                'doctor_id':     rec.surgeon_id.id if rec.surgeon_id else False,
+                'department_id': rec.department_id.id if rec.department_id else False,
+                'notes':         rec.operation_name if rec.is_operation else (rec.reason or ''),
+            })
+    except Exception:
+        _logger.exception(
+            'failed to sync mirrored appointment for admission request %s',
             rec.id,
         )
 
@@ -419,6 +448,7 @@ class AdmissionRequestController(http.Controller):
         vals = _map_body_to_vals(body, _REQUEST_FIELD_MAP)
         if vals:
             rec.write(vals)
+            _sync_operation_booking_appointment(rec)
         return _json(_admission_request_dict(rec))
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>/admit', type='http', auth='user', methods=['POST'], csrf=False)

@@ -97,7 +97,7 @@ class VisitListController(http.Controller):
 
     @http.route('/saycare/api/visits', type='http', auth='user', methods=['GET'], csrf=False)
     def get_all(self, date='', date_from='', date_to='', state='', specialty_id='',
-                doctor_id='', patient_id='', visit_type='', **kw):
+                doctor_id='', patient_id='', visit_type='', request_source='', **kw):
         domain = []
         if date:
             domain += [('admission_date', '>=', f'{date} 00:00:00'),
@@ -118,6 +118,9 @@ class VisitListController(http.Controller):
             domain.append(('patient_id', '=', int(patient_id)))
         if visit_type:
             domain.append(('visit_type', '=', visit_type))
+        if request_source:
+            sources = [s.strip() for s in request_source.split(',') if s.strip()]
+            domain.append(('request_source', 'in', sources) if len(sources) > 1 else ('request_source', '=', sources[0]))
         records = request.env['saycare.visit'].sudo().search(
             domain, order='admission_date desc', limit=200
         )
@@ -482,6 +485,9 @@ class ClinicBookingController(http.Controller):
                     'phone':          body.get('mobile', ''),
                     'is_patient':     True,
                     'financial_class': body.get('financial_class', 'cash'),
+                    **({'dob': body['dob']} if body.get('dob') else {}),
+                    **({'gender': body['gender']} if body.get('gender') else {}),
+                    **({'street': body['address']} if body.get('address') else {}),
                 })
             patient_id = patient.id
 
