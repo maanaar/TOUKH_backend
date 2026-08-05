@@ -11,6 +11,38 @@ def http_response(data, status=200):
     return Response(body, status=status, mimetype='application/json')
 
 
+def _normalize_ar_keyword(text):
+    """Collapse Arabic spelling variants that get typed inconsistently
+    depending on who entered the data and which keyboard they used:
+    - alef forms (أ/إ/آ) vs bare alef (ا) — e.g. "أشعة" vs "اشعة"
+    - ta marbuta (ة) vs ha (ه) — e.g. "الأشعة" vs "الاشعه"
+    Matching on the normalized form means a caller only has to type one
+    spelling and it still finds category names stored with another."""
+    if not text:
+        return ''
+    for ch in ('أ', 'إ', 'آ'):
+        text = text.replace(ch, 'ا')
+    text = text.replace('ة', 'ه')
+    return text.lower()
+
+
+def _categ_ids_by_keyword(env, keyword):
+    """product.category ids whose name, complete_name (full path) or
+    name_ar contains keyword, matched after Arabic normalization (see
+    _normalize_ar_keyword) so alef/ta-marbuta spelling differences between
+    the caller and the DB don't cause a real match to be missed."""
+    norm_kw = _normalize_ar_keyword(keyword)
+    if not norm_kw:
+        return []
+    categs = env['product.category'].sudo().search([])
+    return [
+        c.id for c in categs
+        if norm_kw in _normalize_ar_keyword(c.name or '')
+        or norm_kw in _normalize_ar_keyword(c.complete_name or '')
+        or norm_kw in _normalize_ar_keyword(getattr(c, 'name_ar', '') or '')
+    ]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  شاشة الأصناف والأدوية (/unit/inventory/items) — field mapping
 #
@@ -112,6 +144,28 @@ def _apply_items_form_vals(body, vals):
                       'min_qty', 'max_qty', 'expiry_months', 'storage_temp'):
         if int_field in vals and vals[int_field] in (None, ''):
             vals[int_field] = 0
+
+
+def _packaging_options(rec):
+    """Base uom_id plus each additional packaging in uom_ids (native
+    product.template 'Packagings' field), price-converted through the
+    packaging's factor against the base unit. This is the list dispense
+    screens build the الوحدة dropdown from — deliberately narrower than
+    every uom.uom in the system, since it only offers units the product is
+    actually configured to be sold/dispensed in.
+    """
+    base_uom = rec.uom_id
+    if not base_uom:
+        return []
+    options = [{'id': base_uom.id, 'name': base_uom.name, 'price': rec.list_price}]
+    for uom in rec.uom_ids:
+        ratio = (uom.factor / base_uom.factor) if base_uom._has_common_reference(uom) else None
+        options.append({
+            'id': uom.id,
+            'name': uom.name,
+            'price': rec.list_price * ratio if ratio is not None else rec.list_price,
+        })
+    return options
 
 
 def _items_form_dict(rec):
@@ -302,26 +356,10 @@ class ProductController(http.Controller):
             else:
                 domain = [('id', '=', 0)]  # unknown location — no products, not "all products"
         if categ_keyword:
-            # نفس أسلوب search_lite: مطابقة الاسم بتسامح مع اختلاف الهاء/التاء
-            # المربوطة، وعلى complete_name كمان عشان يشمل كل الفئات الفرعية
-            # تحت الفئة المطلوبة (زي فئات الأدوية الفرعية تحت "Medications").
-            categ_variants = [categ_keyword]
-            if 'ة' in categ_keyword:
-                alt = categ_keyword.replace('ة', 'ه')
-                if alt not in categ_variants:
-                    categ_variants.append(alt)
-            if 'ه' in categ_keyword:
-                alt = categ_keyword.replace('ه', 'ة')
-                if alt not in categ_variants:
-                    categ_variants.append(alt)
-            categ_leaves = []
-            for kw2 in categ_variants:
-                categ_leaves += [
-                    ('categ_id.name', 'ilike', kw2),
-                    ('categ_id.complete_name', 'ilike', kw2),
-                    ('categ_id.name_ar', 'ilike', kw2),
-                ]
-            domain += ['|'] * (len(categ_leaves) - 1) + categ_leaves
+            # Matches on name, complete_name (full path — covers subcategories
+            # like الأدوية's children) and name_ar, after Arabic normalization
+            # so alef/ta-marbuta spelling differences don't hide a real match.
+            domain += [('categ_id', 'in', _categ_ids_by_keyword(request.env, categ_keyword))]
         records = request.env['product.template'].sudo().search(domain)
         all_uoms = request.env['uom.uom'].sudo().search([])
 
@@ -397,6 +435,10 @@ class ProductController(http.Controller):
                 'uom_medium_name': rec.uom_mediumm.name if rec.uom_mediumm else '',
                 # 'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
                 # 'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
+                # Packagings — base uom_id plus each additional packaging in uom_ids,
+                # price-converted. This is the list dispense screens should build
+                # the الوحدة dropdown from.
+                'packaging_uom_ids': _packaging_options(rec),
                 # Every unit of measure in the system, selectable for this product —
                 # defaults to product.uom_id. Price is list_price converted through
                 # uom.uom._compute_price against the product's base uom_id; units that
@@ -469,26 +511,10 @@ class ProductController(http.Controller):
                 ('categ_id.name_ar', 'ilike', term),
             ]
         if categ_keyword:
-            # فئات زي "أشعة" بتتكتب أحياناً بهاء بدل التاء المربوطة ("الاشعه")
-            # حسب مين دخلها في أودو — نجرب الكلمة زي ما هي وبنسخة بديلة بحرف
-            # مختلف عشان الفئة تتلاقى مهما كانت طريقة كتابتها في قاعدة البيانات.
-            categ_variants = [categ_keyword]
-            if 'ة' in categ_keyword:
-                alt = categ_keyword.replace('ة', 'ه')
-                if alt not in categ_variants:
-                    categ_variants.append(alt)
-            if 'ه' in categ_keyword:
-                alt = categ_keyword.replace('ه', 'ة')
-                if alt not in categ_variants:
-                    categ_variants.append(alt)
-            categ_leaves = []
-            for kw in categ_variants:
-                categ_leaves += [
-                    ('categ_id.name', 'ilike', kw),
-                    ('categ_id.complete_name', 'ilike', kw),
-                    ('categ_id.name_ar', 'ilike', kw),
-                ]
-            domain += ['|'] * (len(categ_leaves) - 1) + categ_leaves
+            # Matches on name, complete_name and name_ar, after Arabic
+            # normalization so alef/ta-marbuta spelling differences (e.g.
+            # "أشعة" vs "اشعة") don't hide a real match.
+            domain += [('categ_id', 'in', _categ_ids_by_keyword(request.env, categ_keyword))]
         if product_type:
             domain.append(('type', '=', product_type))
 
@@ -546,6 +572,7 @@ class ProductController(http.Controller):
             'uom_medium_name': rec.uom_mediumm.name if rec.uom_mediumm else '',
             # 'uom_po_id':                rec.uom_po_id.id if rec.uom_po_id else None,
             # 'uom_po_name':              rec.uom_po_id.name if rec.uom_po_id else None,
+            'packaging_uom_ids': _packaging_options(rec),
             'list_price':               rec.list_price,
             'standard_price':           rec.standard_price,
             'currency_id':              rec.currency_id.id if rec.currency_id else None,
@@ -1766,10 +1793,11 @@ class PickingCreateController(http.Controller):
                     return http_response({'error': f'moves[{i}]: product_id not found'}, 400)
 
                 qty = float(move.get('quantity', move.get('product_uom_qty', 1)))
+                move_uom_id = move.get('product_uom') or product.uom_id.id
                 move_vals_list.append((0, 0, {
                     'product_id':       product.id,
                     'product_uom_qty':  qty,
-                    'product_uom':      product.uom_id.id,
+                    'product_uom':      move_uom_id,
                     'location_id':      location_src.id,
                     'location_dest_id': location_dst.id,
                 }))

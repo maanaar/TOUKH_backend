@@ -36,39 +36,39 @@ def _product_service_dict(p, specialty_id=None, specialty_name=''):
     }
 
 
-def _keyword_variants(keyword):
-    """Arabic category names sometimes get typed with 'ه' instead of the
-    correct 'ة' (or vice versa) depending on who entered them in Odoo — e.g.
-    "الاشعه" vs "الأشعة". Expand the keyword so a single caller-supplied
-    spelling still matches whichever variant actually exists in the DB."""
-    variants = [keyword]
-    if 'ة' in keyword:
-        alt = keyword.replace('ة', 'ه')
-        if alt not in variants:
-            variants.append(alt)
-    if 'ه' in keyword:
-        alt = keyword.replace('ه', 'ة')
-        if alt not in variants:
-            variants.append(alt)
-    return variants
+def _normalize_ar(text):
+    """Collapse Arabic spelling variants that get typed inconsistently
+    depending on who entered the data and which keyboard they used:
+    - alef forms (أ/إ/آ) vs bare alef (ا) — e.g. "أشعة" vs "اشعة"
+    - ta marbuta (ة) vs ha (ه) — e.g. "الأشعة" vs "الاشعه"
+    Matching on the normalized form means a caller only has to type one
+    spelling and it still finds category names stored with another."""
+    if not text:
+        return ''
+    for ch in ('أ', 'إ', 'آ'):
+        text = text.replace(ch, 'ا')
+    text = text.replace('ة', 'ه')
+    return text.lower()
 
 
 def _categs_by_keyword(env, keyword):
-    """Return all product.category IDs whose name or complete_name contains keyword."""
-    all_categs = env['product.category'].sudo()
-    for kw in _keyword_variants(keyword):
-        # Search by direct name match
-        all_categs |= env['product.category'].sudo().search([('name', 'ilike', kw)])
-        # Also search by complete_name (full path like "All / اجراءات / ...")
-        try:
-            all_categs |= env['product.category'].sudo().search([('complete_name', 'ilike', kw)])
-        except Exception:
-            pass
-    if not all_categs:
+    """Return all product.category IDs whose name or complete_name contains
+    keyword, matching on a normalized form (see _normalize_ar) so alef/ta
+    marbuta spelling differences between the caller and the DB don't cause
+    a real match to be missed."""
+    norm_kw = _normalize_ar(keyword)
+    if not norm_kw:
+        return []
+    all_categs = env['product.category'].sudo().search([])
+    matched = all_categs.filtered(
+        lambda c: norm_kw in _normalize_ar(c.name or '')
+        or norm_kw in _normalize_ar(c.complete_name or '')
+    )
+    if not matched:
         return []
     # Include all child categories
     return env['product.category'].sudo().search(
-        [('id', 'child_of', all_categs.ids)]
+        [('id', 'child_of', matched.ids)]
     ).ids
 
 
