@@ -199,6 +199,7 @@ def _dt_iso(v, with_time=True):
 def _admission_request_dict(r):
     return {
         'id':                     r.id,
+        'mirroredAppointmentId':  r.mirrored_appointment_id.id if r.mirrored_appointment_id else None,
         'patientId':              r.patient_id.id if r.patient_id else None,
         'source':                 r.source or '',
         'status':                 r.status or '',

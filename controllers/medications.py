@@ -194,6 +194,25 @@ class MedicationOrderController(http.Controller):
             'dispensed_at': DT.now(),
         }
 
+        # A pharmacist may adjust the order while reopening it before actually
+        # dispensing (dose/frequency/route/quantity/drug swapped for an
+        # in-stock alternative) — persist those edits onto the record itself
+        # here, since dispensing is the save point for this screen. Without
+        # this the record silently kept the doctor's original values forever,
+        # even though the picking/print already reflected the edited ones.
+        for key in ('drug_name', 'dose', 'frequency', 'duration', 'route', 'instructions'):
+            if key in body:
+                vals[key] = body[key]
+        if 'quantity' in body and body['quantity'] not in (None, ''):
+            try:
+                vals['quantity'] = float(body['quantity'])
+            except (TypeError, ValueError):
+                pass
+        if 'uom_id' in body:
+            vals['uom_id'] = body['uom_id'] or False
+        if 'product_id' in body:
+            vals['product_id'] = body['product_id'] or False
+
         if employee:
             vals['dispensed_by'] = employee.id
         elif body.get('dispensed_by'):
