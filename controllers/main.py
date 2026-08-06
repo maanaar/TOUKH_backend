@@ -912,12 +912,15 @@ class PurchaseOrderController(http.Controller):
                 'priority':             rec.priority,
                 'origin':               rec.origin or '',
                 'partner_ref':          rec.partner_ref or '',
-                'note':                 rec.notes or '',
+                'note':                 rec.note or '',
                 # ── partner ───────────────────────────────────────────────
                 'partner_id':           rec.partner_id.id if rec.partner_id else None,
                 'partner_name':         rec.partner_id.name if rec.partner_id else None,
                 'dest_address_id':      rec.dest_address_id.id if rec.dest_address_id else None,
                 'dest_address_name':    rec.dest_address_id.name if rec.dest_address_id else None,
+                # ── deliver to ───────────────────────────────────────────
+                'picking_type_id':      rec.picking_type_id.id if rec.picking_type_id else None,
+                'picking_type_name':    rec.picking_type_id.name if rec.picking_type_id else None,
                 # ── dates ─────────────────────────────────────────────────
                 'date_order':           str(rec.date_order) if rec.date_order else None,
                 'date_approve':         str(rec.date_approve) if rec.date_approve else None,
@@ -951,6 +954,9 @@ class PurchaseOrderController(http.Controller):
                 # ── company / warehouse ───────────────────────────────────
                 'company_id':           rec.company_id.id if rec.company_id else None,
                 'company_name':         rec.company_id.name if rec.company_id else None,
+                # ── attachments ───────────────────────────────────────────
+                'request_documents_count':    len(rec.request_document_ids),
+                'inspection_documents_count': len(rec.inspection_document_ids),
             })
         return http_response(data)
 
@@ -982,14 +988,13 @@ class PurchaseOrderController(http.Controller):
                 # ── pricing ───────────────────────────────────────────────
                 'price_unit':               line.price_unit,
                 'discount':                 line.discount,
-                'taxes_id':                 line.taxes_id.ids,
+                'taxes_id':                 line.tax_ids.ids,
                 'price_subtotal':           line.price_subtotal,
                 'price_total':              line.price_total,
                 'price_tax':                line.price_tax,
                 # ── dates ─────────────────────────────────────────────────
                 'date_planned':             str(line.date_planned) if line.date_planned else None,
                 # ── links ─────────────────────────────────────────────────
-                'account_analytic_id':      line.account_analytic_id.id if line.account_analytic_id else None,
                 'analytic_distribution':    line.analytic_distribution or {},
                 'move_ids':                 line.move_ids.ids,
                 'invoice_lines':            line.invoice_lines.ids,
@@ -1004,11 +1009,13 @@ class PurchaseOrderController(http.Controller):
             'priority':             rec.priority,
             'origin':               rec.origin or '',
             'partner_ref':          rec.partner_ref or '',
-            'note':                 rec.notes or '',
+            'note':                 rec.note or '',
             'partner_id':           rec.partner_id.id if rec.partner_id else None,
             'partner_name':         rec.partner_id.name if rec.partner_id else None,
             'dest_address_id':      rec.dest_address_id.id if rec.dest_address_id else None,
             'dest_address_name':    rec.dest_address_id.name if rec.dest_address_id else None,
+            'picking_type_id':      rec.picking_type_id.id if rec.picking_type_id else None,
+            'picking_type_name':    rec.picking_type_id.name if rec.picking_type_id else None,
             'date_order':           str(rec.date_order) if rec.date_order else None,
             'date_approve':         str(rec.date_approve) if rec.date_approve else None,
             'date_planned':         str(rec.date_planned) if rec.date_planned else None,
@@ -1031,6 +1038,9 @@ class PurchaseOrderController(http.Controller):
             'company_id':           rec.company_id.id if rec.company_id else None,
             'company_name':         rec.company_id.name if rec.company_id else None,
             'order_lines':          lines,
+            # ── attachments ───────────────────────────────────────────────
+            'request_documents':    _cr_attachment_list(rec.request_document_ids),
+            'inspection_documents': _cr_attachment_list(rec.inspection_document_ids),
         }
         return http_response(data)
 
@@ -2249,14 +2259,22 @@ class PurchaseOrderCreateController(http.Controller):
 
             vals = {'partner_id': partner.id}
 
-            for field in ('origin', 'partner_ref', 'date_order', 'date_planned', 'notes'):
+            for field in ('origin', 'partner_ref', 'date_order', 'date_planned'):
                 if body.get(field):
                     vals[field] = body[field]
+
+            if body.get('notes'):
+                vals['note'] = body['notes']
 
             if body.get('currency_id'):
                 currency = request.env['res.currency'].sudo().browse(int(body['currency_id']))
                 if currency.exists():
                     vals['currency_id'] = currency.id
+
+            if body.get('picking_type_id'):
+                picking_type = request.env['stock.picking.type'].sudo().browse(int(body['picking_type_id']))
+                if picking_type.exists():
+                    vals['picking_type_id'] = picking_type.id
 
             now_str = odoo_fields.Datetime.to_string(odoo_fields.Datetime.now())
             line_vals_list = []
@@ -2323,6 +2341,54 @@ class PurchaseOrderConfirmController(http.Controller):
                 'date_approve': str(rec.date_approve) if rec.date_approve else None,
             })
 
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+
+_PO_ATTACHMENT_FIELDS = {
+    'request':    'request_document_ids',
+    'inspection': 'inspection_document_ids',
+}
+
+
+class PurchaseOrderAttachmentController(http.Controller):
+
+    @http.route('/api/v1/purchase/orders/<int:rec_id>/attachments', type='http', auth='user', methods=['POST'], csrf=False)
+    def add_attachment(self, rec_id, **kw):
+        try:
+            rec = request.env['purchase.order'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            body = json.loads(request.httprequest.data or '{}')
+            field = _PO_ATTACHMENT_FIELDS.get(body.get('field'))
+            if not field:
+                return http_response({'error': "field must be 'request' or 'inspection'"}, 400)
+            data = body.get('data')
+            if not data:
+                return http_response({'error': 'data (base64) is required'}, 400)
+            attachment = request.env['ir.attachment'].sudo().create({
+                'name':      body.get('name') or 'attachment',
+                'datas':     data,
+                'mimetype':  body.get('mimetype') or False,
+                'res_model': 'purchase.order',
+                'res_id':    rec.id,
+            })
+            rec[field] = [(4, attachment.id)]
+            return http_response(_cr_attachment_list(rec[field]), 201)
+        except Exception as e:
+            return http_response({'error': str(e)}, 500)
+
+    @http.route('/api/v1/purchase/orders/<int:rec_id>/attachments/<int:attachment_id>', type='http', auth='user', methods=['DELETE'], csrf=False)
+    def remove_attachment(self, rec_id, attachment_id, **kw):
+        try:
+            rec = request.env['purchase.order'].sudo().browse(rec_id)
+            if not rec.exists():
+                return http_response({'error': 'not found'}, 404)
+            field = _PO_ATTACHMENT_FIELDS.get(kw.get('field'))
+            if not field:
+                return http_response({'error': "field must be 'request' or 'inspection'"}, 400)
+            rec[field] = [(3, attachment_id)]
+            return http_response(_cr_attachment_list(rec[field]))
         except Exception as e:
             return http_response({'error': str(e)}, 500)
 

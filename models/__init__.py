@@ -33,4 +33,5 @@ from . import (
     saycare_geo,
     saycare_resuscitation,
     saycare_doctor_assessment,
+    purchase_order_ext,
 )

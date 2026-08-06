@@ -73,5 +73,12 @@
             <field name="number_next">1</field>
             <field name="number_increment">1</field>
         </record>
+
+        <!-- Overrides the purchase module's own sequence (P00001) so purchase
+             orders read as RFQ0001, matching the اوامر الشراء page. -->
+        <record id="purchase.seq_purchase_order" model="ir.sequence">
+            <field name="prefix">RFQ</field>
+            <field name="padding">4</field>
+        </record>
     </data>
 </odoo>
