@@ -27,6 +27,7 @@ from . import (
     saycare_admission_request,
     saycare_inventory_count_request,
     saycare_department_stock_request,
+    saycare_main_warehouse_receipt,
     saycare_inpatient_nursing_assessment,
     saycare_inpatient_nursing_sheets,
     saycare_critical_care_sheets,
@@ -35,3 +36,4 @@ from . import (
     saycare_doctor_assessment,
     purchase_order_ext,
 )
+from . import saycare_mortuary
