@@ -248,11 +248,11 @@ def _case_dict(record, detail=False):
     return data
 
 
-class MortuaryReceptionController(http.Controller):
-    _case_model = "saycare.mortuary.case"
+class MorgueReceptionController(http.Controller):
+    _case_model = "saycare.morgue.case"
 
     @http.route(
-        "/api/v1/mortuary/cases",
+        "/api/v1/morgue/cases",
         type="http",
         auth="user",
         methods=["GET"],
@@ -324,7 +324,7 @@ class MortuaryReceptionController(http.Controller):
         )
 
     @http.route(
-        "/api/v1/mortuary/cases/<int:case_id>",
+        "/api/v1/morgue/cases/<int:case_id>",
         type="http",
         auth="user",
         methods=["GET"],
@@ -333,11 +333,11 @@ class MortuaryReceptionController(http.Controller):
     def get_case(self, case_id, **kw):
         record = request.env[self._case_model].sudo().browse(case_id)
         if not record.exists():
-            return _json({"error": "mortuary case not found"}, 404)
+            return _json({"error": "morgue case not found"}, 404)
         return _json(_case_dict(record, detail=True))
 
     @http.route(
-        "/api/v1/mortuary/cases",
+        "/api/v1/morgue/cases",
         type="http",
         auth="user",
         methods=["POST"],
@@ -350,11 +350,11 @@ class MortuaryReceptionController(http.Controller):
 
         case_no = " ".join((body.get("caseNo") or "").strip().split())
         if not case_no:
-            return _json({"error": "mortuary case number is required"}, 400)
+            return _json({"error": "morgue case number is required"}, 400)
 
         model = request.env[self._case_model].sudo()
         if model.search_count([("case_no", "=", case_no)]):
-            return _json({"error": "mortuary case number already exists"}, 409)
+            return _json({"error": "morgue case number already exists"}, 409)
 
         try:
             record = model.create(_vals_from_body(body))
@@ -364,11 +364,11 @@ class MortuaryReceptionController(http.Controller):
             return _json({"error": str(exc)}, 400)
         except Exception as exc:
             request.env.cr.rollback()
-            _logger.exception("mortuary case creation failed")
+            _logger.exception("morgue case creation failed")
             return _json({"error": str(exc)}, 500)
 
     @http.route(
-        "/api/v1/mortuary/cases/<int:case_id>",
+        "/api/v1/morgue/cases/<int:case_id>",
         type="http",
         auth="user",
         methods=["PUT"],
@@ -377,10 +377,10 @@ class MortuaryReceptionController(http.Controller):
     def update_case(self, case_id, **kw):
         record = request.env[self._case_model].sudo().browse(case_id)
         if not record.exists():
-            return _json({"error": "mortuary case not found"}, 404)
+            return _json({"error": "morgue case not found"}, 404)
         if record.state != "draft":
             return _json(
-                {"error": "only draft mortuary cases can be edited"},
+                {"error": "only draft morgue cases can be edited"},
                 409,
             )
 
@@ -394,7 +394,7 @@ class MortuaryReceptionController(http.Controller):
                 [("case_no", "=", case_no), ("id", "!=", record.id)]
             )
             if duplicate:
-                return _json({"error": "mortuary case number already exists"}, 409)
+                return _json({"error": "morgue case number already exists"}, 409)
 
         try:
             record.write(_vals_from_body(body))
@@ -404,11 +404,11 @@ class MortuaryReceptionController(http.Controller):
             return _json({"error": str(exc)}, 400)
         except Exception as exc:
             request.env.cr.rollback()
-            _logger.exception("mortuary case update failed")
+            _logger.exception("morgue case update failed")
             return _json({"error": str(exc)}, 500)
 
     @http.route(
-        "/api/v1/mortuary/cases/<int:case_id>/confirm",
+        "/api/v1/morgue/cases/<int:case_id>/confirm",
         type="http",
         auth="user",
         methods=["POST"],
@@ -417,7 +417,7 @@ class MortuaryReceptionController(http.Controller):
     def confirm_case(self, case_id, **kw):
         record = request.env[self._case_model].sudo().browse(case_id)
         if not record.exists():
-            return _json({"error": "mortuary case not found"}, 404)
+            return _json({"error": "morgue case not found"}, 404)
 
         body, error = _load_body()
         if error:
@@ -433,11 +433,11 @@ class MortuaryReceptionController(http.Controller):
             return _json({"error": message}, code)
         except Exception as exc:
             request.env.cr.rollback()
-            _logger.exception("mortuary case confirmation failed")
+            _logger.exception("morgue case confirmation failed")
             return _json({"error": str(exc)}, 500)
 
     @http.route(
-        "/api/v1/mortuary/cases/<int:case_id>/cancel",
+        "/api/v1/morgue/cases/<int:case_id>/cancel",
         type="http",
         auth="user",
         methods=["POST"],
@@ -446,7 +446,7 @@ class MortuaryReceptionController(http.Controller):
     def cancel_case(self, case_id, **kw):
         record = request.env[self._case_model].sudo().browse(case_id)
         if not record.exists():
-            return _json({"error": "mortuary case not found"}, 404)
+            return _json({"error": "morgue case not found"}, 404)
         try:
             record.action_cancel_draft()
             return _json(_case_dict(record, detail=True))
@@ -455,7 +455,78 @@ class MortuaryReceptionController(http.Controller):
             return _json({"error": str(exc)}, 409)
 
     @http.route(
-        "/api/v1/mortuary/fridges",
+        "/api/v1/morgue/patients/<int:patient_id>/admissions",
+        type="http",
+        auth="user",
+        methods=["GET"],
+        csrf=False,
+    )
+    def list_patient_admissions(self, patient_id, limit=50, **kw):
+        patient = request.env["res.partner"].sudo().browse(patient_id)
+        if not patient.exists() or not patient.is_patient:
+            return _json({"error": "patient not found"}, 404)
+
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 50
+
+        admissions = (
+            request.env["saycare.admission.request"]
+            .sudo()
+            .search(
+                [("patient_id", "=", patient.id)],
+                order="admitted_at desc, create_date desc, id desc",
+                limit=limit,
+            )
+        )
+
+        return _json(
+            {
+                "patientId": patient.id,
+                "admissions": [
+                    {
+                        "id": admission.id,
+                        "status": admission.status or "",
+                        "patientName": admission.patient_name or patient.name or "",
+                        "patientMrn": admission.patient_mrn
+                        or getattr(patient, "mrn", "")
+                        or "",
+                        "medicalFileNumber": admission.x_file_number
+                        or getattr(patient, "x_file_number", "")
+                        or "",
+                        "entryPermitNo": admission.entry_permit_no
+                        or getattr(patient, "x_entry_permit_no", "")
+                        or "",
+                        "nationalId": admission.national_id
+                        or getattr(patient, "id_number", "")
+                        or "",
+                        "departmentId": admission.department_id.id
+                        if admission.department_id
+                        else None,
+                        "departmentName": admission.department_id.display_name
+                        if admission.department_id
+                        else (admission.ward or ""),
+                        "attendingDoctorName": admission.attending_doctor
+                        or admission.doctor_name
+                        or "",
+                        "admissionDate": admission.admission_date.isoformat()
+                        if admission.admission_date
+                        else "",
+                        "admittedAt": fields.Datetime.to_string(
+                            admission.admitted_at
+                        )
+                        if admission.admitted_at
+                        else "",
+                        "inpatientBookingNumber": admission.inpatient_booking_number
+                        or "",
+                    }
+                    for admission in admissions
+                ],
+            }
+        )
+    @http.route(
+        "/api/v1/morgue/fridges",
         type="http",
         auth="user",
         methods=["GET"],
@@ -463,7 +534,7 @@ class MortuaryReceptionController(http.Controller):
     )
     def list_fridges(self, available_only="1", **kw):
         only_available = _bool_value(available_only)
-        fridges = request.env["saycare.mortuary.fridge"].sudo().search(
+        fridges = request.env["saycare.morgue.fridge"].sudo().search(
             [("active", "=", True)],
             order="code asc",
         )

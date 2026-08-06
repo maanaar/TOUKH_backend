@@ -37,4 +37,4 @@ from . import (
     resuscitation,
     doctor_assessment,
 )
-from . import mortuary
+from . import morgue

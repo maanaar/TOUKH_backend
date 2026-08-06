@@ -8,15 +8,15 @@ from odoo.exceptions import UserError, ValidationError
 _CASE_NO_ALLOWED_RE = re.compile(r"^[\w\u0600-\u06FF./\- ]+$", re.UNICODE)
 
 
-class SaycareMortuaryCase(models.Model):
-    _name = "saycare.mortuary.case"
-    _description = "Mortuary Reception Case"
+class SaycareMorgueCase(models.Model):
+    _name = "saycare.morgue.case"
+    _description = "Morgue Reception Case"
     _inherit = ["mail.thread", "mail.activity.mixin"]
     _order = "reception_datetime desc, id desc"
     _rec_name = "case_no"
 
     case_no = fields.Char(
-        string="Mortuary Case Number",
+        string="Morgue Case Number",
         required=True,
         copy=False,
         index=True,
@@ -164,14 +164,14 @@ class SaycareMortuaryCase(models.Model):
         ondelete="restrict",
     )
     fridge_id = fields.Many2one(
-        "saycare.mortuary.fridge",
+        "saycare.morgue.fridge",
         string="Fridge",
         copy=False,
         tracking=True,
         ondelete="restrict",
     )
     drawer_id = fields.Many2one(
-        "saycare.mortuary.drawer",
+        "saycare.morgue.drawer",
         string="Drawer",
         copy=False,
         tracking=True,
@@ -190,7 +190,7 @@ class SaycareMortuaryCase(models.Model):
         tracking=True,
     )
     belonging_ids = fields.One2many(
-        "saycare.mortuary.belonging",
+        "saycare.morgue.belonging",
         "case_id",
         string="Personal Belongings",
         copy=True,
@@ -212,7 +212,7 @@ class SaycareMortuaryCase(models.Model):
 
     _case_no_uniq = models.Constraint(
         "unique(case_no)",
-        "Mortuary case number must be unique.",
+        "Morgue case number must be unique.",
     )
 
     @api.model
@@ -226,10 +226,10 @@ class SaycareMortuaryCase(models.Model):
     def _normalise_case_no(self, value):
         value = " ".join((value or "").strip().split())
         if not value:
-            raise ValidationError(_("Mortuary case number is required."))
+            raise ValidationError(_("Morgue case number is required."))
         if not _CASE_NO_ALLOWED_RE.match(value):
             raise ValidationError(
-                _("Mortuary case number contains unsupported characters.")
+                _("Morgue case number contains unsupported characters.")
             )
         return value
 
@@ -254,7 +254,7 @@ class SaycareMortuaryCase(models.Model):
             vals["case_no"] = self._normalise_case_no(vals.get("case_no"))
             if any(rec.state != "draft" and vals["case_no"] != rec.case_no for rec in self):
                 raise UserError(
-                    _("The mortuary case number cannot be changed after confirmation.")
+                    _("The morgue case number cannot be changed after confirmation.")
                 )
 
         protected_location_fields = {"fridge_id", "drawer_id"}
@@ -262,7 +262,7 @@ class SaycareMortuaryCase(models.Model):
             rec.state != "draft" for rec in self
         ):
             raise UserError(
-                _("Storage location changes must use the mortuary transfer workflow.")
+                _("Storage location changes must use the morgue transfer workflow.")
             )
 
         self._apply_source_snapshots(vals)
@@ -402,13 +402,13 @@ class SaycareMortuaryCase(models.Model):
             raise ValidationError(_("A valid drawer is required."))
 
         self.env.cr.execute(
-            "SELECT id FROM saycare_mortuary_drawer WHERE id = %s FOR UPDATE",
+            "SELECT id FROM saycare_morgue_drawer WHERE id = %s FOR UPDATE",
             [drawer_id],
         )
         if not self.env.cr.fetchone():
             raise ValidationError(_("The selected drawer does not exist."))
 
-        drawer = self.env["saycare.mortuary.drawer"].sudo().browse(drawer_id)
+        drawer = self.env["saycare.morgue.drawer"].sudo().browse(drawer_id)
         drawer.invalidate_recordset(["active", "current_case_id", "fridge_id"])
 
         if not drawer.active or not drawer.fridge_id.active:
@@ -441,15 +441,15 @@ class SaycareMortuaryCase(models.Model):
         return True
 
 
-class SaycareMortuaryBelonging(models.Model):
-    _name = "saycare.mortuary.belonging"
-    _description = "Mortuary Personal Belonging"
+class SaycareMorgueBelonging(models.Model):
+    _name = "saycare.morgue.belonging"
+    _description = "Morgue Personal Belonging"
     _order = "id asc"
     _rec_name = "item_name"
 
     case_id = fields.Many2one(
-        "saycare.mortuary.case",
-        string="Mortuary Case",
+        "saycare.morgue.case",
+        string="Morgue Case",
         required=True,
         index=True,
         ondelete="cascade",
@@ -509,9 +509,9 @@ class SaycareMortuaryBelonging(models.Model):
                 raise ValidationError(_("Belonging quantity must be greater than zero."))
 
 
-class SaycareMortuaryFridge(models.Model):
-    _name = "saycare.mortuary.fridge"
-    _description = "Mortuary Fridge"
+class SaycareMorgueFridge(models.Model):
+    _name = "saycare.morgue.fridge"
+    _description = "Morgue Fridge"
     _order = "code asc"
     _rec_name = "name"
 
@@ -520,7 +520,7 @@ class SaycareMortuaryFridge(models.Model):
     location = fields.Char(string="Location")
     active = fields.Boolean(string="Active", default=True, index=True)
     drawer_ids = fields.One2many(
-        "saycare.mortuary.drawer",
+        "saycare.morgue.drawer",
         "fridge_id",
         string="Drawers",
     )
@@ -531,14 +531,14 @@ class SaycareMortuaryFridge(models.Model):
     )
 
 
-class SaycareMortuaryDrawer(models.Model):
-    _name = "saycare.mortuary.drawer"
-    _description = "Mortuary Drawer"
+class SaycareMorgueDrawer(models.Model):
+    _name = "saycare.morgue.drawer"
+    _description = "Morgue Drawer"
     _order = "fridge_id, code asc"
     _rec_name = "code"
 
     fridge_id = fields.Many2one(
-        "saycare.mortuary.fridge",
+        "saycare.morgue.fridge",
         string="Fridge",
         required=True,
         index=True,
@@ -548,8 +548,8 @@ class SaycareMortuaryDrawer(models.Model):
     name = fields.Char(string="Drawer Name")
     active = fields.Boolean(string="Active", default=True, index=True)
     current_case_id = fields.Many2one(
-        "saycare.mortuary.case",
-        string="Current Mortuary Case",
+        "saycare.morgue.case",
+        string="Current Morgue Case",
         copy=False,
         index=True,
         ondelete="restrict",
@@ -561,5 +561,5 @@ class SaycareMortuaryDrawer(models.Model):
     )
     _drawer_current_case_uniq = models.Constraint(
         "unique(current_case_id)",
-        "A mortuary case cannot occupy more than one drawer.",
+        "A morgue case cannot occupy more than one drawer.",
     )

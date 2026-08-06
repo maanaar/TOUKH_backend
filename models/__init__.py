@@ -36,4 +36,4 @@ from . import (
     saycare_doctor_assessment,
     purchase_order_ext,
 )
-from . import saycare_mortuary
+from . import saycare_morgue
