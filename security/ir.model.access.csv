@@ -114,3 +114,11 @@ access_saycare_main_warehouse_receipt_line_admin,saycare.main.warehouse.receipt.
 access_saycare_main_warehouse_receipt_batch_user,saycare.main.warehouse.receipt.batch user,model_saycare_main_warehouse_receipt_batch,base.group_user,1,1,1,0
 access_saycare_main_warehouse_receipt_batch_admin,saycare.main.warehouse.receipt.batch admin,model_saycare_main_warehouse_receipt_batch,base.group_system,1,1,1,1
 access_saycare_department_stock_issue_line_admin,saycare.department.stock.issue.line admin,model_saycare_department_stock_issue_line,base.group_system,1,1,1,1
+access_saycare_mortuary_case_user,saycare.mortuary.case user,model_saycare_mortuary_case,base.group_user,1,1,1,0
+access_saycare_mortuary_case_admin,saycare.mortuary.case admin,model_saycare_mortuary_case,base.group_system,1,1,1,1
+access_saycare_mortuary_belonging_user,saycare.mortuary.belonging user,model_saycare_mortuary_belonging,base.group_user,1,1,1,0
+access_saycare_mortuary_belonging_admin,saycare.mortuary.belonging admin,model_saycare_mortuary_belonging,base.group_system,1,1,1,1
+access_saycare_mortuary_fridge_user,saycare.mortuary.fridge user,model_saycare_mortuary_fridge,base.group_user,1,0,0,0
+access_saycare_mortuary_fridge_admin,saycare.mortuary.fridge admin,model_saycare_mortuary_fridge,base.group_system,1,1,1,1
+access_saycare_mortuary_drawer_user,saycare.mortuary.drawer user,model_saycare_mortuary_drawer,base.group_user,1,0,0,0
+access_saycare_mortuary_drawer_admin,saycare.mortuary.drawer admin,model_saycare_mortuary_drawer,base.group_system,1,1,1,1

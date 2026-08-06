@@ -35,3 +35,4 @@ from . import (
     saycare_resuscitation,
     saycare_doctor_assessment,
 )
+from . import saycare_mortuary
