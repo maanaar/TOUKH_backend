@@ -352,7 +352,15 @@ class ProductController(http.Controller):
                 quants = request.env['stock.quant'].sudo().search([
                     ('location_id', 'child_of', loc.id),
                 ])
-                domain = [('id', 'in', quants.mapped('product_id.product_tmpl_id').ids)]
+                # Odoo's search() silently excludes active=False records even
+                # with an explicit 'id in [...]' domain — a product archived
+                # after it was stocked (e.g. discontinued) would otherwise
+                # vanish from here even though it still has real quantity on
+                # hand and needs to stay dispensable until that stock is used up.
+                domain = [
+                    ('id', 'in', quants.mapped('product_id.product_tmpl_id').ids),
+                    ('active', 'in', [True, False]),
+                ]
             else:
                 domain = [('id', '=', 0)]  # unknown location — no products, not "all products"
         if categ_keyword:
