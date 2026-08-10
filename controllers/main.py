@@ -352,7 +352,15 @@ class ProductController(http.Controller):
                 quants = request.env['stock.quant'].sudo().search([
                     ('location_id', 'child_of', loc.id),
                 ])
-                domain = [('id', 'in', quants.mapped('product_id.product_tmpl_id').ids)]
+                # Odoo's search() silently excludes active=False records even
+                # with an explicit 'id in [...]' domain — a product archived
+                # after it was stocked (e.g. discontinued) would otherwise
+                # vanish from here even though it still has real quantity on
+                # hand and needs to stay dispensable until that stock is used up.
+                domain = [
+                    ('id', 'in', quants.mapped('product_id.product_tmpl_id').ids),
+                    ('active', 'in', [True, False]),
+                ]
             else:
                 domain = [('id', '=', 0)]  # unknown location — no products, not "all products"
         if categ_keyword:
@@ -518,13 +526,27 @@ class ProductController(http.Controller):
         if product_type:
             domain.append(('type', '=', product_type))
 
-        limit_i  = min(int(limit),  200)
+        # getCachedProducts() (services/productsCache.js) intentionally asks
+        # for limit=9999 to cache the *whole* catalog client-side — capping
+        # this too low silently truncates it alphabetically, dropping any
+        # product past that cutoff from every screen that reads the cache
+        # (both pharmacy dispensing screens included).
+        limit_i  = min(int(limit),  5000)
         offset_i = max(int(offset), 0)
 
         total   = request.env['product.template'].sudo().search_count(domain)
         records = request.env['product.template'].sudo().search(
             domain, limit=limit_i, offset=offset_i, order='name asc'
         )
+        # أدوية checkbox on product.category, expanded to subcategories — same
+        # rule as ProductController.get_all, needed here too since the pharmacy
+        # screens' medicine list is now sourced from this endpoint (no location
+        # filter, so it can show every medicine regardless of which stock
+        # location currently holds it).
+        medicine_roots = request.env['product.category'].sudo().search([('is_medicines', '=', True)])
+        medicine_categ_ids = set(
+            request.env['product.category'].sudo().search([('id', 'child_of', medicine_roots.ids)]).ids
+        ) if medicine_roots else set()
         items = [{
             'id':                rec.id,
             'name':              rec.name,
@@ -534,9 +556,11 @@ class ProductController(http.Controller):
             'categ_name':        rec.categ_id.complete_name if rec.categ_id else '',
             'categ_name_ar':     rec.categ_id.name_ar if rec.categ_id else '',
             'categ_parent_name': rec.categ_id.parent_id.name if rec.categ_id and rec.categ_id.parent_id else '',
+            'is_medicines':      rec.categ_id.id in medicine_categ_ids if rec.categ_id else False,
             'uom_id':            rec.uom_id.id   if rec.uom_id else None,
             'uom_name':          rec.uom_id.name if rec.uom_id else '',
             'type':              rec.type,
+            'qty_available':     rec.qty_available,
         } for rec in records]
         return http_response({'items': items, 'total': total, 'offset': offset_i, 'limit': limit_i})
 

@@ -55,14 +55,26 @@ def _categs_by_keyword(env, keyword):
     """Return all product.category IDs whose name or complete_name contains
     keyword, matching on a normalized form (see _normalize_ar) so alef/ta
     marbuta spelling differences between the caller and the DB don't cause
-    a real match to be missed."""
+    a real match to be missed.
+
+    Categories that are themselves named after a specific clinic/specialty
+    (e.g. "عيادة الأسنان", "عيادة الطوارئ") are excluded even when they match
+    the keyword — a broad keyword like "عيادة" is meant to reach a *generic*
+    category shared across clinics (e.g. "خدمات عيادة عامة"), not pull one
+    clinic's own procedures into every other clinic's list."""
     norm_kw = _normalize_ar(keyword)
     if not norm_kw:
         return []
     all_categs = env['product.category'].sudo().search([])
+    specialty_names = {
+        _normalize_ar(name) for name in
+        env['saycare.specialty'].sudo().search([]).mapped('name') if name
+    }
     matched = all_categs.filtered(
-        lambda c: norm_kw in _normalize_ar(c.name or '')
-        or norm_kw in _normalize_ar(c.complete_name or '')
+        lambda c: (
+            norm_kw in _normalize_ar(c.name or '')
+            or norm_kw in _normalize_ar(c.complete_name or '')
+        ) and _normalize_ar(c.name or '') not in specialty_names
     )
     if not matched:
         return []
