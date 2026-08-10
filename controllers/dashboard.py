@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import pytz
 from odoo import http
 from odoo.http import request
+from .inpatient import _effective_bed_status
 from .utils import _json
 
 AR_DAYS = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد']
@@ -316,41 +317,28 @@ class DashboardController(http.Controller):
             # physical room) — filter on it directly, matching /saycare/api/beds elsewhere.
             beds = Bed.search([('department_id', '=', dept.id), ('active', '=', True)])
 
+            # _effective_bed_status auto-frees a bed once last_occupancy_date is
+            # stale (see inpatient.py) — matches /saycare/api/beds so this dashboard's
+            # counts don't disagree with what the bed pickers/bed map show.
             bed_total     = len(beds)
-            occupied_beds = beds.filtered(lambda b: b.bed_status == 'occupied')
+            occupied_beds = beds.filtered(lambda b: _effective_bed_status(b) == 'occupied')
             bed_occupied  = len(occupied_beds)
-            bed_available = len(beds.filtered(lambda b: b.bed_status == 'available'))
+            bed_available = len(beds.filtered(lambda b: _effective_bed_status(b) == 'available'))
             occupancy_pct = round((bed_occupied / bed_total) * 100) if bed_total else 0
             ventilators_in_use = len(occupied_beds.filtered(lambda b: b.has_ventilator))
 
             # A care=true department is tracked from the moment a request targets it —
             # pending_admission cases show up here immediately, not only once admitted.
-            # When a date range is selected, the patient list/counts are scoped to it:
-            # admitted cases are matched on admitted_at, pending (not-yet-admitted) cases
-            # on booking_datetime since they have no admitted_at yet.
-            base_domain = [
+            # This is a live census (who is actually occupying the unit right now), so
+            # it must NEVER be scoped to the selected date range — a patient admitted
+            # three days ago and still here would otherwise vanish from their own
+            # department the moment "today" no longer matches their admitted_at, which
+            # is exactly why رعاية patients were disappearing from their unit. Only the
+            # "admissions/transfers in range" stats below are meant to be date-scoped.
+            current = Admission.search([
                 ('department_id', '=', dept.id),
                 ('status', 'in', ['admitted', 'pending_admission']),
-            ]
-            if range_start or range_end:
-                admitted_domain = base_domain + [('admitted_at', '!=', False)]
-                if range_start:
-                    admitted_domain.append(('admitted_at', '>=', str(range_start)))
-                if range_end:
-                    admitted_domain.append(('admitted_at', '<', str(range_end)))
-
-                pending_domain = base_domain + [
-                    ('admitted_at', '=', False),
-                    ('booking_datetime', '!=', False),
-                ]
-                if range_start:
-                    pending_domain.append(('booking_datetime', '>=', str(range_start)))
-                if range_end:
-                    pending_domain.append(('booking_datetime', '<', str(range_end)))
-
-                current = Admission.search(admitted_domain) | Admission.search(pending_domain)
-            else:
-                current = Admission.search(base_domain)
+            ])
 
             assessments = Assessment.search([('admission_request_id', 'in', current.ids)])
             condition_by_admission = {a.admission_request_id.id: a.general_condition for a in assessments}

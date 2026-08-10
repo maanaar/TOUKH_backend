@@ -446,9 +446,24 @@ class AdmissionRequestController(http.Controller):
         if err:
             return err
         vals = _map_body_to_vals(body, _REQUEST_FIELD_MAP)
+        vals.update(_map_body_to_vals(body.get('admissionDetails') or {}, _ADMISSION_DETAILS_FIELD_MAP))
         if vals:
+            previous_bed = rec.bed_id
             rec.write(vals)
             _sync_operation_booking_appointment(rec)
+            # A bed edited after admission (e.g. transferring an admitted patient to a
+            # different room) must move the occupancy flag too, otherwise the old bed
+            # stays marked occupied forever and the bed-map/critical-care dashboards
+            # (which read off hospital.bed, not this record) go stale.
+            if 'bed_id' in vals and rec.bed_id.id != (previous_bed.id if previous_bed else False):
+                if previous_bed:
+                    previous_bed.write({'bed_status': 'available', 'current_patient_id': False})
+                if rec.bed_id:
+                    rec.bed_id.write({
+                        'bed_status':          'occupied',
+                        'current_patient_id':  rec.patient_id.id if rec.patient_id else False,
+                        'last_occupancy_date': fields.Datetime.now(),
+                    })
         return _json(_admission_request_dict(rec))
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>/admit', type='http', auth='user', methods=['POST'], csrf=False)
