@@ -32,8 +32,13 @@
 ### Clinical / visit flow
 
 - saycare.visit -> saycare_visit
-  name (seq), state (waiting -> triage -> doctor_queue -> in_progress -> done/cancelled),
-  visit_type, financial_class, payment_method, basket_json, basket_paid,
+  name (seq), state (pending_payment -> waiting -> triage -> doctor_queue -> in_progress ->
+    diagnostic -> done/cancelled),
+  visit_type (outpatient/inpatient/emergency/consultation),
+  request_source (reception/doctor/lab/external_services — where the visit originated;
+    not filtered server-side by the nurse/doctor queue endpoints, each screen filters
+    client-side instead, see NursingPage.jsx vs TriagePage.jsx),
+  financial_class, payment_method, basket_json, basket_paid,
   computed total_price/insurance_share/patient_share
   M2one to res.partner (required, restrict), saycare.specialty, hr.employee (doctor/nurse),
   account.move (invoice_id)
@@ -85,6 +90,9 @@
   admission-time only: ward, bed (Char snapshots, not FKs), attending_doctor, admission_date,
     admission_notes, admitted_at
   rejection-time only: rejection_reason, rejected_at
+  mirrored_appointment_id: M2one to saycare.appointment — the appointment shown in
+    قائمة الحجوزات الداخلي, kept in sync (date/doctor/department/notes) whenever this
+    request is edited, so that list never goes stale relative to the request itself
   M2one to res.partner, hospital.inpatient.department, hospital.floor,
   hospital.accommodation.grade (stay_grade_id), hospital.room, hospital.bed, hr.employee (surgeon_id)
 
@@ -103,6 +111,7 @@ All four: M2one to res.partner (required, cascade, domain is_patient=True).
   name (uniq), code, room_number, color, consultant/specialist prices
   M2one to product.category (categ_id)
   O2M to hr.employee (doctor_ids), saycare.service (service_ids)
+  M2M from hr.employee (nurse_specialty_ids) — clinics a nurse covers
 
 - saycare.service -> saycare_service
   name, code (uniq), visit_type, price, insurance_price
@@ -117,7 +126,10 @@ All four: M2one to res.partner (required, cascade, domain is_patient=True).
 
 - hr.employee (extended) -> hr_employee
   medical_role (doctor/nurse/receptionist/pharmacist/lab_tech/rad_tech), doctor_grade,
-  license_number; M2one to saycare.specialty
+  license_number; M2one to saycare.specialty (specialty_id — doctor's own specialty)
+  M2M to saycare.specialty (nurse_specialty_ids) — separate field: which clinics a
+  nurse is assigned to cover (a nurse can cover more than one); scopes نظام
+  التمريض's queue (NursingPage.jsx) to only those clinics' visits
 
 ### Geography (Egypt)
 
@@ -160,6 +172,27 @@ All four: M2one to res.partner (required, cascade, domain is_patient=True).
 
 - saycare.government.expense.settings -> saycare_government_expense_settings
   singleton: deduction_amount, max_addition_amount
+
+### Internal decisions module (شاشة قرارات الداخلي)
+
+Independent of saycare.government.expense.decision above — no monthly
+allocation tracking, no clinic/service scoping, just the decision basics
+per patient for internal-admission use.
+
+- saycare.internal.decision -> saycare_internal_decision
+  name, number, start_date, duration_days (default 90), computed end_date,
+  total_amount, deduction_amount (default 60.0), status (جاري/منتهي/موقوف),
+  notes, created_by_name, page_no (per-patient, unique within this model only),
+  computed distributable_amount (total_amount - deduction_amount)
+  M2one to res.partner (restrict)
+
+- saycare.internal.decision.service.invoice -> saycare_internal_decision_service_invoice
+  Auto-registered from شاشة حجز الداخلي when a service is executed against a
+  government-expense transaction during an inpatient stay. Linked to the
+  patient directly, not to a specific decision record.
+  patient_id (required, cascade), invoice_number (auto: INV-{year}-{seq}),
+  service_name (required), doctor_id + doctor_name (snapshot, survives
+  employee rename/archive), amount, invoice_date, notes
 
 ## Extended existing Odoo models (columns added, no new table)
 
