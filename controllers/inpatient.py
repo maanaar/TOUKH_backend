@@ -1,7 +1,14 @@
 # -*- coding: utf-8 -*-
+import datetime
 import json
-from odoo import http
+from odoo import fields, http
 from odoo.http import request
+
+# There is no discharge step in this system yet, so a bed written to 'occupied'
+# on admit has no way to go back to 'available' on its own — auto-free it once
+# last_occupancy_date is this many hours old so reception can reuse it without
+# a manual override.
+BED_AUTO_FREE_HOURS = 24
 
 def _json(data, status=200):
     return request.make_response(
@@ -105,7 +112,19 @@ def _grade_dict(r):
     }
 
 
+def _effective_bed_status(r):
+    if r.bed_status == 'occupied' and r.last_occupancy_date:
+        elapsed = fields.Datetime.now() - r.last_occupancy_date
+        if elapsed >= datetime.timedelta(hours=BED_AUTO_FREE_HOURS):
+            return 'available'
+    return r.bed_status or 'available'
+
+
 def _bed_dict(r):
+    effective_status = _effective_bed_status(r)
+    # Auto-freed beds must not still point at the previous patient — otherwise
+    # the bed map/pickers would show "available" next to a stale occupant name.
+    is_auto_freed = effective_status == 'available' and r.bed_status == 'occupied'
     return {
         'id':                   r.id,
         'code':                 r.code or '',
@@ -119,10 +138,10 @@ def _bed_dict(r):
         'department_name':      r.department_id.display_name if r.department_id else '',
         'grade_id':             r.grade_id.id if r.grade_id else None,
         'grade_name':           r.grade_id.display_name if r.grade_id else '',
-        'bed_status':           r.bed_status or '',
+        'bed_status':           effective_status,
         'allowed_gender':       r.allowed_gender or '',
-        'current_patient_id':   r.current_patient_id.id if r.current_patient_id else None,
-        'current_patient_name': r.current_patient_id.display_name if r.current_patient_id else '',
+        'current_patient_id':   None if is_auto_freed else (r.current_patient_id.id if r.current_patient_id else None),
+        'current_patient_name': '' if is_auto_freed else (r.current_patient_id.display_name if r.current_patient_id else ''),
         'last_occupancy_date':  r.last_occupancy_date.isoformat() if r.last_occupancy_date else '',
         'has_ventilator':       r.has_ventilator,
         'active':               r.active,
