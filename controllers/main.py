@@ -509,7 +509,12 @@ class ProductController(http.Controller):
     @http.route('/api/v1/products/search', type='http', auth='user', methods=['GET'], csrf=False)
     def search_lite(self, term='', limit='50', offset='0', product_type='', categ_keyword='', **kw):
         """Lightweight product search for dropdowns — returns only the fields needed."""
-        domain = [('active', '=', True)]
+        # Same reasoning as ProductController.get_all's location_id branch: a
+        # product archived after it was stocked (e.g. discontinued) must stay
+        # visible here too, since the pharmacy screens' full medicine catalog
+        # is sourced from this endpoint and would otherwise silently drop it
+        # even though it still has real quantity on hand.
+        domain = [('active', 'in', [True, False])]
         if term:
             domain += ['|', '|', '|', '|',
                 ('name', 'ilike', term),
