@@ -344,7 +344,7 @@ class UomController(http.Controller):
 class ProductController(http.Controller):
 
     @http.route('/api/v1/products', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, location_id='', categ_keyword='', **kw):
+    def get_all(self, location_id='', categ_keyword='', term='', medicines_only='', limit='', **kw):
         domain = []
         if location_id:
             loc = request.env['stock.location'].sudo().browse(int(location_id))
@@ -368,7 +368,29 @@ class ProductController(http.Controller):
             # like الأدوية's children) and name_ar, after Arabic normalization
             # so alef/ta-marbuta spelling differences don't hide a real match.
             domain += [('categ_id', 'in', _categ_ids_by_keyword(request.env, categ_keyword))]
-        records = request.env['product.template'].sudo().search(domain)
+        # أدوية checkbox on product.category, expanded to subcategories — computed
+        # here (ahead of the search) so a term search can optionally be scoped to
+        # medicines only; also reused below to tag is_medicines on every record.
+        medicine_roots = request.env['product.category'].sudo().search([('is_medicines', '=', True)])
+        medicine_categ_ids = set(
+            request.env['product.category'].sudo().search([('id', 'child_of', medicine_roots.ids)]).ids
+        ) if medicine_roots else set()
+        if term:
+            # Live typeahead search (DrugPicker's "أضف دواءً من المخزون"). The
+            # full-catalog fetch this endpoint does when called with no filters
+            # doesn't scale as the catalog grows (33k+ product templates and
+            # counting) — a term search gets a real server-side query and a
+            # small capped result instead of relying on a client-side filter
+            # over the entire catalog.
+            domain += ['|', '|',
+                ('name', 'ilike', term),
+                ('name_en', 'ilike', term),
+                ('default_code', 'ilike', term),
+            ]
+            if medicines_only:
+                domain += [('categ_id', 'in', list(medicine_categ_ids))]
+        search_kwargs = {'limit': min(int(limit), 200) if limit else 50, 'order': 'name asc'} if term else {}
+        records = request.env['product.template'].sudo().search(domain, **search_kwargs)
         all_uoms = request.env['uom.uom'].sudo().search([])
 
         # uom_options below used to call _compute_price/_has_common_reference
@@ -395,14 +417,6 @@ class ProductController(http.Controller):
                 'price': rec_list_price * ratio if ratio is not None else rec_list_price,
             } for uom_id, uom_name, ratio in ratios]
 
-        # أدوية is a checkbox on product.category — checking it on a parent
-        # category (e.g. "أدوية") marks every product under it, including
-        # sub-categories, as a medicine, so resolve via child_of rather than
-        # an exact categ_id match.
-        medicine_roots = request.env['product.category'].sudo().search([('is_medicines', '=', True)])
-        medicine_categ_ids = set(
-            request.env['product.category'].sudo().search([('id', 'child_of', medicine_roots.ids)]).ids
-        ) if medicine_roots else set()
         data = []
         for rec in records:
             rec_list_price = rec.list_price
@@ -532,11 +546,13 @@ class ProductController(http.Controller):
             domain.append(('type', '=', product_type))
 
         # getCachedProducts() (services/productsCache.js) intentionally asks
-        # for limit=9999 to cache the *whole* catalog client-side — capping
-        # this too low silently truncates it alphabetically, dropping any
-        # product past that cutoff from every screen that reads the cache
-        # (both pharmacy dispensing screens included).
-        limit_i  = min(int(limit),  5000)
+        # for a limit large enough to cache the *whole* catalog client-side —
+        # capping this too low silently truncates it alphabetically, dropping
+        # any product past that cutoff from every screen that reads the cache
+        # (pharmacy dispensing screens, Nursing, Doctor, inpatient forms).
+        # The real catalog has passed 33k product templates, so this cap
+        # needs real headroom, not just a bump to the last time it ran out.
+        limit_i  = min(int(limit),  50000)
         offset_i = max(int(offset), 0)
 
         total   = request.env['product.template'].sudo().search_count(domain)
