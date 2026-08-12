@@ -135,3 +135,12 @@ class HrEmployeeMedical(models.Model):
 
     specialty_id    = fields.Many2one('saycare.specialty', string='Specialty')
     license_number  = fields.Char(string='Medical License No.')
+
+    # Which clinics a nurse is assigned to cover — separate from specialty_id
+    # (that field is doctor-only: saycare.specialty.doctor_ids is a One2many
+    # inverse of it, so repurposing it for nurses would break every doctor
+    # picker in the app). A nurse can cover more than one clinic; the نظام
+    # التمريض queue (NursingPage.jsx) only shows visits for clinics listed here.
+    nurse_specialty_ids = fields.Many2many(
+        'saycare.specialty', string='العيادات المسؤول عنها (تمريض)',
+    )
