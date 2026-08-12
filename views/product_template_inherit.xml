@@ -13,6 +13,17 @@
         </field>
     </record>
 
+    <record id="product_template_form_expiration_date" model="ir.ui.view">
+        <field name="name">product.template.form.expiration.date</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <field name="categ_id" position="after">
+                <field name="expiration_date" invisible="type == 'service'"/>
+            </field>
+        </field>
+    </record>
+
     <record id="product_template_form_name_en" model="ir.ui.view">
         <field name="name">product.template.form.name.en</field>
         <field name="model">product.template</field>
