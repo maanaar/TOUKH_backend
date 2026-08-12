@@ -218,6 +218,10 @@ class ProductTemplateMedicine(models.Model):
     show_internal_transfer = fields.Boolean(string='يظهر في طلبات الصرف الداخلي')
     needs_tracking         = fields.Boolean(string='يحتاج تتبع')
     has_expiry             = fields.Boolean(string='له تاريخ صلاحية')
+    expiration_date        = fields.Date(
+        string='تاريخ الانتهاء',
+        help='تاريخ انتهاء صلاحية هذا الصنف — قيمة واحدة على مستوى الصنف ككل (وليست لكل تشغيلة/Lot).',
+    )
     allow_fractions        = fields.Boolean(string='يسمح بالكسر')
     allow_partial          = fields.Boolean(string='يسمح بالصرف الجزئي')
 

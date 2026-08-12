@@ -77,7 +77,7 @@ ITEMS_SIMPLE_FIELDS = [
     'name_en',
     'main_category', 'sub_category', 'department', 'is_critical', 'needs_approval',
     'can_dispense', 'show_pharmacy', 'show_warehouse', 'show_purchase_req',
-    'show_internal_transfer', 'needs_tracking', 'has_expiry', 'allow_fractions',
+    'show_internal_transfer', 'needs_tracking', 'has_expiry', 'expiration_date', 'allow_fractions',
     'allow_partial',
     'tax_purchase', 'tax_sale', 'currency', 'price_include_tax',
     'origin_country', 'purchase_policy', 'min_purchase_qty',
@@ -1018,6 +1018,8 @@ class PurchaseOrderController(http.Controller):
                 'price_unit':               line.price_unit,
                 'discount':                 line.discount,
                 'taxes_id':                 line.tax_ids.ids,
+                'tax_names':                ', '.join(line.tax_ids.mapped('name')),
+                'tax_percent':              line.tax_ids[:1].amount if line.tax_ids else None,
                 'price_subtotal':           line.price_subtotal,
                 'price_total':              line.price_total,
                 'price_tax':                line.price_tax,
@@ -2323,14 +2325,33 @@ class PurchaseOrderCreateController(http.Controller):
                     if uom.exists():
                         uom_id = uom.id
 
-                line_vals_list.append((0, 0, {
+                line_vals = {
                     'product_id':    product.id,
                     'name':          product.display_name,
                     'product_qty':   qty,
                     'price_unit':    price,
                     'product_uom_id': uom_id,
+                    'discount':      float(line.get('discount') or 0),
                     'date_planned':  line.get('date_planned') or body.get('date_planned') or now_str,
-                }))
+                }
+                if line.get('tax_percent') not in (None, ''):
+                    pct = float(line['tax_percent'])
+                    tax = request.env['account.tax'].sudo().search([
+                        ('type_tax_use', '=', 'purchase'),
+                        ('amount_type', '=', 'percent'),
+                        ('amount', '=', pct),
+                        ('company_id', '=', request.env.company.id),
+                    ], limit=1)
+                    if not tax:
+                        tax = request.env['account.tax'].sudo().create({
+                            'name':          f'ضريبة شراء {pct:g}%',
+                            'amount':        pct,
+                            'amount_type':   'percent',
+                            'type_tax_use':  'purchase',
+                            'company_id':    request.env.company.id,
+                        })
+                    line_vals['tax_ids'] = [(6, 0, tax.ids)]
+                line_vals_list.append((0, 0, line_vals))
 
             vals['order_line'] = line_vals_list
             rec = request.env['purchase.order'].sudo().create(vals)
@@ -2645,6 +2666,91 @@ class DashboardController(http.Controller):
             'low_stock':    low_stock[:20],
             'expiring':     expiring,
             'recent_moves': recent,
+        })
+
+    @http.route('/api/v1/inventory/stagnant-report', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_stagnant_report(self, days='90', **kw):
+        """تقرير الرواكد: أصناف بدون أي حركة مخزنية خلال آخر N يوم (افتراضياً 90 يوم / 3 أشهر)،
+        بالإضافة إلى الأصناف منتهية الصلاحية والموجودة بالمخزون فعلياً."""
+        env = request.env
+        try:
+            days_n = int(days)
+        except (TypeError, ValueError):
+            days_n = 90
+        today = date.today()
+        cutoff = today - timedelta(days=days_n)
+
+        # ── on-hand quants grouped by product ────────────────────────────────
+        quants = env['stock.quant'].sudo().search([
+            ('location_id.usage', '=', 'internal'),
+            ('quantity', '>', 0),
+        ])
+        by_product = {}
+        for q in quants:
+            pid = q.product_id.id
+            entry = by_product.setdefault(pid, {'product': q.product_id, 'qty': 0.0, 'uom': ''})
+            entry['qty'] += q.quantity
+            if not entry['uom'] and q.product_uom_id:
+                entry['uom'] = q.product_uom_id.name
+
+        last_move_by_product = {}
+        if by_product:
+            groups = env['stock.move'].sudo().read_group(
+                [('product_id', 'in', list(by_product.keys())), ('state', '=', 'done')],
+                ['date:max'], ['product_id'],
+            )
+            for g in groups:
+                pid = g['product_id'][0] if g.get('product_id') else None
+                if pid:
+                    last_move_by_product[pid] = g.get('date')
+
+        stagnant = []
+        for pid, info in by_product.items():
+            last_dt = last_move_by_product.get(pid)
+            last_date = last_dt.date() if hasattr(last_dt, 'date') else last_dt
+            if last_date and last_date > cutoff:
+                continue
+            days_idle = (today - last_date).days if last_date else None
+            stagnant.append({
+                'product_id':           pid,
+                'product_name':         info['product'].name,
+                'product_default_code': info['product'].default_code or '',
+                'categ_name':           info['product'].categ_id.name if info['product'].categ_id else '',
+                'qty':                  info['qty'],
+                'uom':                  info['uom'],
+                'last_move_date':       str(last_date) if last_date else None,
+                'days_idle':            days_idle,
+            })
+        stagnant.sort(key=lambda r: r['days_idle'] if r['days_idle'] is not None else 10 ** 6, reverse=True)
+
+        # ── expired products still on hand ──────────────────────────────────
+        # Uses product.template.expiration_date (a single date per product,
+        # set on the product form) instead of per-lot expiry tracking.
+        expired = []
+        for pid, info in by_product.items():
+            tmpl = info['product'].product_tmpl_id
+            exp_date = tmpl.expiration_date
+            if not exp_date or exp_date >= today:
+                continue
+            expired.append({
+                'product_id':           pid,
+                'product_name':         info['product'].name,
+                'product_default_code': info['product'].default_code or '',
+                'categ_name':           info['product'].categ_id.name if info['product'].categ_id else '',
+                'expiration_date':      str(exp_date),
+                'qty':                  info['qty'],
+                'uom':                  info['uom'],
+                'days_expired':         (today - exp_date).days,
+            })
+        expired.sort(key=lambda r: r['days_expired'], reverse=True)
+
+        return http_response({
+            'days':           days_n,
+            'cutoff_date':    str(cutoff),
+            'stagnant':       stagnant,
+            'expired':        expired,
+            'stagnant_count': len(stagnant),
+            'expired_count':  len(expired),
         })
 
 
