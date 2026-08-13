@@ -7,7 +7,8 @@ from .utils import _json
 APPT_VALID_TRANSITIONS = {
     'scheduled':  ['confirmed', 'cancelled'],
     'confirmed':  ['arrived',   'cancelled'],
-    'arrived':    ['cancelled'],
+    'arrived':    ['discharged', 'cancelled'],
+    'discharged': [],
     'cancelled':  [],
 }
 

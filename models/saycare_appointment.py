@@ -28,6 +28,7 @@ class SaycareAppointment(models.Model):
         ('scheduled',  'مجدول'),
         ('confirmed',  'مؤكد'),
         ('arrived',    'حضر'),
+        ('discharged', 'خروج'),
         ('cancelled',  'ملغي'),
     ], string='Status', default='scheduled', index=True)
     visit_id     = fields.Many2one('saycare.visit', string='Visit', ondelete='set null')
