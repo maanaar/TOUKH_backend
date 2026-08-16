@@ -51,6 +51,7 @@
         'data/hospital_accommodation_grade_type_data.xml',
         'views/hospital_accommodation_grade_views.xml',
         'views/hospital_bed_views.xml',
+        'views/saycare_password_change_log_views.xml',
         "views/hospital_menus.xml",
         'data/account_journals.xml',
         'data/default_services.xml',

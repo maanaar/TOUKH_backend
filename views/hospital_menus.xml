@@ -38,4 +38,9 @@
     <menuitem id="menu_government_expense_settings" name="اعدادات عامه للقرار"
               parent="menu_government_expense_root"
               action="action_government_expense_settings_open" sequence="20"/>
+
+    <menuitem id="menu_saycare_password_change_log" name="سجل تغييرات كلمات المرور"
+              parent="saycare_odoo_19.menu_saycare_config"
+              action="action_saycare_password_change_log" sequence="90"
+              groups="base.group_system"/>
 </odoo>

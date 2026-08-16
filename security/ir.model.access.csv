@@ -122,3 +122,4 @@ access_saycare_morgue_fridge_user,saycare.morgue.fridge user,model_saycare_morgu
 access_saycare_morgue_fridge_admin,saycare.morgue.fridge admin,model_saycare_morgue_fridge,base.group_system,1,1,1,1
 access_saycare_morgue_drawer_user,saycare.morgue.drawer user,model_saycare_morgue_drawer,base.group_user,1,0,0,0
 access_saycare_morgue_drawer_admin,saycare.morgue.drawer admin,model_saycare_morgue_drawer,base.group_system,1,1,1,1
+access_saycare_password_change_log_admin,saycare.password.change.log admin,model_saycare_password_change_log,base.group_system,1,0,0,0
