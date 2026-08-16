@@ -15,6 +15,7 @@ class SaycareClinicalNote(models.Model):
         ('6','6'),('7','7'),('8','8'),('9','9'),('10','10'),
     ], string='Severity (1-10)')
     associated_symptoms    = fields.Text(string='Associated Symptoms')
+    nursing_notes          = fields.Text(string='Nursing Notes')
 
     primary_diagnosis_code = fields.Char(string='Primary Diagnosis Code')
     primary_diagnosis_desc = fields.Char(string='Primary Diagnosis')

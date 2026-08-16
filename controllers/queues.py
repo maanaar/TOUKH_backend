@@ -3,6 +3,7 @@ import datetime
 import json as _json_mod
 from odoo import http
 from odoo.http import request
+from odoo.osv import expression
 from .utils import _json
 from .visits import _visit_dict
 
@@ -30,13 +31,36 @@ def _drop_refunded(records):
 class QueueController(http.Controller):
 
     @http.route('/saycare/api/queue/nurse', type='http', auth='user', methods=['GET'], csrf=False)
-    def nurse_queue(self, **kw):
-        # Includes doctor_queue/in_progress so nurses keep visibility of a visit
-        # (e.g. to dispatch a basket the doctor just ordered) after triage is done.
-        records = request.env['saycare.visit'].sudo().search(
-            [('state', 'in', ['waiting', 'triage', 'doctor_queue', 'in_progress'])],
-            order='admission_date asc',
-        )
+    def nurse_queue(self, date='', date_from='', date_to='', **kw):
+        # doctor_queue/in_progress stay visible regardless of date so nurses
+        # keep visibility of a visit (e.g. to dispatch a basket the doctor just
+        # ordered) after triage is done, even if it was admitted on a prior day.
+        # waiting/triage are scoped to the requested day when given — without
+        # this, every visit ever created in those states (unbounded, no date
+        # restriction) was fetched and shipped to the browser on every poll.
+        #
+        # admission_date is stored in UTC. `date_from`/`date_to` are exact UTC
+        # instants the caller computed from the *browser's local* calendar day
+        # (so "today" lines up with the nurse's actual local today regardless
+        # of timezone offset). The bare `date` param is kept only as a coarser
+        # fallback for other/older callers and is matched as a naive UTC day.
+        carryover_domain = [('state', 'in', ['doctor_queue', 'in_progress'])]
+        todays_domain = [('state', 'in', ['waiting', 'triage'])]
+        if date_from or date_to:
+            if date_from:
+                todays_domain.append(('admission_date', '>=', date_from))
+            if date_to:
+                todays_domain.append(('admission_date', '<=', date_to))
+            domain = expression.OR([todays_domain, carryover_domain])
+        elif date:
+            todays_domain += [
+                ('admission_date', '>=', f'{date} 00:00:00'),
+                ('admission_date', '<=', f'{date} 23:59:59'),
+            ]
+            domain = expression.OR([todays_domain, carryover_domain])
+        else:
+            domain = expression.OR([todays_domain, carryover_domain])
+        records = request.env['saycare.visit'].sudo().search(domain, order='admission_date asc')
         records = _drop_refunded(records)
         return _json([_visit_dict(v) for v in records])
 
