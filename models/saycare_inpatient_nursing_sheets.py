@@ -628,3 +628,172 @@ class SaycareInpatientNursingPhysicalRestraintEntry(models.Model):
     @api.constrains('release_minutes')
     def _check_release_minutes(self):
         self._check_non_negative([('release_minutes', 'مدة الفك')])
+
+
+class SaycareInpatientNursingVaeSurveillanceEntry(models.Model):
+    _name = 'saycare.inpatient.nursing.vae.surveillance.entry'
+    _description = (
+        'Infection Control - Ventilator-Associated Event (VAE) '
+        'Surveillance Entry'
+    )
+    _inherit = 'saycare.inpatient.nursing.sheet.entry.mixin'
+    _order = 'entry_date desc, id desc'
+    _rec_name = 'entry_date'
+
+    diagnosis = fields.Char(string='التشخيص')
+    admission_date = fields.Date(string='تاريخ الدخول')
+    ventilator_connection_date = fields.Date(
+        string='تاريخ التوصيل على جهاز التنفس الاصطناعي',
+    )
+
+    entry_date = fields.Date(
+        string='تاريخ اليوم (Calendar Day)',
+        required=True,
+        index=True,
+    )
+    vent_day = fields.Integer(
+        string='يوم جهاز التنفس الاصطناعي (Vent Day)',
+    )
+
+    peep_10am = fields.Float(string='PEEP - 10 صباحاً', digits=(6, 2))
+    fio2_10am = fields.Float(string='FiO2 - 10 صباحاً', digits=(6, 2))
+    peep_2pm = fields.Float(string='PEEP - 2 ظهراً', digits=(6, 2))
+    fio2_2pm = fields.Float(string='FiO2 - 2 ظهراً', digits=(6, 2))
+    peep_6pm = fields.Float(string='PEEP - 6 مساءً', digits=(6, 2))
+    fio2_6pm = fields.Float(string='FiO2 - 6 مساءً', digits=(6, 2))
+    peep_10pm = fields.Float(string='PEEP - 10 مساءً', digits=(6, 2))
+    fio2_10pm = fields.Float(string='FiO2 - 10 مساءً', digits=(6, 2))
+    peep_2am = fields.Float(string='PEEP - 2 صباحاً', digits=(6, 2))
+    fio2_2am = fields.Float(string='FiO2 - 2 صباحاً', digits=(6, 2))
+    peep_6am = fields.Float(string='PEEP - 6 صباحاً', digits=(6, 2))
+    fio2_6am = fields.Float(string='FiO2 - 6 صباحاً', digits=(6, 2))
+
+    daily_min = fields.Float(
+        string='الحد الأدنى اليومي (Daily Min)',
+        digits=(6, 2),
+    )
+    sedation_vacation_done = fields.Boolean(
+        string='تنفيذ إجازة التخدير (S)',
+    )
+    weaning_trial_done = fields.Boolean(
+        string='تجربة الفطام عن جهاز التنفس (W)',
+    )
+    notes = fields.Text(string='ملاحظات')
+
+    @api.constrains(
+        'vent_day',
+        'peep_10am', 'peep_2pm', 'peep_6pm',
+        'peep_10pm', 'peep_2am', 'peep_6am',
+        'daily_min',
+    )
+    def _check_non_negative_values(self):
+        self._check_non_negative([
+            ('vent_day', 'يوم جهاز التنفس الاصطناعي'),
+            ('peep_10am', 'PEEP - 10 صباحاً'),
+            ('peep_2pm', 'PEEP - 2 ظهراً'),
+            ('peep_6pm', 'PEEP - 6 مساءً'),
+            ('peep_10pm', 'PEEP - 10 مساءً'),
+            ('peep_2am', 'PEEP - 2 صباحاً'),
+            ('peep_6am', 'PEEP - 6 صباحاً'),
+            ('daily_min', 'الحد الأدنى اليومي'),
+        ])
+
+    @api.constrains(
+        'fio2_10am', 'fio2_2pm', 'fio2_6pm',
+        'fio2_10pm', 'fio2_2am', 'fio2_6am',
+    )
+    def _check_fio2_range(self):
+        for record in self:
+            for field_name, label in (
+                ('fio2_10am', 'FiO2 - 10 صباحاً'),
+                ('fio2_2pm', 'FiO2 - 2 ظهراً'),
+                ('fio2_6pm', 'FiO2 - 6 مساءً'),
+                ('fio2_10pm', 'FiO2 - 10 مساءً'),
+                ('fio2_2am', 'FiO2 - 2 صباحاً'),
+                ('fio2_6am', 'FiO2 - 6 صباحاً'),
+            ):
+                value = record[field_name]
+                if value and not 0 <= value <= 100:
+                    raise ValidationError(
+                        f'{label} يجب أن تكون قيمة من 0 إلى 100'
+                    )
+
+
+_TURNING_POSITION_SELECTION = [
+    ('back', 'على الظهر'),
+    ('right', 'على الجانب الأيمن'),
+    ('left', 'على الجانب الأيسر'),
+]
+
+
+class SaycareInpatientNursingQualityTurningChartEntry(models.Model):
+    _name = 'saycare.inpatient.nursing.quality.turning.chart.entry'
+    _description = (
+        'Quality Management - Patient Turning Chart & Pressure '
+        'Ulcer Admission Assessment Entry'
+    )
+    _inherit = 'saycare.inpatient.nursing.sheet.entry.mixin'
+    _order = 'entry_date desc, id desc'
+    _rec_name = 'entry_date'
+
+    department = fields.Char(string='القسم')
+    admission_date = fields.Date(string='تاريخ الدخول')
+
+    initial_ulcer_present = fields.Selection([
+        ('yes', 'نعم'),
+        ('no', 'لا'),
+    ], string='التقييم عند الدخول - وجود قرحة')
+    initial_ulcer_location = fields.Char(string='مكان القرحة عند الدخول')
+    initial_ulcer_grade = fields.Selection([
+        ('stage1', 'المرحلة الأولى'),
+        ('stage2', 'المرحلة الثانية'),
+        ('stage3', 'المرحلة الثالثة'),
+        ('stage4', 'المرحلة الرابعة'),
+    ], string='درجة القرحة عند الدخول')
+
+    entry_date = fields.Date(
+        string='التاريخ',
+        required=True,
+        index=True,
+    )
+
+    position_8am = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 8 صباحاً',
+    )
+    position_10am = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 10 صباحاً',
+    )
+    position_12pm = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 12 ظهراً',
+    )
+    position_2pm = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 2 ظهراً',
+    )
+    position_4pm = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 4 عصراً',
+    )
+    position_6pm = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 6 مساءً',
+    )
+    position_8pm = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 8 مساءً',
+    )
+    position_10pm = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 10 مساءً',
+    )
+    position_12am = fields.Selection(
+        _TURNING_POSITION_SELECTION,
+        string='وضعية النوم - 12 منتصف الليل',
+    )
+    position_2am = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 2 صباحاً',
+    )
+    position_4am = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 4 صباحاً',
+    )
+    position_6am = fields.Selection(
+        _TURNING_POSITION_SELECTION, string='وضعية النوم - 6 صباحاً',
+    )
+
+    nurse_sign = fields.Char(string='توقيع التمريض')
+    notes = fields.Text(string='ملاحظات')

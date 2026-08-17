@@ -415,6 +415,83 @@ _SHEET_CONFIGS = {
             'followUpSign': _text('follow_up_sign'),
         },
     },
+    'vae-surveillance': {
+        'model': (
+            'saycare.inpatient.nursing.vae.surveillance.entry'
+        ),
+        'response_key': 'vaeSurveillance',
+        'required': (
+            'entry_date',
+            'تاريخ اليوم مطلوب',
+        ),
+        'fields': {
+            'diagnosis': _text('diagnosis'),
+            'admissionDate': _date('admission_date'),
+            'ventilatorConnectionDate': _date(
+                'ventilator_connection_date'
+            ),
+            'calendarDay': _date('entry_date'),
+            'ventDay': _integer('vent_day'),
+            'peep10am': _float('peep_10am'),
+            'fio210am': _float('fio2_10am'),
+            'peep2pm': _float('peep_2pm'),
+            'fio22pm': _float('fio2_2pm'),
+            'peep6pm': _float('peep_6pm'),
+            'fio26pm': _float('fio2_6pm'),
+            'peep10pm': _float('peep_10pm'),
+            'fio210pm': _float('fio2_10pm'),
+            'peep2am': _float('peep_2am'),
+            'fio22am': _float('fio2_2am'),
+            'peep6am': _float('peep_6am'),
+            'fio26am': _float('fio2_6am'),
+            'dailyMin': _float('daily_min'),
+            'sedationVacationDone': _boolean(
+                'sedation_vacation_done'
+            ),
+            'weaningTrialDone': _boolean(
+                'weaning_trial_done'
+            ),
+            'notes': _text('notes'),
+        },
+    },
+    'quality-turning-chart': {
+        'model': (
+            'saycare.inpatient.nursing.quality.turning.chart.entry'
+        ),
+        'response_key': 'qualityManagement',
+        'required': (
+            'entry_date',
+            'التاريخ مطلوب',
+        ),
+        'fields': {
+            'department': _text('department'),
+            'admissionDate': _date('admission_date'),
+            'initialUlcerPresent': _text(
+                'initial_ulcer_present'
+            ),
+            'initialUlcerLocation': _text(
+                'initial_ulcer_location'
+            ),
+            'initialUlcerGrade': _text(
+                'initial_ulcer_grade'
+            ),
+            'entryDate': _date('entry_date'),
+            'position8am': _text('position_8am'),
+            'position10am': _text('position_10am'),
+            'position12pm': _text('position_12pm'),
+            'position2pm': _text('position_2pm'),
+            'position4pm': _text('position_4pm'),
+            'position6pm': _text('position_6pm'),
+            'position8pm': _text('position_8pm'),
+            'position10pm': _text('position_10pm'),
+            'position12am': _text('position_12am'),
+            'position2am': _text('position_2am'),
+            'position4am': _text('position_4am'),
+            'position6am': _text('position_6am'),
+            'nurseSign': _text('nurse_sign'),
+            'notes': _text('notes'),
+        },
+    },
 }
 
 
@@ -575,6 +652,22 @@ def _validate_ranges(sheet_type, vals):
         'icu-lab': [
             ('ph', 0, 14, 'pH'),
             ('o2_sat', 0, 100, 'O2 Sat'),
+        ],
+        'vae-surveillance': [
+            ('vent_day', 0, None, 'يوم جهاز التنفس الاصطناعي'),
+            ('peep_10am', 0, None, 'PEEP - 10 صباحاً'),
+            ('fio2_10am', 0, 100, 'FiO2 - 10 صباحاً'),
+            ('peep_2pm', 0, None, 'PEEP - 2 ظهراً'),
+            ('fio2_2pm', 0, 100, 'FiO2 - 2 ظهراً'),
+            ('peep_6pm', 0, None, 'PEEP - 6 مساءً'),
+            ('fio2_6pm', 0, 100, 'FiO2 - 6 مساءً'),
+            ('peep_10pm', 0, None, 'PEEP - 10 مساءً'),
+            ('fio2_10pm', 0, 100, 'FiO2 - 10 مساءً'),
+            ('peep_2am', 0, None, 'PEEP - 2 صباحاً'),
+            ('fio2_2am', 0, 100, 'FiO2 - 2 صباحاً'),
+            ('peep_6am', 0, None, 'PEEP - 6 صباحاً'),
+            ('fio2_6am', 0, 100, 'FiO2 - 6 صباحاً'),
+            ('daily_min', 0, None, 'الحد الأدنى اليومي'),
         ],
     }
 
