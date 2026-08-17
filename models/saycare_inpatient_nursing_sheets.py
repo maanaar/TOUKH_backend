@@ -570,3 +570,61 @@ class SaycareInpatientNursingPressureUlcerEntry(models.Model):
         string='تثقيف المريض أو الأهل لتجنب قرح الفراش',
         default=False,
     )
+
+
+class SaycareInpatientNursingPhysicalRestraintEntry(models.Model):
+    _name = 'saycare.inpatient.nursing.physical.restraint.entry'
+    _description = 'Physician Physical Restraint Order & Nurse Follow-up Entry'
+    _inherit = 'saycare.inpatient.nursing.sheet.entry.mixin'
+    _order = 'follow_up_time desc, recorded_at desc, id desc'
+    _rec_name = 'follow_up_time'
+
+    department = fields.Char(string='القسم')
+    admission_date = fields.Date(string='تاريخ الدخول')
+    diagnosis = fields.Char(string='التشخيص')
+
+    restraint_type = fields.Selection([
+        ('chemical', 'كيميائي'),
+        ('physical', 'جسدي'),
+    ], string='نوع التقييد')
+    chemical_given = fields.Selection([
+        ('yes', 'نعم'),
+        ('no', 'لا'),
+    ], string='تم إعطاء علاج كيميائي')
+
+    restraint_location_hand = fields.Selection([
+        ('left', 'يسار'),
+        ('right', 'يمين'),
+        ('both', 'كلتاهما'),
+    ], string='مكان التقييد - اليد')
+    restraint_location_foot = fields.Selection([
+        ('left', 'يسار'),
+        ('right', 'يمين'),
+        ('both', 'كلتاهما'),
+    ], string='مكان التقييد - القدم')
+    restraint_body = fields.Boolean(string='تقييد الجسم بالكامل (Body)')
+
+    duration_type = fields.Selection([
+        ('24h', '24 ساعة (الحد الأقصى)'),
+        ('other', 'أخرى'),
+    ], string='مدة التقييد')
+    duration_other = fields.Char(string='تحديد المدة')
+    release_frequency = fields.Char(string='عدد مرات فك التقييد')
+    release_minutes = fields.Integer(string='مدة الفك (دقائق)')
+
+    physician_evaluated = fields.Boolean(
+        string='أقرّ الطبيب بتقييم المريض شخصياً وتحديد الحاجة للتقييد',
+    )
+    physician_sign = fields.Char(string='توقيع الطبيب')
+    physician_time = fields.Char(string='وقت أمر الطبيب')
+    physician_date = fields.Date(string='تاريخ أمر الطبيب')
+
+    follow_up_time = fields.Char(string='وقت المتابعة', required=True)
+    follow_up_notes = fields.Text(
+        string='ملاحظة الممرضة أثناء التقييد (النبض - تورم - اللون)'
+    )
+    follow_up_sign = fields.Char(string='توقيع الممرضة')
+
+    @api.constrains('release_minutes')
+    def _check_release_minutes(self):
+        self._check_non_negative([('release_minutes', 'مدة الفك')])

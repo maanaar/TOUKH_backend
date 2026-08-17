@@ -378,6 +378,43 @@ _SHEET_CONFIGS = {
             ),
         },
     },
+    'physical-restraint': {
+        'model': (
+            'saycare.inpatient.nursing.physical.restraint.entry'
+        ),
+        'response_key': 'physicalRestraint',
+        'required': (
+            'follow_up_time',
+            'وقت المتابعة مطلوب',
+        ),
+        'fields': {
+            'department': _text('department'),
+            'admissionDate': _date('admission_date'),
+            'diagnosis': _text('diagnosis'),
+            'restraintType': _text('restraint_type'),
+            'chemicalGiven': _text('chemical_given'),
+            'restraintLocationHand': _text(
+                'restraint_location_hand'
+            ),
+            'restraintLocationFoot': _text(
+                'restraint_location_foot'
+            ),
+            'restraintBody': _boolean('restraint_body'),
+            'durationType': _text('duration_type'),
+            'durationOther': _text('duration_other'),
+            'releaseFrequency': _text('release_frequency'),
+            'releaseMinutes': _integer('release_minutes'),
+            'physicianEvaluated': _boolean(
+                'physician_evaluated'
+            ),
+            'physicianSign': _text('physician_sign'),
+            'physicianTime': _text('physician_time'),
+            'physicianDate': _date('physician_date'),
+            'followUpTime': _text('follow_up_time'),
+            'followUpNotes': _text('follow_up_notes'),
+            'followUpSign': _text('follow_up_sign'),
+        },
+    },
 }
 
 
