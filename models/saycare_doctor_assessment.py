@@ -54,6 +54,57 @@ class SaycareDoctorAssessment(models.Model):
                                       domain=[('medical_role', '=', 'doctor')])
     medical_advice  = fields.Text(string='الملاحظة الطبية')
 
+    # ── مرفقات طبية — نموذج كشف قسم الطوارئ الورقي ──────────────────────────────
+    sheet_no             = fields.Char(string='رقم النموذج')
+    sheet_visit_type = fields.Selection([
+        ('private',   'أهلي'),
+        ('ambulance', 'إسعاف'),
+    ], string='النوع (أهلي/إسعاف)')
+    sheet_referral_party = fields.Selection([
+        ('companies', 'شركات'),
+        ('police',    'شرطة'),
+    ], string='الجهة (شركات/شرطة)')
+
+    sheet_type             = fields.Char(string='النوع')
+    sheet_age               = fields.Char(string='السن')
+    sheet_patient_card_no   = fields.Char(string='رقم بطاقة المريض')
+    sheet_address            = fields.Char(string='العنوان')
+    sheet_phone              = fields.Char(string='رقم التليفون')
+    sheet_arrival_desc      = fields.Char(string='تعريفة الوصول')
+    sheet_date               = fields.Date(string='التاريخ')
+    sheet_arrival_time      = fields.Char(string='وقت الوصول')
+    sheet_card_no            = fields.Char(string='رقم البطاقة')
+    sheet_companion          = fields.Char(string='الشخص المصاحب')
+    sheet_departure_time    = fields.Char(string='وقت الانصراف')
+    sheet_patient_name      = fields.Char(string='اسم المريض')
+
+    sheet_vs_pulse      = fields.Char(string='النبض (Pulse/min)')
+    sheet_vs_temp       = fields.Char(string='الحرارة (Temp)')
+    sheet_vs_bp          = fields.Char(string='الضغط (BI/P)')
+    sheet_vs_rr          = fields.Char(string='معدل التنفس (R.R)')
+    sheet_vs_allergies  = fields.Char(string='حساسية (Allergies)')
+
+    sheet_main_complaint         = fields.Text(string='شكوى المريض (Main Complaint)')
+    sheet_physical_findings      = fields.Text(string='العلامات الحيوية (Physical Findings)')
+    sheet_investigation_ordered = fields.Text(string='الفحوصات المطلوبة (Investigation Ordered)')
+    sheet_procedure_done         = fields.Text(string='ما تم إجراؤه للمريض (Procedure done)')
+    sheet_diagnosis               = fields.Text(string='التشخيص (Diagnosis)')
+    sheet_treatment               = fields.Text(string='العلاج (Treatment)')
+    sheet_consultant              = fields.Char(string='اسم الاستشاري المعالج (Consultant)')
+
+    sheet_advice_action = fields.Selection([
+        ('prevention',          'وقاية'),
+        ('care',                'الرعاية'),
+        ('hospital_admission',  'دخول مستشفى'),
+        ('outpatient_transfer', 'تحويل عيادة خارجية'),
+        ('internal_dept',       'القسم الداخلي'),
+        ('home',                'المنزل - الخروج'),
+    ], string='التصرف المتخذ (Advice action given)')
+
+    sheet_nurse_sign  = fields.Char(string='توقيع الممرضة (Nurse Sign)')
+    sheet_doctor_sign = fields.Char(string='توقيع الطبيب (Doctor Sign)')
+    sheet_cod          = fields.Char(string='Cod')
+
     active = fields.Boolean(default=True)
 
     _sql_constraints = [
