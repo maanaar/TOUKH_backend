@@ -36,5 +36,6 @@ from . import (
     geo,
     resuscitation,
     doctor_assessment,
+    triage_assessment,
 )
 from . import morgue

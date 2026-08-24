@@ -30,6 +30,8 @@ def _rad_dict(ro):
         'patient_id':          ro.patient_id.id if ro.patient_id else None,
         'patient_name':        ro.patient_id.name if ro.patient_id else '',
         'patient_mrn':         getattr(ro.patient_id, 'mrn', '') if ro.patient_id else '',
+        # الرقم القومي/رقم الباسبور — حقل واحد على res.partner (id_number)
+        'patient_national_id': getattr(ro.patient_id, 'id_number', '') if ro.patient_id else '',
         'service_id':          ro.service_id.id if ro.service_id else None,
         'service_name':        ro.service_id.name if ro.service_id else '',
         'product_id':          f'prod-{ro.product_id.id}' if ro.product_id else None,

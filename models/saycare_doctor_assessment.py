@@ -88,7 +88,7 @@ class SaycareDoctorAssessment(models.Model):
     sheet_address         = fields.Char(string='العنوان (النموذج)')
     sheet_companion       = fields.Char(string='الشخص المصاحب')
     sheet_arrival_desc    = fields.Char(string='تعريفة الوصول')
-    sheet_date            = fields.Char(string='التاريخ (النموذج)')
+    sheet_date            = fields.Date(string='التاريخ (النموذج)')
     sheet_arrival_time    = fields.Char(string='وقت الوصول')
     sheet_departure_time  = fields.Char(string='وقت الانصراف')
 

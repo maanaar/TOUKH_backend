@@ -13,17 +13,16 @@ ASSESSMENT_FIELDS = [
     'requested_tests_notes', 'requested_procedures_notes',
     'diagnosis', 'treatment_plan', 'treatment_given', 'consultant_id', 'medical_advice',
     'case_exit',
-    # مرفقات طبية (نموذج كشف قسم الطوارئ)
+
+    # ── مرفقات طبية — نموذج كشف قسم الطوارئ الورقي ──────────────────────────────
     'sheet_no', 'sheet_visit_type', 'sheet_referral_party',
-    'sheet_patient_name', 'sheet_age', 'sheet_type',
-    'sheet_patient_card_no', 'sheet_card_no', 'sheet_phone', 'sheet_address',
-    'sheet_companion', 'sheet_arrival_desc', 'sheet_date',
-    'sheet_arrival_time', 'sheet_departure_time',
+    'sheet_type', 'sheet_age', 'sheet_patient_card_no', 'sheet_address',
+    'sheet_phone', 'sheet_arrival_desc', 'sheet_date', 'sheet_arrival_time',
+    'sheet_card_no', 'sheet_companion', 'sheet_departure_time', 'sheet_patient_name',
     'sheet_vs_pulse', 'sheet_vs_temp', 'sheet_vs_bp', 'sheet_vs_rr', 'sheet_vs_allergies',
     'sheet_main_complaint', 'sheet_physical_findings', 'sheet_investigation_ordered',
-    'sheet_procedure_done', 'sheet_diagnosis', 'sheet_treatment',
-    'sheet_consultant', 'sheet_advice_action',
-    'sheet_nurse_sign', 'sheet_doctor_sign', 'sheet_cod',
+    'sheet_procedure_done', 'sheet_diagnosis', 'sheet_treatment', 'sheet_consultant',
+    'sheet_advice_action', 'sheet_nurse_sign', 'sheet_doctor_sign', 'sheet_cod',
 ]
 
 
@@ -78,37 +77,37 @@ def _assessment_dict(a, full=False):
         'medical_advice':   a.medical_advice or '',
         'case_exit':        a.case_exit or '',
 
-        'sheet_no':               a.sheet_no or '',
-        'sheet_visit_type':       a.sheet_visit_type or '',
-        'sheet_referral_party':   a.sheet_referral_party or '',
-        'sheet_patient_name':     a.sheet_patient_name or '',
-        'sheet_age':              a.sheet_age or '',
-        'sheet_type':             a.sheet_type or '',
-        'sheet_patient_card_no':  a.sheet_patient_card_no or '',
-        'sheet_card_no':          a.sheet_card_no or '',
-        'sheet_phone':            a.sheet_phone or '',
-        'sheet_address':          a.sheet_address or '',
-        'sheet_companion':        a.sheet_companion or '',
-        'sheet_arrival_desc':     a.sheet_arrival_desc or '',
-        'sheet_date':             a.sheet_date or '',
-        'sheet_arrival_time':     a.sheet_arrival_time or '',
-        'sheet_departure_time':   a.sheet_departure_time or '',
-        'sheet_vs_pulse':         a.sheet_vs_pulse or '',
-        'sheet_vs_temp':          a.sheet_vs_temp or '',
-        'sheet_vs_bp':            a.sheet_vs_bp or '',
-        'sheet_vs_rr':            a.sheet_vs_rr or '',
-        'sheet_vs_allergies':     a.sheet_vs_allergies or '',
-        'sheet_main_complaint':          a.sheet_main_complaint or '',
-        'sheet_physical_findings':       a.sheet_physical_findings or '',
-        'sheet_investigation_ordered':   a.sheet_investigation_ordered or '',
-        'sheet_procedure_done':          a.sheet_procedure_done or '',
-        'sheet_diagnosis':               a.sheet_diagnosis or '',
-        'sheet_treatment':               a.sheet_treatment or '',
-        'sheet_consultant':       a.sheet_consultant or '',
-        'sheet_advice_action':    a.sheet_advice_action or '',
-        'sheet_nurse_sign':       a.sheet_nurse_sign or '',
-        'sheet_doctor_sign':      a.sheet_doctor_sign or '',
-        'sheet_cod':              a.sheet_cod or '',
+        'sheet_no':                    a.sheet_no or '',
+        'sheet_visit_type':            a.sheet_visit_type or '',
+        'sheet_referral_party':        a.sheet_referral_party or '',
+        'sheet_type':                  a.sheet_type or '',
+        'sheet_age':                   a.sheet_age or '',
+        'sheet_patient_card_no':       a.sheet_patient_card_no or '',
+        'sheet_address':               a.sheet_address or '',
+        'sheet_phone':                 a.sheet_phone or '',
+        'sheet_arrival_desc':          a.sheet_arrival_desc or '',
+        'sheet_date':                  str(a.sheet_date) if a.sheet_date else None,
+        'sheet_arrival_time':          a.sheet_arrival_time or '',
+        'sheet_card_no':               a.sheet_card_no or '',
+        'sheet_companion':             a.sheet_companion or '',
+        'sheet_departure_time':        a.sheet_departure_time or '',
+        'sheet_patient_name':          a.sheet_patient_name or '',
+        'sheet_vs_pulse':              a.sheet_vs_pulse or '',
+        'sheet_vs_temp':               a.sheet_vs_temp or '',
+        'sheet_vs_bp':                 a.sheet_vs_bp or '',
+        'sheet_vs_rr':                 a.sheet_vs_rr or '',
+        'sheet_vs_allergies':          a.sheet_vs_allergies or '',
+        'sheet_main_complaint':        a.sheet_main_complaint or '',
+        'sheet_physical_findings':     a.sheet_physical_findings or '',
+        'sheet_investigation_ordered': a.sheet_investigation_ordered or '',
+        'sheet_procedure_done':        a.sheet_procedure_done or '',
+        'sheet_diagnosis':             a.sheet_diagnosis or '',
+        'sheet_treatment':             a.sheet_treatment or '',
+        'sheet_consultant':            a.sheet_consultant or '',
+        'sheet_advice_action':         a.sheet_advice_action or '',
+        'sheet_nurse_sign':            a.sheet_nurse_sign or '',
+        'sheet_doctor_sign':           a.sheet_doctor_sign or '',
+        'sheet_cod':                   a.sheet_cod or '',
 
         # ── visit / patient context ─────────────────────────────────────────
         'visit_name':          v.name or '',
@@ -126,10 +125,11 @@ def _assessment_dict(a, full=False):
         'patient_id':      v.patient_id.id if v.patient_id else None,
         'patient_name':    v.patient_id.name if v.patient_id else '',
         'patient_mrn':     getattr(v.patient_id, 'mrn', '') if v.patient_id else '',
+        'companion_name':  v.companion_name or '',
     }
     if full:
-        d['patient']    = _patient_dict(v.patient_id) if v.patient_id else {}
-        d['requests']   = [_request_dict(r) for r in a.request_ids]
+        d['patient']  = _patient_dict(v.patient_id) if v.patient_id else {}
+        d['requests'] = [_request_dict(r) for r in a.request_ids]
     return d
 
 

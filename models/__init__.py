@@ -34,6 +34,7 @@ from . import (
     saycare_geo,
     saycare_resuscitation,
     saycare_doctor_assessment,
+    saycare_triage_assessment,
     purchase_order_ext,
     saycare_password_change_log,
 )
