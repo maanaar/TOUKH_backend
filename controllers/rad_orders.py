@@ -32,6 +32,8 @@ def _rad_dict(ro):
         'patient_mrn':         getattr(ro.patient_id, 'mrn', '') if ro.patient_id else '',
         'service_id':          ro.service_id.id if ro.service_id else None,
         'service_name':        ro.service_id.name if ro.service_id else '',
+        'product_id':          f'prod-{ro.product_id.id}' if ro.product_id else None,
+        'product_name':        ro.product_id.name if ro.product_id else '',
         'request_group':       ro.request_group or '',
         'study_type':          ro.study_type or '',
         'body_part':           ro.body_part or '',
@@ -59,15 +61,29 @@ def _normalise_rad_vals(visit, body, request_group=None):
     if not study_type:
         raise ValueError('study_type is required')
 
-    service_id = body.get('service_id')
-    service = request.env['saycare.service'].sudo().browse(int(service_id)) if service_id else None
-    if service_id and (not service or not service.exists()):
-        raise ValueError('invalid service_id')
+    raw_service = body.get('service_id')
+    service = None
+    product = None
+    if isinstance(raw_service, str) and raw_service.startswith('prod-'):
+        try:
+            product = request.env['product.template'].sudo().browse(int(raw_service[5:]))
+        except (TypeError, ValueError):
+            product = None
+        if not product or not product.exists():
+            raise ValueError('invalid service_id')
+    elif raw_service:
+        try:
+            service = request.env['saycare.service'].sudo().browse(int(raw_service))
+        except (TypeError, ValueError):
+            service = None
+        if not service or not service.exists():
+            raise ValueError('invalid service_id')
 
     return {
         'visit_id':            visit.id,
         'patient_id':          body.get('patient_id') or visit.patient_id.id,
-        'service_id':          service.id if service and service.exists() else False,
+        'service_id':          service.id if service else False,
+        'product_id':          product.id if product else False,
         'request_group':       request_group or body.get('request_group') or False,
         'study_type':          study_type,
         'body_part':           body.get('body_part', ''),

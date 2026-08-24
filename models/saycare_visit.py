@@ -79,6 +79,20 @@ class SaycareVisit(models.Model):
         ('referral',  'تحويل'),
     ], string='طريقة الوصول')
     companion_name = fields.Char(string='اسم المرافق')
+    # حالة المريض عند الاستقبال - يظهر حقول إضافية حسب الاختيار: حوادث تحتاج
+    # بيانات المسعف/السيارة، وحالات رعايات مصر تحتاج جهة التحويل من/إلى.
+    case_status = fields.Selection([
+        ('death_outside',   'وفاة من الخارج'),
+        ('death_reception', 'وفاة بالاستقبال'),
+        ('accident',        'حوادث'),
+        ('egypt_referral',  'حالات رعايات مصر'),
+    ], string='حالة المريض')
+    accident_rescuer_name   = fields.Char(string='اسم المسعف')
+    accident_car_number     = fields.Char(string='رقم السيارة')
+    accident_location       = fields.Char(string='مكان الحادث')
+    accident_rescuer_phone  = fields.Char(string='رقم المسعف')
+    referral_from           = fields.Char(string='محول من')
+    referral_to             = fields.Char(string='محول إلي')
     exit_status = fields.Selection([
         ('home',              'خروج للمنزل'),
         ('critical_care',     'حجز بالرعاية'),

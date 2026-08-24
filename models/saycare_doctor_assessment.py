@@ -54,6 +54,69 @@ class SaycareDoctorAssessment(models.Model):
                                       domain=[('medical_role', '=', 'doctor')])
     medical_advice  = fields.Text(string='الملاحظة الطبية')
 
+    # ── الخروج إلى (نموذج كشف قسم الطوارئ) ───────────────────────────────────
+    case_exit = fields.Selection([
+        ('home',              'المنزل'),
+        ('inpatient_dept',    'القسم الداخلي'),
+        ('outpatient_clinic', 'تحويل عيادة خارجية'),
+        ('other_hospital',    'تحويل مستشفى آخر'),
+        ('observation',       'دخول ملاحظة'),
+        ('care',              'الرعاية'),
+        ('death',             'وفاة'),
+    ], string='خروج الحالة')
+
+    # ── مرفقات طبية (نموذج كشف قسم الطوارئ) ───────────────────────────────────
+    sheet_no             = fields.Char(string='رقم النموذج')
+    sheet_visit_type = fields.Selection([
+        ('emergency',     'طارئ'),
+        ('non_emergency', 'غير طارئ'),
+    ], string='نوع النموذج')
+    sheet_referral_party = fields.Selection([
+        ('self',      'ذاتي'),
+        ('ambulance', 'إسعاف'),
+        ('police',    'شرطة'),
+        ('hospital',  'تحويل من مستشفى آخر'),
+        ('clinic',    'تحويل من عيادة'),
+    ], string='الجهة')
+
+    sheet_patient_name    = fields.Char(string='اسم المريض (النموذج)')
+    sheet_age             = fields.Char(string='السن (النموذج)')
+    sheet_type            = fields.Char(string='النوع (النموذج)')
+    sheet_patient_card_no = fields.Char(string='رقم بطاقة المريض')
+    sheet_card_no         = fields.Char(string='رقم البطاقة')
+    sheet_phone           = fields.Char(string='رقم التليفون (النموذج)')
+    sheet_address         = fields.Char(string='العنوان (النموذج)')
+    sheet_companion       = fields.Char(string='الشخص المصاحب')
+    sheet_arrival_desc    = fields.Char(string='تعريفة الوصول')
+    sheet_date            = fields.Char(string='التاريخ (النموذج)')
+    sheet_arrival_time    = fields.Char(string='وقت الوصول')
+    sheet_departure_time  = fields.Char(string='وقت الانصراف')
+
+    sheet_vs_pulse     = fields.Char(string='Pulse/min النبض')
+    sheet_vs_temp      = fields.Char(string='Temp الحرارة')
+    sheet_vs_bp        = fields.Char(string='BI/P الضغط')
+    sheet_vs_rr        = fields.Char(string='R.R معدل التنفس')
+    sheet_vs_allergies = fields.Char(string='Allergies حساسية')
+
+    sheet_main_complaint         = fields.Text(string='Main Complaint')
+    sheet_physical_findings      = fields.Text(string='Physical Findings')
+    sheet_investigation_ordered  = fields.Text(string='Investigation Ordered')
+    sheet_procedure_done         = fields.Text(string='Procedure done')
+    sheet_diagnosis              = fields.Text(string='Diagnosis (النموذج)')
+    sheet_treatment              = fields.Text(string='Treatment (النموذج)')
+
+    sheet_consultant     = fields.Char(string='Consultant')
+    sheet_advice_action = fields.Selection([
+        ('discharged',          'خروج'),
+        ('admitted',            'دخول'),
+        ('referred',            'تحويل'),
+        ('left_against_advice', 'انصراف تحت المسؤولية'),
+    ], string='Advice action given')
+
+    sheet_nurse_sign  = fields.Char(string='Nurse Sign')
+    sheet_doctor_sign = fields.Char(string='Doctor Sign')
+    sheet_cod         = fields.Char(string='Cod')
+
     active = fields.Boolean(default=True)
 
     _sql_constraints = [

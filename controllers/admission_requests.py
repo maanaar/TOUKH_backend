@@ -497,6 +497,53 @@ class AdmissionRequestController(http.Controller):
 
         return _json(_admission_request_dict(rec))
 
+    @http.route('/saycare/api/admission-requests/<int:rec_id>/ensure-visit', type='http', auth='user', methods=['POST'], csrf=False)
+    def ensure_visit(self, rec_id, **kw):
+        """Purely-inpatient admissions (source != an OPD visit) often have no
+        linked saycare.visit at all - it's only created when the admission
+        originated from a booked OPD visit. Doctor/nurse-originated lab/rad
+        requests still need a real visit to attach to (ReceptionPage.jsx's
+        pending-request confirm flow requires one), so create one on first
+        use rather than assuming it already exists."""
+        rec = request.env[self._model].sudo().browse(rec_id)
+        if not rec.exists():
+            return _json({'error': 'admission request not found'}, 404)
+
+        if rec.visit_id and rec.visit_id.exists():
+            return _json({'visit_id': rec.visit_id.id})
+
+        if not rec.patient_id:
+            return _json({'error': 'admission request has no patient'}, 400)
+
+        # rec.payment_type stores the Arabic label typed/picked at booking time,
+        # not saycare.visit.financial_class's internal Selection key - map it,
+        # defaulting to cash for anything unrecognised (never leave it unset,
+        # since financial_class drives invoice/treasury logic downstream).
+        PAYMENT_TYPE_TO_FINANCIAL_CLASS = {
+            'نقدي':          'cash',
+            'نفقة الدولة':   'state',
+            'جهة تعاقد':     'contract',
+            'تعاقدات':       'contract',
+            'تأمين صحى':     'insurance',
+            'تكافل وكرامة':  'takaful',
+            'مشورة':         'consultation',
+            'وزارة الصحة':   'moh',
+            'عاملين':        'staff',
+        }
+        financial_class = PAYMENT_TYPE_TO_FINANCIAL_CLASS.get((rec.payment_type or '').strip(), 'cash')
+
+        visit = request.env['saycare.visit'].sudo().create({
+            'patient_id':      rec.patient_id.id,
+            'visit_type':      'inpatient',
+            'department':      rec.department_id.display_name if rec.department_id else '',
+            'financial_class': financial_class,
+            'contract_entity': rec.contract_entity or '',
+            'co_pay_percent':  rec.co_pay_percent or '',
+            'chief_complaint': rec.diagnosis or rec.reason or '',
+        })
+        rec.write({'visit_id': visit.id})
+        return _json({'visit_id': visit.id}, 201)
+
     @http.route('/saycare/api/admission-requests/<int:rec_id>/cancel', type='http', auth='user', methods=['POST'], csrf=False)
     def cancel_request(self, rec_id, **kw):
         rec = request.env[self._model].sudo().browse(rec_id)

@@ -67,8 +67,12 @@ class QueueController(http.Controller):
     @http.route('/saycare/api/queue/doctor', type='http', auth='user', methods=['GET'], csrf=False)
     def doctor_queue(self, specialty_id='', doctor_id='', **kw):
         today_start = datetime.datetime.combine(datetime.date.today(), datetime.time.min)
-        # Return active visits + today's completed visits so the kanban persists after refresh
+        # Return active visits + today's completed visits so the kanban persists after refresh.
+        # visit_type != 'emergency': طبيب العيادات only - emergency cases route
+        # through الفرز (nurse_queue, filtered client-side in TriagePage.jsx)
+        # instead, so they must never surface here regardless of state.
         domain = [
+            ('visit_type', '!=', 'emergency'),
             '|',
             ('state', 'in', ['waiting', 'triage', 'doctor_queue', 'in_progress']),
             '&', ('state', '=', 'done'), ('admission_date', '>=', today_start),

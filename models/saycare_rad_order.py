@@ -12,6 +12,12 @@ class SaycareRadOrder(models.Model):
                                           domain=[('is_patient', '=', True)])
     service_id          = fields.Many2one('saycare.service', string='Service',
                                           ondelete='set null', index=True)
+    # أشعة catalog items are searched via categ_keyword against product
+    # categories, not saycare.service records (see services.py get_all —
+    # categ_keyword-only calls skip saycare.service entirely) — so a rad
+    # order created from that search must link a product, not a service.
+    product_id          = fields.Many2one('product.template', string='Product',
+                                          ondelete='set null', index=True)
     request_group       = fields.Char(string='Request Group', index=True, copy=False)
     study_type          = fields.Char(string='Study Type', required=True)
     body_part           = fields.Char(string='Body Part')

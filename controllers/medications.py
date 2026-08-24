@@ -22,6 +22,8 @@ def _med_dict(m):
         ) if m.patient_id else '',
         'visit_reference':    m.visit_id.name if m.visit_id else '',
         'financial_class':    m.visit_id.financial_class if m.visit_id else '',
+        'decision_no':        (m.visit_id.decision_no or '') if m.visit_id else '',
+        'card_number':        (m.visit_id.card_number or '') if m.visit_id else '',
         'specialty_id':       m.visit_id.specialty_id.id if (m.visit_id and m.visit_id.specialty_id) else None,
         'specialty_name':     m.visit_id.specialty_id.name if (m.visit_id and m.visit_id.specialty_id) else '',
         'doctor_id':          (
