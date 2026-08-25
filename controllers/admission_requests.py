@@ -268,14 +268,17 @@ def _admission_request_dict(r):
     }
 
 
+_MIRRORED_APPOINTMENT_SOURCES = ('operation_booking', 'emergency')
+
+
 def _create_operation_booking_appointment(rec):
-    """Mirror an operation-booking admission request onto saycare.appointment so it
-    shows up in "قائمة الحجوزات الداخلي" (/unit/appointments/internal). Runs in the
-    same request as the admission-request creation so the two can't drift apart —
-    best-effort (must never block the admission request itself), so failures are
-    only logged, not raised.
+    """Mirror an operation-booking or ER-internal-transfer admission request onto
+    saycare.appointment so it shows up in "قائمة الحجوزات الداخلي"
+    (/unit/appointments/internal). Runs in the same request as the admission-request
+    creation so the two can't drift apart — best-effort (must never block the
+    admission request itself), so failures are only logged, not raised.
     """
-    if rec.source != 'operation_booking' or not rec.patient_id or not rec.booking_datetime:
+    if rec.source not in _MIRRORED_APPOINTMENT_SOURCES or not rec.patient_id or not rec.booking_datetime:
         return
 
     try:
@@ -308,7 +311,7 @@ def _sync_operation_booking_appointment(rec):
     in sync when an operation-booking admission request is edited — otherwise
     "قائمة الحجوزات الداخلي" keeps showing the stale date/doctor/department from
     whenever the request was first created. Best-effort, same as create's mirror."""
-    if rec.source != 'operation_booking' or not rec.mirrored_appointment_id or not rec.booking_datetime:
+    if rec.source not in _MIRRORED_APPOINTMENT_SOURCES or not rec.mirrored_appointment_id or not rec.booking_datetime:
         return
     try:
         with request.env.cr.savepoint():

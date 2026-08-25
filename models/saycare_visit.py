@@ -156,6 +156,7 @@ class SaycareVisit(models.Model):
     admin_letter_no    = fields.Char(string='رقم الخطاب الإداري')
     issuing_authority  = fields.Char(string='جهة الإصدار')
     card_number        = fields.Char(string='رقم الكارت')
+    receipt_no         = fields.Char(string='رقم الايصال')
     financial_notes    = fields.Text(string='ملاحظات مالية')
     employee_id_no     = fields.Char(string='الرقم الوظيفي')
     department         = fields.Char(string='الإدارة / القسم')

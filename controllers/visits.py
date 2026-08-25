@@ -66,6 +66,7 @@ def _visit_dict(v, full=False):
         'specialty_id':    v.specialty_id.id if v.specialty_id else None,
         'specialty_name':  v.specialty_id.name if v.specialty_id else '',
         'notes':           v.notes or '',
+        'receipt_no':      v.receipt_no or '',
         'createdByName':   v.created_by_name or v.create_uid.name or '',
         'services': [{
             'id':              s.id,
@@ -136,7 +137,7 @@ def _visit_update_vals(body):
         'visit_type', 'financial_class', 'payment_method', 'chief_complaint',
         'arrival_mode', 'companion_name', 'exit_status', 'notes',
         'decision_no', 'covered_services', 'contract_entity', 'co_pay_percent',
-        'admin_letter_no', 'issuing_authority', 'card_number', 'financial_notes',
+        'admin_letter_no', 'issuing_authority', 'card_number', 'receipt_no', 'financial_notes',
         'department',
     )
     for key in str_fields:
@@ -195,6 +196,7 @@ class VisitController(http.Controller):
             'admin_letter_no':   body.get('admin_letter_no', ''),
             'issuing_authority': body.get('issuing_authority', ''),
             'card_number':       body.get('card_number', ''),
+            'receipt_no':        body.get('receipt_no', ''),
             'financial_notes':   body.get('financial_notes', ''),
             'employee_id_no':    body.get('employee_id', ''),
             'department':        body.get('department', ''),

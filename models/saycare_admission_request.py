@@ -15,6 +15,7 @@ class SaycareAdmissionRequest(models.Model):
     source = fields.Selection([
         ('opd',               'محولة من OPD'),
         ('operation_booking', 'حجز عملية مباشر'),
+        ('emergency',         'محولة من الطوارئ'),
     ], string='Source', default='opd', index=True)
 
     status = fields.Selection([
