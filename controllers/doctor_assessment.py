@@ -12,6 +12,7 @@ ASSESSMENT_FIELDS = [
     'sample_past_history', 'sample_last_intake', 'sample_events',
     'requested_tests_notes', 'requested_procedures_notes',
     'diagnosis', 'treatment_plan', 'treatment_given', 'consultant_id', 'medical_advice',
+    'case_exit',
 
     # ── مرفقات طبية — نموذج كشف قسم الطوارئ الورقي ──────────────────────────────
     'sheet_no', 'sheet_visit_type', 'sheet_referral_party',
@@ -83,6 +84,7 @@ def _assessment_dict(a, full=False):
         'consultant_id':    a.consultant_id.id if a.consultant_id else None,
         'consultant_name':  a.consultant_id.name if a.consultant_id else '',
         'medical_advice':   a.medical_advice or '',
+        'case_exit':        a.case_exit or '',
 
         'orders': _load_orders(a.orders_json),
 

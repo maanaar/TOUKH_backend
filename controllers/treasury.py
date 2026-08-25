@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
 import json
+from zoneinfo import ZoneInfo
 from odoo import http, fields as odoo_fields
 from odoo.http import request
 from .utils import _json
+
+_CAIRO_TZ = ZoneInfo('Africa/Cairo')
+
+
+def _to_cairo(dt):
+    """Odoo stores/returns naive UTC datetimes - the container runs on UTC
+    (no TZ set in docker-compose), so displaying dt.hour/.minute directly
+    shows the raw UTC hour mislabeled as local time. Convert explicitly."""
+    if not dt:
+        return None
+    return dt.replace(tzinfo=ZoneInfo('UTC')).astimezone(_CAIRO_TZ)
 
 FINANCIAL_CLASS_AR = {
     'cash':         'نقدي',
@@ -28,7 +40,7 @@ def _refund_row(rfn, visit=None):
     time_str = ''
     if rfn.invoice_date:
         # invoice_date is a Date; use create_date for time if available
-        cd = rfn.create_date
+        cd = _to_cairo(rfn.create_date)
         if cd:
             time_str = f'{cd.hour:02d}:{cd.minute:02d}'
 
@@ -103,10 +115,22 @@ class TreasuryController(http.Controller):
                 v_insurance = 0.0
             v_patient = max(0.0, amount_total - v_insurance)
 
-            admission_dt = v.admission_date
-            time_str = ''
-            if admission_dt:
-                time_str = f'{admission_dt.hour:02d}:{admission_dt.minute:02d}'
+            # "الوقت" should reflect when the money was actually collected, not
+            # when the visit record was created — admission_date can be set
+            # well before payment (e.g. emergency intake, or a pending request
+            # sitting in الخزنة before being confirmed). Prefer the reconciled
+            # account.payment's own timestamp whenever the invoice is paid.
+            time_dt = None
+            if inv and payment_state == 'paid':
+                payment = request.env['account.payment'].sudo().search(
+                    [('reconciled_invoice_ids', 'in', inv.id)], order='create_date desc', limit=1
+                )
+                if payment and payment.create_date:
+                    time_dt = payment.create_date
+            if not time_dt:
+                time_dt = v.admission_date
+            time_dt = _to_cairo(time_dt)
+            time_str = f'{time_dt.hour:02d}:{time_dt.minute:02d}' if time_dt else ''
 
             # ── check if invoice has been reversed (refunded) ─────────────────
             # payment_state='reversed' only fires when Odoo auto-reconciles;

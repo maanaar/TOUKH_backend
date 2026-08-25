@@ -22,6 +22,8 @@ def _med_dict(m):
         ) if m.patient_id else '',
         'visit_reference':    m.visit_id.name if m.visit_id else '',
         'financial_class':    m.visit_id.financial_class if m.visit_id else '',
+        'decision_no':        (m.visit_id.decision_no or '') if m.visit_id else '',
+        'card_number':        (m.visit_id.card_number or '') if m.visit_id else '',
         'specialty_id':       m.visit_id.specialty_id.id if (m.visit_id and m.visit_id.specialty_id) else None,
         'specialty_name':     m.visit_id.specialty_id.name if (m.visit_id and m.visit_id.specialty_id) else '',
         'doctor_id':          (
@@ -259,7 +261,7 @@ class MedicationOrderController(http.Controller):
 class PharmacyQueueController(http.Controller):
 
     @http.route('/saycare/api/pharmacy/queue', type='http', auth='user', methods=['GET'], csrf=False)
-    def queue(self, date_from='', date_to='', **kw):
+    def queue(self, date_from='', date_to='', visit_type='', **kw):
         if date_from:
             try:
                 range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0,  minute=0,  second=0)
@@ -271,10 +273,21 @@ class PharmacyQueueController(http.Controller):
             range_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             range_end   = range_start + timedelta(days=1)
 
-        records = request.env['saycare.medication.order'].sudo().search([
+        domain = [
             ('prescribed_at', '>=', str(range_start)),
             ('prescribed_at', '<=', str(range_end)),
-        ], order='prescribed_at asc')
+        ]
+        # صيدلية داخلي (inpatient) only sees orders on an inpatient visit.
+        # صيدلية خارجي (outpatient) sees everything else, including صرف مباشر
+        # orders that have no visit_id at all (walk-in, not tied to any visit).
+        if visit_type == 'inpatient':
+            domain.append(('visit_id.visit_type', '=', 'inpatient'))
+        elif visit_type == 'outpatient':
+            domain.append('|')
+            domain.append(('visit_id', '=', False))
+            domain.append(('visit_id.visit_type', '!=', 'inpatient'))
+
+        records = request.env['saycare.medication.order'].sudo().search(domain, order='prescribed_at asc')
         return _json([_med_dict(m) for m in records])
 
 
@@ -310,6 +323,21 @@ class PharmacyDirectOrderController(http.Controller):
         if not medications:
             return _json({'error': 'medications list is required'}, 400)
 
+        # صرف مباشر has no separate pending step - the pharmacist picks the
+        # drug and hands it over in the same action, so the order is created
+        # already dispensed rather than sitting 'active' with nobody to ever
+        # transition it (there's no visit_id here for the normal per-visit
+        # dispense route to attach to).
+        picking_id = body.get('picking_id')
+        picking = None
+        if picking_id:
+            picking = request.env['stock.picking'].sudo().browse(int(picking_id))
+            if not picking.exists():
+                picking = None
+        employee = request.env['hr.employee'].sudo().search(
+            [('user_id', '=', request.env.user.id)], limit=1
+        )
+
         # ── Create medication orders ──────────────────────────────────────────
         orders = []
         for m in medications:
@@ -325,7 +353,10 @@ class PharmacyDirectOrderController(http.Controller):
                 'quantity':      m.get('quantity', 1.0),
                 'uom_id':        m.get('uom_id'),
                 'prescribed_by': body.get('prescribed_by'),
-                'state':         'active',
+                'state':         'dispensed',
+                'dispensed_at':  DT.now(),
+                'dispensed_by':  employee.id if employee else False,
+                'dispense_picking_id': picking.id if picking else False,
             }
             rec = request.env['saycare.medication.order'].sudo().create(vals)
             orders.append(_med_dict(rec))
