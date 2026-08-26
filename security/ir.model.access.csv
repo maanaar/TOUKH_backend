@@ -131,3 +131,9 @@ access_saycare_morgue_fridge_admin,saycare.morgue.fridge admin,model_saycare_mor
 access_saycare_morgue_drawer_user,saycare.morgue.drawer user,model_saycare_morgue_drawer,base.group_user,1,0,0,0
 access_saycare_morgue_drawer_admin,saycare.morgue.drawer admin,model_saycare_morgue_drawer,base.group_system,1,1,1,1
 access_saycare_password_change_log_admin,saycare.password.change.log admin,model_saycare_password_change_log,base.group_system,1,0,0,0
+access_saycare_morgue_movement_user,saycare.morgue.movement user,model_saycare_morgue_movement,base.group_user,1,1,1,0
+access_saycare_morgue_movement_admin,saycare.morgue.movement admin,model_saycare_morgue_movement,base.group_system,1,1,1,1
+access_saycare_morgue_autopsy_user,saycare.morgue.movement user,model_saycare_morgue_autopsy,base.group_user,1,1,1,0
+access_saycare_morgue_autopsy_admin,saycare.morgue.movement admin,model_saycare_morgue_autopsy,base.group_system,1,1,1,1
+access_saycare_morgue_release_user,saycare.morgue.movement user,model_saycare_morgue_release,base.group_user,1,1,1,0
+access_saycare_morgue_release_admin,saycare.morgue.movement admin,model_saycare_morgue_release,base.group_system,1,1,1,1

@@ -30,6 +30,15 @@ def _request_dict(r):
     return {'id': r.id, 'name': r.name or ''}
 
 
+def _load_orders(orders_json):
+    if not orders_json:
+        return None
+    try:
+        return json.loads(orders_json)
+    except (TypeError, ValueError):
+        return None
+
+
 def _assessment_dict(a, full=False):
     v = a.visit_id
     room = v.room_id or (v.bed_id.room_id if v.bed_id else False)
@@ -76,6 +85,8 @@ def _assessment_dict(a, full=False):
         'consultant_name':  a.consultant_id.name if a.consultant_id else '',
         'medical_advice':   a.medical_advice or '',
         'case_exit':        a.case_exit or '',
+
+        'orders': _load_orders(a.orders_json),
 
         'sheet_no':                    a.sheet_no or '',
         'sheet_visit_type':            a.sheet_visit_type or '',
@@ -195,6 +206,8 @@ class DoctorAssessmentController(http.Controller):
             return _json({'error': 'invalid JSON'}, 400)
 
         vals = {k: body[k] for k in ASSESSMENT_FIELDS if k in body}
+        if 'orders' in body:
+            vals['orders_json'] = json.dumps(body['orders']) if body['orders'] is not None else False
         if vals:
             assessment.write(vals)
         return _json(_assessment_dict(assessment, full=True))

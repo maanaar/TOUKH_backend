@@ -250,6 +250,15 @@ class SaycareMorgueCase(models.Model):
         return super().create(vals_list)
 
     def write(self, vals):
+        if (
+            vals.get("state") == "released"
+            and any(rec.state != "released" for rec in self)
+            and not self.env.context.get("allow_morgue_release")
+        ):
+            raise UserError(
+                _("Body release must use the morgue release workflow.")
+            )
+
         if "case_no" in vals:
             vals["case_no"] = self._normalise_case_no(vals.get("case_no"))
             if any(rec.state != "draft" and vals["case_no"] != rec.case_no for rec in self):
@@ -258,8 +267,10 @@ class SaycareMorgueCase(models.Model):
                 )
 
         protected_location_fields = {"fridge_id", "drawer_id"}
-        if protected_location_fields.intersection(vals) and any(
-            rec.state != "draft" for rec in self
+        if (
+            protected_location_fields.intersection(vals)
+            and any(rec.state != "draft" for rec in self)
+            and not self.env.context.get("allow_morgue_transfer")
         ):
             raise UserError(
                 _("Storage location changes must use the morgue transfer workflow.")
@@ -563,3 +574,447 @@ class SaycareMorgueDrawer(models.Model):
         "unique(current_case_id)",
         "A morgue case cannot occupy more than one drawer.",
     )
+
+class SaycareMorgueMovement(models.Model):
+    _name = "saycare.morgue.movement"
+    _description = "Morgue Body Movement"
+    _order = "moved_at desc, id desc"
+
+    case_id = fields.Many2one(
+        "saycare.morgue.case",
+        string="Morgue Case",
+        required=True,
+        index=True,
+        ondelete="cascade",
+    )
+    from_fridge_id = fields.Many2one(
+        "saycare.morgue.fridge",
+        string="From Fridge",
+        required=True,
+        ondelete="restrict",
+    )
+    from_drawer_id = fields.Many2one(
+        "saycare.morgue.drawer",
+        string="From Drawer",
+        required=True,
+        ondelete="restrict",
+    )
+    to_fridge_id = fields.Many2one(
+        "saycare.morgue.fridge",
+        string="To Fridge",
+        required=True,
+        ondelete="restrict",
+    )
+    to_drawer_id = fields.Many2one(
+        "saycare.morgue.drawer",
+        string="To Drawer",
+        required=True,
+        ondelete="restrict",
+    )
+    reason = fields.Text(string="Transfer Reason", required=True)
+    moved_by_id = fields.Many2one(
+        "hr.employee",
+        string="Moved By",
+        ondelete="restrict",
+    )
+    moved_at = fields.Datetime(
+        string="Moved At",
+        required=True,
+        default=fields.Datetime.now,
+        index=True,
+    )
+
+
+class SaycareMorgueCaseTransfer(models.Model):
+    _inherit = "saycare.morgue.case"
+
+    movement_ids = fields.One2many(
+        "saycare.morgue.movement",
+        "case_id",
+        string="Movement History",
+    )
+
+    def action_transfer_storage(self, destination_drawer_id, reason):
+        self.ensure_one()
+
+        if self.state != "stored":
+            raise UserError(_("يمكن نقل الحالات المحفوظة فقط."))
+
+        reason = (reason or "").strip()
+        if not reason:
+            raise ValidationError(_("سبب نقل الجثمان مطلوب."))
+
+        if not self.drawer_id or not self.fridge_id:
+            raise ValidationError(_("الحالة ليس لها موقع حفظ حالي صالح."))
+
+        try:
+            destination_drawer_id = int(destination_drawer_id)
+        except (TypeError, ValueError):
+            raise ValidationError(_("يجب اختيار درج وجهة صالح."))
+
+        source_drawer = self.drawer_id
+        if source_drawer.id == destination_drawer_id:
+            raise ValidationError(_("يجب اختيار درج مختلف عن الدرج الحالي."))
+
+        lock_ids = sorted({source_drawer.id, destination_drawer_id})
+        self.env.cr.execute(
+            """
+            SELECT id
+              FROM saycare_morgue_drawer
+             WHERE id IN %s
+             ORDER BY id
+             FOR UPDATE
+            """,
+            [tuple(lock_ids)],
+        )
+        locked_ids = {row[0] for row in self.env.cr.fetchall()}
+        if set(lock_ids) != locked_ids:
+            raise ValidationError(_("أحد الأدراج المحددة غير موجود."))
+
+        Drawer = self.env["saycare.morgue.drawer"].sudo()
+        source_drawer = Drawer.browse(source_drawer.id)
+        destination = Drawer.browse(destination_drawer_id)
+        source_drawer.invalidate_recordset(
+            ["active", "current_case_id", "fridge_id"]
+        )
+        destination.invalidate_recordset(
+            ["active", "current_case_id", "fridge_id"]
+        )
+
+        if source_drawer.current_case_id != self:
+            raise ValidationError(
+                _("الدرج الحالي لم يعد مرتبطاً بهذه الحالة. قم بتحديث الصفحة.")
+            )
+        if not destination.active or not destination.fridge_id.active:
+            raise ValidationError(_("الثلاجة أو الدرج الوجهة غير نشط."))
+        if destination.current_case_id:
+            raise ValidationError(_("الدرج الوجهة مشغول بالفعل."))
+
+        from_fridge = self.fridge_id
+        from_drawer = source_drawer
+        employee = self._employee_for_current_user()
+
+        source_drawer.write({"current_case_id": False})
+        destination.write({"current_case_id": self.id})
+        self.with_context(allow_morgue_transfer=True).write(
+            {
+                "fridge_id": destination.fridge_id.id,
+                "drawer_id": destination.id,
+            }
+        )
+
+        movement = self.env["saycare.morgue.movement"].sudo().create(
+            {
+                "case_id": self.id,
+                "from_fridge_id": from_fridge.id,
+                "from_drawer_id": from_drawer.id,
+                "to_fridge_id": destination.fridge_id.id,
+                "to_drawer_id": destination.id,
+                "reason": reason,
+                "moved_by_id": employee.id or False,
+                "moved_at": fields.Datetime.now(),
+            }
+        )
+
+        self.message_post(
+            body=_("تم نقل الجثمان من %s / %s إلى %s / %s.")
+            % (
+                from_fridge.display_name,
+                from_drawer.display_name,
+                destination.fridge_id.display_name,
+                destination.display_name,
+            )
+        )
+        return movement
+
+
+class SaycareMorgueAutopsy(models.Model):
+    _name = "saycare.morgue.autopsy"
+    _description = "Morgue Autopsy"
+    _order = "requested_at desc, id desc"
+
+    case_id = fields.Many2one(
+        "saycare.morgue.case",
+        string="Morgue Case",
+        required=True,
+        index=True,
+        ondelete="cascade",
+    )
+    status = fields.Selection(
+        [
+            ("requested", "Requested"),
+            ("in_progress", "In Progress"),
+            ("completed", "Completed"),
+            ("cancelled", "Cancelled"),
+        ],
+        string="Status",
+        default="requested",
+        required=True,
+        index=True,
+    )
+    requested_at = fields.Datetime(
+        string="Requested At",
+        required=True,
+        default=fields.Datetime.now,
+        index=True,
+    )
+    requested_by_id = fields.Many2one(
+        "hr.employee",
+        string="Requested By",
+        default=lambda self: self.env["hr.employee"].sudo().search(
+            [("user_id", "=", self.env.user.id)],
+            limit=1,
+        ),
+        ondelete="restrict",
+    )
+    assigned_doctor_id = fields.Many2one(
+        "hr.employee",
+        string="Assigned Doctor / Pathologist",
+        ondelete="restrict",
+    )
+    reason = fields.Text(string="Reason", required=True)
+    clinical_notes = fields.Text(string="Clinical / Legal Notes")
+    autopsy_at = fields.Datetime(string="Autopsy Date / Time")
+    findings = fields.Text(string="Findings")
+    report_text = fields.Text(string="Autopsy Report")
+    completed_by_id = fields.Many2one(
+        "hr.employee",
+        string="Completed By",
+        ondelete="restrict",
+    )
+    completed_at = fields.Datetime(string="Completed At", index=True)
+    cancel_reason = fields.Text(string="Cancellation Reason")
+
+    @api.constrains("reason")
+    def _check_reason(self):
+        for rec in self:
+            if not (rec.reason or "").strip():
+                raise ValidationError(_("Autopsy reason is required."))
+
+    def _employee_for_current_user(self):
+        return self.env["hr.employee"].sudo().search(
+            [("user_id", "=", self.env.user.id)],
+            limit=1,
+        )
+
+    def action_start(self):
+        self.ensure_one()
+        if self.status != "requested":
+            raise UserError(_("Only requested autopsies can be started."))
+        self.write(
+            {
+                "status": "in_progress",
+                "autopsy_at": self.autopsy_at or fields.Datetime.now(),
+            }
+        )
+        return True
+
+    def action_complete(self, findings="", report_text="", autopsy_at=False):
+        self.ensure_one()
+        if self.status not in ("requested", "in_progress"):
+            raise UserError(
+                _("Only requested or in-progress autopsies can be completed.")
+            )
+
+        findings = (findings or "").strip()
+        report_text = (report_text or "").strip()
+        if not findings and not report_text:
+            raise ValidationError(
+                _("Findings or autopsy report text is required.")
+            )
+
+        employee = self._employee_for_current_user()
+        self.write(
+            {
+                "status": "completed",
+                "findings": findings,
+                "report_text": report_text,
+                "autopsy_at": autopsy_at or self.autopsy_at or fields.Datetime.now(),
+                "completed_by_id": employee.id or False,
+                "completed_at": fields.Datetime.now(),
+                "cancel_reason": False,
+            }
+        )
+        return True
+
+    def action_cancel(self, reason):
+        self.ensure_one()
+        if self.status not in ("requested", "in_progress"):
+            raise UserError(
+                _("Only requested or in-progress autopsies can be cancelled.")
+            )
+
+        reason = (reason or "").strip()
+        if not reason:
+            raise ValidationError(_("Cancellation reason is required."))
+
+        self.write(
+            {
+                "status": "cancelled",
+                "cancel_reason": reason,
+            }
+        )
+        return True
+
+
+class SaycareMorgueRelease(models.Model):
+    _name = "saycare.morgue.release"
+    _description = "Morgue Body Release"
+    _order = "released_at desc, id desc"
+
+    case_id = fields.Many2one(
+        "saycare.morgue.case",
+        string="Morgue Case",
+        required=True,
+        index=True,
+        ondelete="restrict",
+    )
+    receiver_name = fields.Char(string="Receiver Name", required=True)
+    receiver_id_type = fields.Selection(
+        [
+            ("national_id", "National ID"),
+            ("passport", "Passport"),
+            ("other", "Other"),
+        ],
+        string="Receiver ID Type",
+        default="national_id",
+        required=True,
+    )
+    receiver_id_number = fields.Char(
+        string="Receiver ID Number",
+        required=True,
+        index=True,
+    )
+    relation_to_deceased = fields.Char(string="Relation to Deceased")
+    permit_reference = fields.Char(
+        string="Release Permit / Reference",
+        required=True,
+        index=True,
+    )
+    notes = fields.Text(string="Release Notes")
+    released_by_id = fields.Many2one(
+        "hr.employee",
+        string="Released By",
+        ondelete="restrict",
+    )
+    released_at = fields.Datetime(
+        string="Released At",
+        required=True,
+        default=fields.Datetime.now,
+        index=True,
+    )
+    from_fridge_id = fields.Many2one(
+        "saycare.morgue.fridge",
+        string="Release Fridge",
+        required=True,
+        ondelete="restrict",
+    )
+    from_drawer_id = fields.Many2one(
+        "saycare.morgue.drawer",
+        string="Release Drawer",
+        required=True,
+        ondelete="restrict",
+    )
+
+    _case_release_uniq = models.Constraint(
+        "unique(case_id)",
+        "A morgue case can only be released once.",
+    )
+
+
+class SaycareMorgueCaseRelease(models.Model):
+    _inherit = "saycare.morgue.case"
+
+    autopsy_ids = fields.One2many(
+        "saycare.morgue.autopsy",
+        "case_id",
+        string="Autopsies",
+    )
+    release_ids = fields.One2many(
+        "saycare.morgue.release",
+        "case_id",
+        string="Body Releases",
+    )
+
+    def action_release_body(
+        self,
+        receiver_name,
+        receiver_id_type,
+        receiver_id_number,
+        relation_to_deceased,
+        permit_reference,
+        notes="",
+    ):
+        self.ensure_one()
+
+        if self.state != "stored":
+            raise UserError(_("Only stored cases can be released."))
+
+        receiver_name = (receiver_name or "").strip()
+        receiver_id_number = (receiver_id_number or "").strip()
+        permit_reference = (permit_reference or "").strip()
+
+        if not receiver_name:
+            raise ValidationError(_("Receiver name is required."))
+        if not receiver_id_number:
+            raise ValidationError(_("Receiver ID number is required."))
+        if not permit_reference:
+            raise ValidationError(_("Release permit/reference is required."))
+        if receiver_id_type not in ("national_id", "passport", "other"):
+            receiver_id_type = "other"
+
+        if not self.drawer_id or not self.fridge_id:
+            raise ValidationError(_("The case has no valid current storage location."))
+
+        if self.release_ids:
+            raise UserError(_("This case has already been released."))
+
+        drawer_id = self.drawer_id.id
+        self.env.cr.execute(
+            "SELECT id FROM saycare_morgue_drawer WHERE id = %s FOR UPDATE",
+            [drawer_id],
+        )
+        if not self.env.cr.fetchone():
+            raise ValidationError(_("The current drawer no longer exists."))
+
+        drawer = self.env["saycare.morgue.drawer"].sudo().browse(drawer_id)
+        drawer.invalidate_recordset(["current_case_id", "fridge_id", "active"])
+
+        if drawer.current_case_id != self:
+            raise ValidationError(
+                _("The current drawer is no longer occupied by this case. Refresh and retry.")
+            )
+
+        from_fridge = self.fridge_id
+        from_drawer = drawer
+        employee = self._employee_for_current_user()
+
+        release = self.env["saycare.morgue.release"].sudo().create(
+            {
+                "case_id": self.id,
+                "receiver_name": receiver_name,
+                "receiver_id_type": receiver_id_type,
+                "receiver_id_number": receiver_id_number,
+                "relation_to_deceased": (relation_to_deceased or "").strip(),
+                "permit_reference": permit_reference,
+                "notes": (notes or "").strip(),
+                "released_by_id": employee.id or False,
+                "released_at": fields.Datetime.now(),
+                "from_fridge_id": from_fridge.id,
+                "from_drawer_id": from_drawer.id,
+            }
+        )
+
+        drawer.write({"current_case_id": False})
+        self.with_context(allow_morgue_release=True).write({"state": "released"})
+
+        self.message_post(
+            body=_("Body released from %s / %s to %s.")
+            % (
+                from_fridge.display_name,
+                from_drawer.display_name,
+                receiver_name,
+            )
+        )
+
+        return release

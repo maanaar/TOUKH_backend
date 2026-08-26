@@ -46,6 +46,12 @@ class SaycareDoctorAssessment(models.Model):
     request_ids = fields.One2many('saycare.doctor.assessment.request', 'assessment_id',
                                   string='طلبات سريعة')
 
+    # Structured رows for the "الطلبات" tab (lab/rad/procedure/consultation
+    # orders, medications, allergies) — stored as JSON since their shape
+    # mirrors the frontend's OrdersMedicationsTab form as-is, with no need
+    # for per-row querying/reporting on this model.
+    orders_json = fields.Text(string='بيانات الطلبات (JSON)')
+
     # ── التشخيص والخطة العلاجية ───────────────────────────────────────────────
     diagnosis       = fields.Text(string='التشخيص')
     treatment_plan  = fields.Text(string='الخطة العلاجية')
