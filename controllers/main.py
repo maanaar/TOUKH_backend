@@ -1880,6 +1880,27 @@ class PickingCreateController(http.Controller):
             vals['move_ids'] = move_vals_list
             rec = request.env['stock.picking'].sudo().create(vals)
 
+            # إشعار المستخدمين المخوّلين باستلام هذا المخزن — فقط لتحويلات
+            # الأقسام الداخلية (طلبات صرف واستلام الأقسام)، وليس لعمليات
+            # الصيدلية أو غيرها التي تستخدم نفس الـ endpoint.
+            if picking_type.code == 'internal':
+                try:
+                    dest_wh = location_dst.warehouse_id
+                    if dest_wh:
+                        employees = request.env['hr.employee'].sudo().search([
+                            ('warehouse_ids', 'in', dest_wh.id),
+                        ])
+                        recipients = employees.mapped('user_id')
+                        for u in recipients:
+                            request.env['saycare.notification'].sudo().create({
+                                'user_id': u.id,
+                                'title':   f'طلب جديد: {rec.name}',
+                                'body':    f'من {location_src.complete_name} إلى {location_dst.complete_name}',
+                                'url':     f'/unit/sub-storage-transfer?picking={rec.id}',
+                            })
+                except Exception:
+                    pass
+
             return http_response({
                 'id':                 rec.id,
                 'name':               rec.name,

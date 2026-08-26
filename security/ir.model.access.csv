@@ -137,3 +137,5 @@ access_saycare_morgue_autopsy_user,saycare.morgue.movement user,model_saycare_mo
 access_saycare_morgue_autopsy_admin,saycare.morgue.movement admin,model_saycare_morgue_autopsy,base.group_system,1,1,1,1
 access_saycare_morgue_release_user,saycare.morgue.movement user,model_saycare_morgue_release,base.group_user,1,1,1,0
 access_saycare_morgue_release_admin,saycare.morgue.movement admin,model_saycare_morgue_release,base.group_system,1,1,1,1
+access_saycare_notification_user,saycare.notification user,model_saycare_notification,base.group_user,1,1,0,0
+access_saycare_notification_admin,saycare.notification admin,model_saycare_notification,base.group_system,1,1,1,1

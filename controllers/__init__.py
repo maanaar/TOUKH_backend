@@ -37,5 +37,6 @@ from . import (
     resuscitation,
     doctor_assessment,
     triage_assessment,
+    notifications,
 )
 from . import morgue

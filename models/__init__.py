@@ -37,5 +37,6 @@ from . import (
     saycare_triage_assessment,
     purchase_order_ext,
     saycare_password_change_log,
+    saycare_notification,
 )
 from . import saycare_morgue
