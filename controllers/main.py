@@ -1798,6 +1798,24 @@ class WarehouseController(http.Controller):
             })
         return http_response(data)
 
+    @http.route('/api/v1/stock/warehouses/my', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_my(self, **kw):
+        """Warehouses assigned to the current user's hr.employee record
+        (hr.employee.warehouse_ids) - scopes which sub-warehouse destination
+        locations they're allowed to receive transfers into on شاشة نقل
+        للمخازن الفرعية / طلبات صرف واستلام الأقسام."""
+        employee = request.env['hr.employee'].sudo().search(
+            [('user_id', '=', request.env.user.id)], limit=1
+        )
+        warehouses = employee.warehouse_ids if employee else request.env['stock.warehouse']
+        return http_response([{
+            'id':             wh.id,
+            'name':           wh.name,
+            'code':           wh.code,
+            'lot_stock_id':   wh.lot_stock_id.id if wh.lot_stock_id else None,
+            'lot_stock_name': wh.lot_stock_id.complete_name if wh.lot_stock_id else None,
+        } for wh in warehouses])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  stock.picking  — CREATE + VALIDATE
@@ -1973,6 +1991,21 @@ class PickingValidateController(http.Controller):
                 return http_response({'error': 'picking is already done'}, 400)
             if rec.state == 'cancel':
                 return http_response({'error': 'picking is cancelled'}, 400)
+
+            # طلبات صرف واستلام الأقسام (SubStorageTransferPage.jsx) - only the
+            # employee(s) assigned to the destination warehouse may confirm
+            # receipt. Scoped strictly to 'internal' transfers so unrelated
+            # flows (purchase receiving, pharmacy dispensing via 'outgoing')
+            # are never affected. An employee with no warehouse_ids configured
+            # yet is allowed through, matching the frontend's same fallback.
+            if rec.picking_type_id.code == 'internal':
+                employee = request.env['hr.employee'].sudo().search(
+                    [('user_id', '=', request.env.user.id)], limit=1
+                )
+                if employee and employee.warehouse_ids:
+                    dest_wh = rec.location_dest_id.warehouse_id
+                    if dest_wh and dest_wh not in employee.warehouse_ids:
+                        return http_response({'error': 'هذا المخزن غير مخصص لك — لا يمكنك تأكيد الاستلام هنا'}, 403)
 
             # Confirm first if still in draft
             if rec.state in ('draft', 'waiting', 'confirmed'):

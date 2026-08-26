@@ -133,6 +133,14 @@ class HrEmployeeMedical(models.Model):
         ('specialist', 'أخصائي'),
     ], string='درجة الطبيب')
 
+    # ── Warehouse access (نقل للمخازن الفرعية / طلبات صرف واستلام الأقسام) ──
+    # An employee can be assigned more than one warehouse (e.g. covers both
+    # مخازن مستلزمات and مخزن الصيدلية) - scopes which sub-warehouse locations
+    # they're allowed to receive transfers into.
+    warehouse_ids = fields.Many2many(
+        'stock.warehouse', string='المخازن المخصصة',
+    )
+
     specialty_id    = fields.Many2one('saycare.specialty', string='Specialty')
     license_number  = fields.Char(string='Medical License No.')
 

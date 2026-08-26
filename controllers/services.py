@@ -33,6 +33,7 @@ def _product_service_dict(p, specialty_id=None, specialty_name=''):
         'insurance_price': 0.0,
         'notes':           '',
         'source':          'product',
+        'categ_type':      p.categ_id.categ_type or '',
     }
 
 
