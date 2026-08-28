@@ -163,3 +163,27 @@ class StockController(http.Controller):
             'picking_id':      picking.id if picking else None,
             'picking_name':    picking_name,
         })
+
+    @http.route('/saycare/api/visit/<int:visit_id>/dispensed-consumables', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_dispensed_consumables(self, visit_id, **kw):
+        """كل ما تم صرفه فعلياً لهذه الزيارة عبر dispatch-consumables — يُطابق
+        على origin بالتساوي التام (وليس ilike) حتى لا تختلط زيارة رقم 1 مع 12،
+        120 ...الخ. تُستخدم لإعادة عرض الأصناف المصروفة سابقاً عند إعادة فتح
+        سجل المريض (PatientDispenseSection)."""
+        orders = request.env['sale.order'].sudo().search([
+            ('origin', '=', f'Nurse Dispatch / Visit {visit_id}'),
+        ])
+        items = []
+        for so in orders:
+            for line in so.order_line:
+                items.append({
+                    'sale_order_id':      so.id,
+                    'sale_order_name':    so.name,
+                    'product_product_id': line.product_id.id,
+                    'name':               line.name or line.product_id.name,
+                    'uom':                line.product_uom.name if line.product_uom else '',
+                    'uom_id':             line.product_uom.id if line.product_uom else None,
+                    'qty':                line.product_uom_qty,
+                    'date':               str(so.create_date),
+                })
+        return _json(items)

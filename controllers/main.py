@@ -1844,6 +1844,18 @@ class PickingCreateController(http.Controller):
             if not location_dst.exists():
                 return http_response({'error': 'location_dest_id not found'}, 400)
 
+            # طلبات صرف واستلام الأقسام: فقط الموظف المخوّل بمخزن الوجهة هو من
+            # يمكنه إنشاء طلب موجّه إليه — نفس منطق الاستلام لاحقاً، لكن على
+            # لحظة الإنشاء. مقيّد بـ 'internal' فقط، فلا يمس شاشات الصيدلية.
+            if picking_type.code == 'internal':
+                employee = request.env['hr.employee'].sudo().search(
+                    [('user_id', '=', request.env.user.id)], limit=1
+                )
+                if employee and employee.warehouse_ids:
+                    dest_wh = location_dst.warehouse_id
+                    if dest_wh and dest_wh not in employee.warehouse_ids:
+                        return http_response({'error': 'هذا المخزن غير مخصص لك — لا يمكنك إنشاء طلب موجّه إليه'}, 403)
+
             vals = {
                 'picking_type_id':  picking_type.id,
                 'location_id':      location_src.id,
@@ -1963,6 +1975,18 @@ class PickingConfirmController(http.Controller):
                 return http_response({'error': 'picking is already done'}, 400)
             if rec.state == 'cancel':
                 return http_response({'error': 'picking is cancelled'}, 400)
+
+            # طلبات صرف واستلام الأقسام: تحديد وإرسال الكميات (المرحلة التي
+            # يجهّز فيها المخزن الطلب) مقصورة على موظفي مخزن المصدر — عكس
+            # الاستلام الذي يخص مخزن الوجهة. مقيّد بـ 'internal' فقط.
+            if rec.picking_type_id.code == 'internal':
+                employee = request.env['hr.employee'].sudo().search(
+                    [('user_id', '=', request.env.user.id)], limit=1
+                )
+                if employee and employee.warehouse_ids:
+                    src_wh = rec.location_id.warehouse_id
+                    if src_wh and src_wh not in employee.warehouse_ids:
+                        return http_response({'error': 'هذا المخزن غير مخصص لك — لا يمكنك تحديد أو إرسال كميات هذا الطلب'}, 403)
 
             body = json.loads(request.httprequest.data or '{}')
             moves_data = body.get('moves', [])

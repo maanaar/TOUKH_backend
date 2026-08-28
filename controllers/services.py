@@ -277,11 +277,26 @@ class ServiceController(http.Controller):
         return _json({'basket': _basket_items(product)})
 
     @http.route('/saycare/api/products/search', type='http', auth='user', methods=['GET'], csrf=False)
-    def search_products(self, q='', limit='40', **kw):
+    def search_products(self, q='', limit='40', goods_only='', **kw):
         env = request.env
         domain = [('active', '=', True), ('sale_ok', '=', True)]
         if q and q.strip():
             domain = ['&'] + domain + ['|', ('name', 'ilike', q.strip()), ('default_code', 'ilike', q.strip())]
+        # goods_only: مستلزمات/سلع فقط — تستبعد شجرة تصنيف "Medications" بالكامل
+        # (is_medicines غير مضبوط على كل التصنيفات الفرعية فعلياً في القاعدة،
+        # فاستبعاد الشجرة بالاسم أدق) وتستبعد الخدمات/الإجراءات (categ_type)،
+        # وتقتصر على الأصناف المخزنية الفعلية (type='consu'). تُستخدم في شاشات
+        # "صرف للمريض" حيث لا ينبغي أن تظهر الأدوية (لها مسارها عبر الصيدلية).
+        if goods_only in ('1', 'true', 'True'):
+            medicine_root = env['product.category'].sudo().search(
+                [('name', '=', 'Medications'), ('parent_id', '=', False)], limit=1
+            )
+            medicine_categ_ids = env['product.category'].sudo().search(
+                [('id', 'child_of', medicine_root.id)]
+            ).ids if medicine_root else []
+            domain = domain + [('type', '=', 'consu'), ('categ_id.categ_type', 'not in', ['services', 'procedures'])]
+            if medicine_categ_ids:
+                domain = domain + [('categ_id', 'not in', medicine_categ_ids)]
         products = env['product.template'].sudo().search(domain, limit=int(limit))
         results = []
         for p in products:
