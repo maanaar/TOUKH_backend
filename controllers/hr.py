@@ -78,6 +78,25 @@ class EmployeeController(http.Controller):
             'access':          access,
         })
 
+    @http.route('/api/v1/hr/employees/<int:employee_id>/access', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_employee_access(self, employee_id, **kw):
+        """يقرأ صلاحيات موظف بعينه من ir.config_parameter (نفس مكان الحفظ في
+        set_employee_access) — كان مفقوداً، فكانت شاشة إدارة الموظفين تعرض
+        فقط ما في localStorage الخاص بالمتصفح الحالي بدل الصلاحيات الفعلية
+        المحفوظة على الخادم، فتظهر أي صلاحية حُفظت من متصفح/جهاز آخر وكأنها
+        غير مفعّلة، وقد يُعاد حفظ نسخة فارغة تكتب فوق الصلاحيات الصحيحة."""
+        emp = request.env['hr.employee'].sudo().browse(employee_id)
+        if not emp.exists():
+            return http_response({'error': 'employee not found'}, 404)
+        param = request.env['ir.config_parameter'].sudo().get_param(
+            f'his.emp_access.{employee_id}', default=''
+        )
+        try:
+            access = json.loads(param) if param else {}
+        except Exception:
+            access = {}
+        return http_response({'access': access})
+
     @http.route('/api/v1/hr/employees/<int:employee_id>/access', type='http', auth='user', methods=['PUT'], csrf=False)
     def set_employee_access(self, employee_id, **kw):
         emp = request.env['hr.employee'].sudo().browse(employee_id)
