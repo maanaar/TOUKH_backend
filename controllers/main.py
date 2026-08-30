@@ -1901,21 +1901,22 @@ class PickingCreateController(http.Controller):
             vals['move_ids'] = move_vals_list
             rec = request.env['stock.picking'].sudo().create(vals)
 
-            # إشعار المستخدمين المخوّلين باستلام هذا المخزن — فقط لتحويلات
-            # الأقسام الداخلية (طلبات صرف واستلام الأقسام)، وليس لعمليات
-            # الصيدلية أو غيرها التي تستخدم نفس الـ endpoint.
+            # إشعار المستخدمين المخوّلين بمخزن المصدر — هم من يجهّز/يرسل
+            # الطلب تالياً، بخلاف مخزن الوجهة الذي غالباً هو من أنشأ الطلب
+            # أصلاً ولا حاجة لإخباره بإجرائه هو. فقط لتحويلات الأقسام
+            # الداخلية (طلبات صرف واستلام الأقسام)، وليس لعمليات الصيدلية.
             if picking_type.code == 'internal':
                 try:
-                    dest_wh = location_dst.warehouse_id
-                    if dest_wh:
+                    src_wh = location_src.warehouse_id
+                    if src_wh:
                         employees = request.env['hr.employee'].sudo().search([
-                            ('warehouse_ids', 'in', dest_wh.id),
+                            ('warehouse_ids', 'in', src_wh.id),
                         ])
                         recipients = employees.mapped('user_id')
                         for u in recipients:
                             request.env['saycare.notification'].sudo().create({
                                 'user_id': u.id,
-                                'title':   f'طلب جديد: {rec.name}',
+                                'title':   f'طلب جديد يحتاج تجهيز: {rec.name}',
                                 'body':    f'من {location_src.complete_name} إلى {location_dst.complete_name}',
                                 'url':     f'/unit/sub-storage-transfer?picking={rec.id}',
                             })
@@ -2013,6 +2014,26 @@ class PickingConfirmController(http.Controller):
                     move.quantity = float(entry['qty_done'])
 
             rec.write({'state': 'quantities_confirmed'})
+
+            # إشعار المستخدمين المخوّلين بمخزن الوجهة — الطلب أصبح جاهزاً
+            # لتأكيد الاستلام. فقط لتحويلات الأقسام الداخلية.
+            if rec.picking_type_id.code == 'internal':
+                try:
+                    dest_wh = rec.location_dest_id.warehouse_id
+                    if dest_wh:
+                        employees = request.env['hr.employee'].sudo().search([
+                            ('warehouse_ids', 'in', dest_wh.id),
+                        ])
+                        recipients = employees.mapped('user_id')
+                        for u in recipients:
+                            request.env['saycare.notification'].sudo().create({
+                                'user_id': u.id,
+                                'title':   f'الطلب جاهز للاستلام: {rec.name}',
+                                'body':    f'من {rec.location_id.complete_name} إلى {rec.location_dest_id.complete_name}',
+                                'url':     f'/unit/sub-storage-transfer?picking={rec.id}',
+                            })
+                except Exception:
+                    pass
 
             moves_out = []
             for move in rec.move_ids:
