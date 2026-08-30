@@ -1875,7 +1875,16 @@ class PickingCreateController(http.Controller):
             for i, move in enumerate(body['moves']):
                 if not move.get('product_id'):
                     return http_response({'error': f'moves[{i}]: product_id is required'}, 400)
-                product = request.env['product.product'].sudo().browse(int(move['product_id']))
+                # The React product pickers (searchProductsFast) return product.template
+                # ids, but a stock.move needs a product.product variant — resolve the
+                # template's variant first, falling back to a direct browse in case this
+                # is already a product.product id (e.g. re-sent from a loaded picking).
+                raw_id = int(move['product_id'])
+                product = request.env['product.product'].sudo().search(
+                    [('product_tmpl_id', '=', raw_id)], limit=1
+                )
+                if not product:
+                    product = request.env['product.product'].sudo().browse(raw_id)
                 if not product.exists():
                     return http_response({'error': f'moves[{i}]: product_id not found'}, 400)
 
