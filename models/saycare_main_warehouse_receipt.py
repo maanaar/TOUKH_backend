@@ -640,5 +640,5 @@ class MainWarehouseReceiptStatementTypeGuard(models.Model):
                 and record.statement_type not in self._ALLOWED_STATEMENT_TYPES
             ):
                 raise ValidationError(
-                    'نوع المستخلص يجب أن يكون أحد القيم المعتمدة.'
+                    'نوع التوريد يجب أن يكون أحد القيم المعتمدة.'
                 )
