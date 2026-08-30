@@ -622,3 +622,23 @@ class SaycareMainWarehouseReceiptBatch(models.Model):
         for batch in self:
             if batch.quantity <= 0:
                 raise ValidationError('ÙƒÙ…ÙŠØ© Ø§Ù„Ø¯ÙØ¹Ø© ÙŠØ¬Ø¨ Ø£Ù† ØªÙƒÙˆÙ† Ø£ÙƒØ¨Ø± Ù…Ù† ØµÙØ±')
+class MainWarehouseReceiptStatementTypeGuard(models.Model):
+    _inherit = 'saycare.main.warehouse.receipt'
+
+    _ALLOWED_STATEMENT_TYPES = {
+        'توريد عادي',
+        'هيئة شراء موحد',
+        'على سبيل الامانة',
+        'توريد مباشر',
+    }
+
+    @api.constrains('statement_type')
+    def _validate_statement_type(self):
+        for record in self:
+            if (
+                record.statement_type
+                and record.statement_type not in self._ALLOWED_STATEMENT_TYPES
+            ):
+                raise ValidationError(
+                    'نوع المستخلص يجب أن يكون أحد القيم المعتمدة.'
+                )

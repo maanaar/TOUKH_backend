@@ -2301,22 +2301,40 @@ class VendorController(http.Controller):
         # Base filter: active partners only
         domain = [('active', '=', True)]
 
-        # ── Optional: filter by custom is_vendor flag ────────────────────────
-        # If ?is_vendor=true is passed → return ONLY partners flagged as vendors
-        # Otherwise → return partners with supplier_rank > 0 (Odoo's native vendor flag)
+        # If ?is_vendor=true is passed, use the custom vendor flag.
+        # Otherwise preserve the existing Odoo supplier_rank behavior.
         only_vendors = str(kw.get('is_vendor', '')).lower() in ('1', 'true', 'yes')
         if only_vendors:
             domain.append(('is_vendor', '=', True))
         else:
             domain.append(('supplier_rank', '>', 0))
 
-        # ── Optional: name search ────────────────────────────────────────────
-        search = (kw.get('search') or '').strip()
-        if search:
-            domain.append(('name', 'ilike', search))
+        search = (kw.get('q') or '').strip()
 
-        # ✅ Use the domain we just built (the previous version ignored it)
-        records = request.env['res.partner'].sudo().search(domain)
+        # Keep the endpoint backward-compatible for callers that request the
+        # normal vendor list without q. Search callers that explicitly send q
+        # must type at least two characters.
+        if 'q' in kw and len(search) < 2:
+            return http_response([])
+
+        if search:
+            domain.extend([
+                '|',
+                ('name', 'ilike', search),
+                ('ref', 'ilike', search),
+            ])
+
+        try:
+            limit = int(kw.get('limit') or 0)
+        except (TypeError, ValueError):
+            limit = 0
+        limit = max(0, min(limit, 50))
+
+        records = request.env['res.partner'].sudo().search(
+            domain,
+            order='name asc',
+            limit=limit,
+        )
 
         data = []
         for rec in records:
@@ -2325,6 +2343,8 @@ class VendorController(http.Controller):
             except Exception:
                 continue
         return http_response(data)
+
+
 
     @http.route('/api/v1/partners/vendors/<int:rec_id>', type='http', auth='user', methods=['PUT'], csrf=False)
     def update_vendor(self, rec_id, **kw):
