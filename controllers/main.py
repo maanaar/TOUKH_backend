@@ -929,6 +929,10 @@ class PickingController(http.Controller):
             'backorder_name':           rec.backorder_id.name if rec.backorder_id else None,
             'user_id':                  rec.user_id.id if rec.user_id else None,
             'user_name':                rec.user_id.name if rec.user_id else None,
+            'sent_by_id':               rec.sent_by_id.id if rec.sent_by_id else None,
+            'sent_by_name':             rec.sent_by_id.name if rec.sent_by_id else None,
+            'received_by_id':           rec.received_by_id.id if rec.received_by_id else None,
+            'received_by_name':         rec.received_by_id.name if rec.received_by_id else None,
             'owner_id':                 rec.owner_id.id if rec.owner_id else None,
             'owner_name':               rec.owner_id.name if rec.owner_id else None,
             'company_id':               rec.company_id.id if rec.company_id else None,
@@ -2073,7 +2077,7 @@ class PickingConfirmController(http.Controller):
                 if 'qty_done' in entry:
                     move.quantity = float(entry['qty_done'])
 
-            rec.write({'state': 'quantities_confirmed'})
+            rec.write({'state': 'quantities_confirmed', 'sent_by_id': request.env.user.id})
 
             # إشعار المستخدمين المخوّلين بمخزن الوجهة — الطلب أصبح جاهزاً
             # لتأكيد الاستلام. فقط لتحويلات الأقسام الداخلية.
@@ -2103,10 +2107,12 @@ class PickingConfirmController(http.Controller):
                 })
 
             return http_response({
-                'id':    rec.id,
-                'name':  rec.name,
-                'state': rec.state,
-                'moves': moves_out,
+                'id':            rec.id,
+                'name':          rec.name,
+                'state':         rec.state,
+                'moves':         moves_out,
+                'sent_by_id':    rec.sent_by_id.id if rec.sent_by_id else None,
+                'sent_by_name':  rec.sent_by_id.name if rec.sent_by_id else None,
             })
         except Exception as e:
             return http_response({'error': str(e)}, 500)
@@ -2144,6 +2150,22 @@ class PickingValidateController(http.Controller):
                 rec.action_assign()
 
             body = json.loads(request.httprequest.data or '{}')
+
+            # المرتجعات: تعديل الكمية المستلمة فعلياً يحدث هنا مباشرة، ضمن
+            # نفس صلاحية موقع الوجهة أعلاه — وليس عبر استدعاء منفصل لـ
+            # save-quantities (ذاك مقصور على موقع المصدر، فيرفض المستلم
+            # بخطأ 403 لو استُدعي من هنا كما كان يحدث سابقاً).
+            for entry in body.get('moves', []):
+                move_id = entry.get('move_id')
+                if not move_id:
+                    continue
+                move = request.env['stock.move'].sudo().browse(int(move_id))
+                if not move.exists() or move.picking_id.id != rec_id:
+                    continue
+                if 'q_sant' in entry:
+                    move.q_sant = float(entry['q_sant'])
+                if 'qty_done' in entry:
+                    move.quantity = float(entry['qty_done'])
 
             # Set done quantities to match demand for any move that has none
             if body.get('immediate_transfer', True):
@@ -2227,11 +2249,15 @@ class PickingValidateController(http.Controller):
             if isinstance(res, dict) and res.get('res_model'):
                 rec._action_done()
 
+            rec.write({'received_by_id': request.env.user.id})
+
             return http_response({
-                'id':        rec.id,
-                'name':      rec.name,
-                'state':     rec.state,
-                'date_done': str(rec.date_done) if rec.date_done else None,
+                'id':                rec.id,
+                'name':              rec.name,
+                'state':             rec.state,
+                'date_done':         str(rec.date_done) if rec.date_done else None,
+                'received_by_id':    rec.received_by_id.id if rec.received_by_id else None,
+                'received_by_name':  rec.received_by_id.name if rec.received_by_id else None,
             })
 
         except Exception as e:

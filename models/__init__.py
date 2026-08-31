@@ -38,5 +38,6 @@ from . import (
     purchase_order_ext,
     saycare_password_change_log,
     saycare_notification,
+    saycare_stock_picking,
 )
 from . import saycare_morgue
