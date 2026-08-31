@@ -42,8 +42,8 @@ class EmployeeController(http.Controller):
                 'specialty_name':  rec.specialty_id.name if rec.specialty_id else '',
                 'nurse_specialty_ids':   rec.nurse_specialty_ids.ids,
                 'nurse_specialty_names': [s.name for s in rec.nurse_specialty_ids],
-                'warehouse_ids':   rec.warehouse_ids.ids,
-                'warehouse_names': [w.name for w in rec.warehouse_ids],
+                'location_ids':    rec.location_ids.ids,
+                'location_names':  [l.complete_name or l.name for l in rec.location_ids],
                 'company_id':      rec.company_id.id if rec.company_id else None,
                 'company_name':    rec.company_id.name if rec.company_id else None,
                 'image_url':       '/web/image/hr.employee/%d/image_1920' % rec.id if rec.image_1920 else '',
@@ -292,8 +292,8 @@ class EmployeeController(http.Controller):
             vals['specialty_id'] = int(body['specialty_id']) if body['specialty_id'] else False
         if 'nurse_specialty_ids' in body:
             vals['nurse_specialty_ids'] = [(6, 0, [int(i) for i in (body['nurse_specialty_ids'] or [])])]
-        if 'warehouse_ids' in body:
-            vals['warehouse_ids'] = [(6, 0, [int(i) for i in (body['warehouse_ids'] or [])])]
+        if 'location_ids' in body:
+            vals['location_ids'] = [(6, 0, [int(i) for i in (body['location_ids'] or [])])]
 
         if vals:
             rec.write(vals)
@@ -309,8 +309,8 @@ class EmployeeController(http.Controller):
             'specialty_name':  rec.specialty_id.name if rec.specialty_id else '',
             'nurse_specialty_ids':   rec.nurse_specialty_ids.ids,
             'nurse_specialty_names': [s.name for s in rec.nurse_specialty_ids],
-            'warehouse_ids':   rec.warehouse_ids.ids,
-            'warehouse_names': [w.name for w in rec.warehouse_ids],
+            'location_ids':    rec.location_ids.ids,
+            'location_names':  [l.complete_name or l.name for l in rec.location_ids],
         })
 
 

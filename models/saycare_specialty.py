@@ -134,11 +134,21 @@ class HrEmployeeMedical(models.Model):
     ], string='درجة الطبيب')
 
     # ── Warehouse access (نقل للمخازن الفرعية / طلبات صرف واستلام الأقسام) ──
-    # An employee can be assigned more than one warehouse (e.g. covers both
-    # مخازن مستلزمات and مخزن الصيدلية) - scopes which sub-warehouse locations
-    # they're allowed to receive transfers into.
+    # Deprecated in favor of location_ids below (kept only so existing
+    # assignments aren't silently dropped by a schema migration) — no
+    # permission check in controllers/main.py reads this field anymore.
     warehouse_ids = fields.Many2many(
-        'stock.warehouse', string='المخازن المخصصة',
+        'stock.warehouse', string='المخازن المخصصة (قديم)',
+    )
+
+    # An employee can be assigned any number of specific locations — a whole
+    # warehouse's root location (covers every sub-location under it) or a
+    # single granular sub-location — rather than being limited to picking a
+    # full warehouse. Scopes which locations they may create/receive/send
+    # طلبات صرف واستلام الأقسام for (see controllers/main.py's
+    # PickingCreateController/PickingValidateController.save_quantities).
+    location_ids = fields.Many2many(
+        'stock.location', string='المواقع المخصصة',
     )
 
     specialty_id    = fields.Many2one('saycare.specialty', string='Specialty')

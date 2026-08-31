@@ -11,6 +11,38 @@ def http_response(data, status=200):
     return Response(body, status=status, mimetype='application/json')
 
 
+def _location_covered(location, employee):
+    """True if `location` is one of `employee.location_ids`, a descendant of
+    one of them, or shares a warehouse with an assigned location that is that
+    warehouse's own root stock location.
+
+    The third case matters because a warehouse's department sub-locations
+    ("عهدة مستلزمات...") are siblings of its root "Stock" location in the
+    location tree (both live directly under the warehouse's view location),
+    not descendants of "Stock" — a plain child_of check on the root location
+    alone would never match any of them. stock.location.warehouse_id is a
+    compute that already walks the correct (view_location_id-rooted) tree, so
+    reusing it here is what makes "assign the whole warehouse" still cover
+    every department under it, exactly as it did before per-location
+    assignment replaced the old warehouse-level hr.employee.warehouse_ids.
+    """
+    if not employee or not employee.location_ids or not location:
+        return True
+    env = location.env
+    if env['stock.location'].search_count([
+        ('id', '=', location.id),
+        ('id', 'child_of', employee.location_ids.ids),
+    ]):
+        return True
+    location_warehouse = location.warehouse_id
+    if not location_warehouse:
+        return False
+    return any(
+        loc.warehouse_id == location_warehouse and loc.id == location_warehouse.lot_stock_id.id
+        for loc in employee.location_ids
+    )
+
+
 def _normalize_ar_keyword(text):
     """Collapse Arabic spelling variants that get typed inconsistently
     depending on who entered the data and which keyboard they used:
@@ -681,6 +713,23 @@ class LocationController(http.Controller):
             except Exception:
                 continue
         return http_response(data)
+
+    @http.route('/api/v1/stock/locations/my', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_my(self, **kw):
+        """المواقع المخصصة للمستخدم الحالي (hr.employee.location_ids) — تُستخدم
+        لتقييد من يمكنه إنشاء/إرسال كميات/استلام طلبات صرف واستلام الأقسام،
+        بدلاً من قصر التخصيص على مخزن كامل فقط."""
+        employee = request.env['hr.employee'].sudo().search(
+            [('user_id', '=', request.env.user.id)], limit=1
+        )
+        locations = employee.location_ids if employee else request.env['stock.location']
+        return http_response([{
+            'id':             loc.id,
+            'name':           loc.name,
+            'complete_name':  loc.complete_name,
+            'warehouse_id':   loc.warehouse_id.id if loc.warehouse_id else None,
+            'warehouse_name': loc.warehouse_id.name if loc.warehouse_id else None,
+        } for loc in locations])
 
     @http.route('/api/v1/stock/locations/<int:rec_id>', type='http', auth='user', methods=['GET'], csrf=False)
     def get_one(self, rec_id, **kw):
@@ -1846,17 +1895,15 @@ class PickingCreateController(http.Controller):
             if not location_dst.exists():
                 return http_response({'error': 'location_dest_id not found'}, 400)
 
-            # طلبات صرف واستلام الأقسام: فقط الموظف المخوّل بمخزن الوجهة هو من
+            # طلبات صرف واستلام الأقسام: فقط الموظف المخوّل بموقع الوجهة هو من
             # يمكنه إنشاء طلب موجّه إليه — نفس منطق الاستلام لاحقاً، لكن على
             # لحظة الإنشاء. مقيّد بـ 'internal' فقط، فلا يمس شاشات الصيدلية.
             if picking_type.code == 'internal':
                 employee = request.env['hr.employee'].sudo().search(
                     [('user_id', '=', request.env.user.id)], limit=1
                 )
-                if employee and employee.warehouse_ids:
-                    dest_wh = location_dst.warehouse_id
-                    if dest_wh and dest_wh not in employee.warehouse_ids:
-                        return http_response({'error': 'هذا المخزن غير مخصص لك — لا يمكنك إنشاء طلب موجّه إليه'}, 403)
+                if not _location_covered(location_dst, employee):
+                    return http_response({'error': 'هذا الموقع غير مخصص لك — لا يمكنك إنشاء طلب موجّه إليه'}, 403)
 
             vals = {
                 'picking_type_id':  picking_type.id,
@@ -1907,25 +1954,23 @@ class PickingCreateController(http.Controller):
             vals['move_ids'] = move_vals_list
             rec = request.env['stock.picking'].sudo().create(vals)
 
-            # إشعار المستخدمين المخوّلين بمخزن المصدر — هم من يجهّز/يرسل
-            # الطلب تالياً، بخلاف مخزن الوجهة الذي غالباً هو من أنشأ الطلب
+            # إشعار المستخدمين المخوّلين بموقع المصدر — هم من يجهّز/يرسل
+            # الطلب تالياً، بخلاف موقع الوجهة الذي غالباً هو من أنشأ الطلب
             # أصلاً ولا حاجة لإخباره بإجرائه هو. فقط لتحويلات الأقسام
             # الداخلية (طلبات صرف واستلام الأقسام)، وليس لعمليات الصيدلية.
             if picking_type.code == 'internal':
                 try:
-                    src_wh = location_src.warehouse_id
-                    if src_wh:
-                        employees = request.env['hr.employee'].sudo().search([
-                            ('warehouse_ids', 'in', src_wh.id),
-                        ])
-                        recipients = employees.mapped('user_id')
-                        for u in recipients:
-                            request.env['saycare.notification'].sudo().create({
-                                'user_id': u.id,
-                                'title':   f'طلب جديد يحتاج تجهيز: {rec.name}',
-                                'body':    f'من {location_src.complete_name} إلى {location_dst.complete_name}',
-                                'url':     f'/unit/sub-storage-transfer?picking={rec.id}',
-                            })
+                    candidates = request.env['hr.employee'].sudo().search([('location_ids', '!=', False)])
+                    recipients = candidates.filtered(
+                        lambda e: _location_covered(location_src, e)
+                    ).mapped('user_id')
+                    for u in recipients:
+                        request.env['saycare.notification'].sudo().create({
+                            'user_id': u.id,
+                            'title':   f'طلب جديد يحتاج تجهيز: {rec.name}',
+                            'body':    f'من {location_src.complete_name} إلى {location_dst.complete_name}',
+                            'url':     f'/unit/sub-storage-transfer?picking={rec.id}',
+                        })
                 except Exception:
                     pass
 
@@ -2001,10 +2046,8 @@ class PickingConfirmController(http.Controller):
                 employee = request.env['hr.employee'].sudo().search(
                     [('user_id', '=', request.env.user.id)], limit=1
                 )
-                if employee and employee.warehouse_ids:
-                    src_wh = rec.location_id.warehouse_id
-                    if src_wh and src_wh not in employee.warehouse_ids:
-                        return http_response({'error': 'هذا المخزن غير مخصص لك — لا يمكنك تحديد أو إرسال كميات هذا الطلب'}, 403)
+                if not _location_covered(rec.location_id, employee):
+                    return http_response({'error': 'هذا الموقع غير مخصص لك — لا يمكنك تحديد أو إرسال كميات هذا الطلب'}, 403)
 
             body = json.loads(request.httprequest.data or '{}')
             moves_data = body.get('moves', [])
@@ -2027,19 +2070,17 @@ class PickingConfirmController(http.Controller):
             # لتأكيد الاستلام. فقط لتحويلات الأقسام الداخلية.
             if rec.picking_type_id.code == 'internal':
                 try:
-                    dest_wh = rec.location_dest_id.warehouse_id
-                    if dest_wh:
-                        employees = request.env['hr.employee'].sudo().search([
-                            ('warehouse_ids', 'in', dest_wh.id),
-                        ])
-                        recipients = employees.mapped('user_id')
-                        for u in recipients:
-                            request.env['saycare.notification'].sudo().create({
-                                'user_id': u.id,
-                                'title':   f'الطلب جاهز للاستلام: {rec.name}',
-                                'body':    f'من {rec.location_id.complete_name} إلى {rec.location_dest_id.complete_name}',
-                                'url':     f'/unit/sub-storage-transfer?picking={rec.id}',
-                            })
+                    candidates = request.env['hr.employee'].sudo().search([('location_ids', '!=', False)])
+                    recipients = candidates.filtered(
+                        lambda e: _location_covered(rec.location_dest_id, e)
+                    ).mapped('user_id')
+                    for u in recipients:
+                        request.env['saycare.notification'].sudo().create({
+                            'user_id': u.id,
+                            'title':   f'الطلب جاهز للاستلام: {rec.name}',
+                            'body':    f'من {rec.location_id.complete_name} إلى {rec.location_dest_id.complete_name}',
+                            'url':     f'/unit/sub-storage-transfer?picking={rec.id}',
+                        })
                 except Exception:
                     pass
 
@@ -2076,19 +2117,17 @@ class PickingValidateController(http.Controller):
                 return http_response({'error': 'picking is cancelled'}, 400)
 
             # طلبات صرف واستلام الأقسام (SubStorageTransferPage.jsx) - only the
-            # employee(s) assigned to the destination warehouse may confirm
+            # employee(s) assigned to the destination location may confirm
             # receipt. Scoped strictly to 'internal' transfers so unrelated
             # flows (purchase receiving, pharmacy dispensing via 'outgoing')
-            # are never affected. An employee with no warehouse_ids configured
+            # are never affected. An employee with no location_ids configured
             # yet is allowed through, matching the frontend's same fallback.
             if rec.picking_type_id.code == 'internal':
                 employee = request.env['hr.employee'].sudo().search(
                     [('user_id', '=', request.env.user.id)], limit=1
                 )
-                if employee and employee.warehouse_ids:
-                    dest_wh = rec.location_dest_id.warehouse_id
-                    if dest_wh and dest_wh not in employee.warehouse_ids:
-                        return http_response({'error': 'هذا المخزن غير مخصص لك — لا يمكنك تأكيد الاستلام هنا'}, 403)
+                if not _location_covered(rec.location_dest_id, employee):
+                    return http_response({'error': 'هذا الموقع غير مخصص لك — لا يمكنك تأكيد الاستلام هنا'}, 403)
 
             # Confirm first if still in draft
             if rec.state in ('draft', 'waiting', 'confirmed'):
