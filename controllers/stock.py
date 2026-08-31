@@ -81,6 +81,71 @@ class StockController(http.Controller):
             result[str(q.product_id.id)] += (q.quantity - q.reserved_quantity)
         return _json(result)
 
+    @http.route('/saycare/api/stock/transfer-item-details', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_transfer_item_details(self, location_id='', product_ids='', **kw):
+        """Per-product stock snapshot at a source location for شاشة طلبات صرف
+        واستلام الأقسام's "الأصناف المطلوبة" table: quantity available there
+        right now, plus the nearest-to-expire lot/serial (FEFO) — so whoever
+        is preparing the transfer sees what they'd actually be sending before
+        they confirm quantities. product_ids are product.template ids (this
+        screen's product picker returns templates, not variants — same as
+        PickingCreateController.create_picking's product_id resolution)."""
+        try:
+            tmpl_ids = [int(x) for x in product_ids.split(',') if x.strip().isdigit()]
+        except Exception:
+            tmpl_ids = []
+
+        result = {str(tid): {
+            'qty_available':   0.0,
+            'lot_id':          None,
+            'lot_name':        None,
+            'expiration_date': None,
+        } for tid in tmpl_ids}
+        if not tmpl_ids or not location_id:
+            return _json(result)
+
+        try:
+            loc = request.env['stock.location'].sudo().browse(int(location_id))
+        except (ValueError, TypeError):
+            return _json(result)
+        if not loc.exists():
+            return _json(result)
+
+        variants = request.env['product.product'].sudo().search([('product_tmpl_id', 'in', tmpl_ids)])
+        if not variants:
+            return _json(result)
+        variant_to_tmpl = {v.id: v.product_tmpl_id.id for v in variants}
+
+        quants = request.env['stock.quant'].sudo().search([
+            ('product_id', 'in', variants.ids),
+            ('location_id', 'child_of', loc.id),
+        ])
+
+        best_lot = {}
+        for q in quants:
+            tid = variant_to_tmpl.get(q.product_id.id)
+            if tid is None:
+                continue
+            result[str(tid)]['qty_available'] += (q.quantity - q.reserved_quantity)
+            if q.lot_id:
+                # expiration_date only exists on stock.lot when the product_expiry
+                # module is installed — getattr keeps this endpoint working (just
+                # without an expiry value) on installs that don't have it enabled.
+                exp = getattr(q.lot_id, 'expiration_date', False)
+                current = best_lot.get(tid)
+                if current is None or (
+                    exp and (not getattr(current.lot_id, 'expiration_date', False) or exp < current.lot_id.expiration_date)
+                ):
+                    best_lot[tid] = q
+
+        for tid, q in best_lot.items():
+            exp = getattr(q.lot_id, 'expiration_date', False)
+            result[str(tid)]['lot_id']          = q.lot_id.id
+            result[str(tid)]['lot_name']        = q.lot_id.name
+            result[str(tid)]['expiration_date'] = str(exp.date()) if exp else None
+
+        return _json(result)
+
     @http.route('/saycare/api/visit/<int:visit_id>/dispatch-consumables', type='http', auth='user', methods=['POST'], csrf=False)
     def dispatch_consumables(self, visit_id, **kw):
         try:

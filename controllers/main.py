@@ -1692,7 +1692,9 @@ class QuantController(http.Controller):
                 'location_name':        rec.location_id.complete_name if rec.location_id else None,
                 'lot_id':               rec.lot_id.id if rec.lot_id else None,
                 'lot_name':             rec.lot_id.name if rec.lot_id else None,
-                'expiration_date':      str(rec.lot_id.expiration_date) if rec.lot_id and rec.lot_id.expiration_date else None,
+                # expiration_date only exists on stock.lot when product_expiry is
+                # installed — getattr avoids an AttributeError on installs without it.
+                'expiration_date':      str(getattr(rec.lot_id, 'expiration_date', False).date()) if getattr(rec.lot_id, 'expiration_date', False) else None,
                 'quantity':             rec.quantity,
                 'reserved_quantity':    rec.reserved_quantity,
                 'available_quantity':   rec.available_quantity,
@@ -1860,6 +1862,10 @@ class PickingCreateController(http.Controller):
                 'picking_type_id':  picking_type.id,
                 'location_id':      location_src.id,
                 'location_dest_id': location_dst.id,
+                # المرسل: the person creating the transfer request — defaults
+                # to whoever is logged in, so طلبات صرف واستلام الأقسام can
+                # show "المرسل" without the client having to pass it explicitly.
+                'user_id':          request.env.user.id,
             }
 
             for field in ('origin', 'note', 'scheduled_date', 'date_deadline'):
@@ -1934,6 +1940,8 @@ class PickingCreateController(http.Controller):
                 'location_dest_id':   rec.location_dest_id.id,
                 'location_dest_name': rec.location_dest_id.complete_name,
                 'move_ids_count':     len(rec.move_ids),
+                'user_id':            rec.user_id.id if rec.user_id else None,
+                'user_name':          rec.user_id.name if rec.user_id else None,
             }, 201)
 
         except Exception as e:
