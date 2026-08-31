@@ -25,9 +25,18 @@ def _location_covered(location, employee):
     reusing it here is what makes "assign the whole warehouse" still cover
     every department under it, exactly as it did before per-location
     assignment replaced the old warehouse-level hr.employee.warehouse_ids.
+
+    No linked hr.employee at all (e.g. a system/admin login not tied to a
+    staff record) stays unrestricted. But an employee record that exists
+    with zero location_ids is deliberately denied everything, not allowed
+    through — an employee with no assignment yet must not be able to create,
+    send, or receive طلبات صرف واستلام الأقسام for any location until an
+    admin actually assigns one.
     """
-    if not employee or not employee.location_ids or not location:
+    if not employee:
         return True
+    if not location or not employee.location_ids:
+        return False
     env = location.env
     if env['stock.location'].search_count([
         ('id', '=', location.id),
@@ -2121,7 +2130,7 @@ class PickingValidateController(http.Controller):
             # receipt. Scoped strictly to 'internal' transfers so unrelated
             # flows (purchase receiving, pharmacy dispensing via 'outgoing')
             # are never affected. An employee with no location_ids configured
-            # yet is allowed through, matching the frontend's same fallback.
+            # yet is denied, not let through — see _location_covered.
             if rec.picking_type_id.code == 'internal':
                 employee = request.env['hr.employee'].sudo().search(
                     [('user_id', '=', request.env.user.id)], limit=1
