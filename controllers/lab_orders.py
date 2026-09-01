@@ -7,6 +7,7 @@ from odoo.fields import Datetime as DT
 from odoo.http import request
 
 from .utils import _json
+from .inpatient_billing import bill_service_orders, is_admission_discharged
 
 LAB_VALID_TRANSITIONS = {
     'requested': ['collected', 'cancelled'],
@@ -91,6 +92,8 @@ class LabOrderController(http.Controller):
         visit = _resolve_visit(visit_id)
         if not visit:
             return _json({'error': 'visit not found'}, 404)
+        if is_admission_discharged(visit):
+            return _json({'error': 'تم إغلاق فاتورة هذا المريض بعد الخروج — لا يمكن إضافة طلبات جديدة'}, 400)
         try:
             body = json.loads(request.httprequest.data or '{}')
             vals = _normalise_lab_vals(visit, body)
@@ -100,6 +103,7 @@ class LabOrderController(http.Controller):
             return _json({'error': str(exc)}, 400)
 
         rec = request.env['saycare.lab.order'].sudo().create(vals)
+        bill_service_orders(visit, rec)
         return _json(_lab_dict(rec), 201)
 
     @http.route('/saycare/api/visit/<int:visit_id>/lab-orders/bulk', type='http', auth='user', methods=['POST'], csrf=False)
@@ -107,6 +111,8 @@ class LabOrderController(http.Controller):
         visit = _resolve_visit(visit_id)
         if not visit:
             return _json({'error': 'visit not found'}, 404)
+        if is_admission_discharged(visit):
+            return _json({'error': 'تم إغلاق فاتورة هذا المريض بعد الخروج — لا يمكن إضافة طلبات جديدة'}, 400)
         try:
             body = json.loads(request.httprequest.data or '{}')
         except json.JSONDecodeError:
@@ -126,6 +132,7 @@ class LabOrderController(http.Controller):
             return _json({'error': str(exc)}, 400)
 
         records = request.env['saycare.lab.order'].sudo().create(vals_list)
+        bill_service_orders(visit, records)
         return _json({
             'request_group': request_group,
             'visit_id': visit.id,

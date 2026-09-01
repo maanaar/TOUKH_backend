@@ -4,6 +4,7 @@ import logging
 from odoo import http
 from odoo.http import request
 from .utils import _json
+from .inpatient_billing import add_bill_line
 
 _logger = logging.getLogger(__name__)
 
@@ -176,8 +177,22 @@ class StockController(http.Controller):
         if not partner_id:
             partner_id = env.ref('base.res_partner_1').id
 
-        # Build sale order lines
-        order_lines = []
+        # Inpatient visits bill onto the admission's single running Open Bill
+        # (saycare.admission.request.sale_order_id) instead of a one-off order
+        # per dispatch — stock still has to leave the shelf immediately, so
+        # each item still gets its own validated stock.move right away, just
+        # linked to that shared order's lines via sale_line_id (see
+        # inpatient_billing.add_bill_line) rather than via a separate order.
+        admission = None
+        if visit.exists() and visit.visit_type == 'inpatient':
+            admission = env['saycare.admission.request'].sudo().search(
+                [('visit_id', '=', visit_id)], limit=1
+            )
+            if admission and admission.worklist_stage == 'discharged':
+                return _json({'error': 'تم إغلاق فاتورة هذا المريض بعد الخروج — لا يمكن إضافة أصناف جديدة'}, 400)
+
+        # Build item list (resolved products)
+        resolved_items = []
         for item in items:
             pp_id = item.get('product_product_id')
             qty   = float(item.get('qty') or 0)
@@ -186,17 +201,36 @@ class StockController(http.Controller):
             product = env['product.product'].sudo().browse(int(pp_id))
             if not product.exists():
                 continue
-            uom_id = item.get('uom_id') or product.uom_id.id
-            order_lines.append((0, 0, {
-                'product_id':      product.id,
-                'product_uom_qty': qty,
-                'product_uom_id':  uom_id,
-                'price_unit':      product.lst_price,
-                'name':            item.get('name') or product.name,
-            }))
+            resolved_items.append((product, qty, item.get('name') or product.name))
 
-        if not order_lines:
+        if not resolved_items:
             return _json({'error': 'No valid items to dispatch'}, 400)
+
+        if admission:
+            try:
+                for product, qty, name in resolved_items:
+                    add_bill_line(admission, product, qty, product.lst_price, name,
+                                  warehouse=wh, deliver_now=True)
+                so = admission.sale_order_id
+            except Exception as e:
+                _logger.exception('dispatch-consumables: inpatient open-bill dispatch failed')
+                return _json({'error': str(e)}, 500)
+
+            return _json({
+                'sale_order_id':   so.id,
+                'sale_order_name': so.name,
+                'picking_id':      None,
+                'picking_name':    None,
+            })
+
+        # Outpatient / no admission record: previous one-off-order-per-dispatch behavior.
+        order_lines = [(0, 0, {
+            'product_id':      product.id,
+            'product_uom_qty': qty,
+            'product_uom_id':  product.uom_id.id,
+            'price_unit':      product.lst_price,
+            'name':            name,
+        }) for product, qty, name in resolved_items]
 
         try:
             so = env['sale.order'].sudo().create({
@@ -251,4 +285,26 @@ class StockController(http.Controller):
                     'qty':                line.product_uom_qty,
                     'date':               str(so.create_date),
                 })
+
+        # Inpatient: dispatches land as lines on the admission's single running
+        # Open Bill rather than a one-off order — only lines with an actual
+        # linked stock.move are consumable dispatches (lab/rad/service lines
+        # on the same bill never get one), so filter to those.
+        admission = request.env['saycare.admission.request'].sudo().search(
+            [('visit_id', '=', visit_id)], limit=1
+        )
+        if admission and admission.sale_order_id:
+            so = admission.sale_order_id
+            for line in so.order_line.filtered(lambda l: l.move_ids):
+                items.append({
+                    'sale_order_id':      so.id,
+                    'sale_order_name':    so.name,
+                    'product_product_id': line.product_id.id,
+                    'name':               line.name or line.product_id.name,
+                    'uom':                line.product_uom.name if line.product_uom else '',
+                    'uom_id':             line.product_uom.id if line.product_uom else None,
+                    'qty':                line.product_uom_qty,
+                    'date':               str(line.create_date),
+                })
+
         return _json(items)

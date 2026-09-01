@@ -265,6 +265,10 @@ def _admission_request_dict(r):
         'visitId':                r.visit_id.id if r.visit_id else None,
         'worklistStage':          r.worklist_stage or 'booked',
         'isTransfer':             r.is_transfer,
+        'saleOrderId':            r.sale_order_id.id if r.sale_order_id else None,
+        'saleOrderName':          r.sale_order_id.name if r.sale_order_id else '',
+        'billTotal':              r.sale_order_id.amount_total if r.sale_order_id else 0.0,
+        'dischargeDate':          _dt_iso(r.discharge_date),
     }
 
 
@@ -499,6 +503,57 @@ class AdmissionRequestController(http.Controller):
             })
 
         return _json(_admission_request_dict(rec))
+
+    @http.route('/saycare/api/admission-requests/<int:rec_id>/discharge', type='http', auth='user', methods=['POST'], csrf=False)
+    def discharge(self, rec_id, **kw):
+        """Closes the inpatient Open Bill: stops new charges, confirms the
+        admission's running sale.order (if it has any lines — action_confirm's
+        own procurement skips any line already fully covered by a done stock
+        move, see inpatient_billing.add_bill_line), generates and posts the
+        final invoice, and frees the bed immediately instead of relying on
+        the 24h auto-free timeout."""
+        rec = request.env[self._model].sudo().browse(rec_id)
+        if not rec.exists():
+            return _json({'error': 'admission request not found'}, 404)
+        if rec.status != 'admitted':
+            return _json({'error': 'هذا الحجز لم يتم قبوله بعد'}, 400)
+        if rec.worklist_stage == 'discharged':
+            return _json({'error': 'تم تسجيل خروج هذا المريض بالفعل'}, 400)
+
+        if rec.bed_id:
+            rec.bed_id.write({'bed_status': 'available', 'current_patient_id': False})
+
+        invoice = None
+        so = rec.sale_order_id
+        if so and so.exists() and so.order_line:
+            try:
+                if so.state == 'draft':
+                    # skip_procurement: every consumable/medicine line on this
+                    # order was already physically dispensed (and its stock
+                    # move done) the moment it was dispatched during the stay
+                    # — see inpatient_billing.add_bill_line — so confirming
+                    # here must only finalize pricing, never launch a second,
+                    # duplicate delivery for stock that already left the shelf.
+                    so.with_context(skip_procurement=True).action_confirm()
+                invoices = so._create_invoices()
+                for inv in invoices:
+                    if inv.state == 'draft' and inv.invoice_line_ids:
+                        inv.action_post()
+                invoice = invoices[:1]
+            except Exception as e:
+                _logger.error('discharge: billing failed for admission=%s: %s', rec.id, e, exc_info=True)
+                return _json({'error': f'تعذر إصدار الفاتورة النهائية: {e}'}, 500)
+
+        rec.write({
+            'worklist_stage': 'discharged',
+            'discharge_date': fields.Datetime.now(),
+        })
+
+        result = _admission_request_dict(rec)
+        result['invoiceId'] = invoice.id if invoice else None
+        result['invoiceName'] = invoice.name if invoice else ''
+        result['invoiceAmount'] = invoice.amount_total if invoice else 0.0
+        return _json(result)
 
     @http.route('/saycare/api/admission-requests/<int:rec_id>/ensure-visit', type='http', auth='user', methods=['POST'], csrf=False)
     def ensure_visit(self, rec_id, **kw):

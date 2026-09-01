@@ -462,6 +462,13 @@ class VisitController(http.Controller):
         invoice_id = None
         if new_state == 'done' and v.service_ids and v.patient_id:
             invoice_id = _create_visit_invoice(v)
+            if invoice_id:
+                inv = request.env['account.move'].sudo().browse(invoice_id)
+                if inv.exists() and inv.state == 'draft' and inv.invoice_line_ids:
+                    try:
+                        inv.action_post()
+                    except Exception as e:
+                        _logger.error('change_state action_post FAILED move_id=%s: %s', invoice_id, e, exc_info=True)
 
         return _json({
             'ok': True,
@@ -651,7 +658,31 @@ IMMEDIATE_PAYMENT_CLASSES = ('cash', 'takaful')
 INSURANCE_SPLIT_CLASSES = ('insurance', 'contract', 'moh', 'state', 'staff', 'consultation')
 
 
-def _create_visit_invoice(visit):
+def service_charge_items(visit, svc):
+    """(name, price_unit) pairs for one saycare.service charged to a visit,
+    split by patient/insurance share per financial class — shared between the
+    outpatient invoice (_create_visit_invoice below) and inpatient Open Bill
+    lines (lab/rad orders billed onto the admission's running sale.order)."""
+    fin_class = visit.financial_class or 'cash'
+    is_cash   = fin_class == 'cash'
+    financial_label = FINANCIAL_LABELS.get(fin_class, fin_class)
+
+    if is_cash:
+        return [(svc.name, svc.price)]
+
+    patient_share   = max(0.0, svc.price - svc.insurance_price)
+    insurance_share = svc.insurance_price or 0.0
+    items = []
+    if patient_share > 0:
+        items.append((f'{svc.name} — حصة المريض', patient_share))
+    if insurance_share > 0:
+        items.append((f'{svc.name} — حصة التأمين ({financial_label})', insurance_share))
+    if not items:
+        items.append((svc.name, svc.price))
+    return items
+
+
+def _create_visit_invoice(visit, post=False):
     env = visit.env
 
     existing = env['account.move'].sudo().search([
@@ -734,7 +765,7 @@ def _create_visit_invoice(visit):
 
     move = env['account.move'].sudo().create(move_vals)
 
-    if lines:
+    if lines and post:
         try:
             move.action_post()
         except Exception as e:

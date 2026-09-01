@@ -119,6 +119,7 @@ class NursingWorklistController(http.Controller):
             'bedName':                admission.bed_id.display_name if admission.bed_id else '',
             'status':                 admission.status or '',
             'worklistStage':          admission.worklist_stage or 'booked',
+            'billTotal':              admission.sale_order_id.amount_total if admission.sale_order_id else 0.0,
         }
 
         visit = _resolve_visit(admission)

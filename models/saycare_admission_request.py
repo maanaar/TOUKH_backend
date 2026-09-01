@@ -110,7 +110,12 @@ class SaycareAdmissionRequest(models.Model):
         ('under_assessment', 'تحت التقييم'),
         ('ready_for_operation', 'جاهز للعملية'),
         ('discharge_planning', 'تخطيط الخروج'),
+        ('discharged', 'تم الخروج'),
     ], string='مرحلة قائمة التمريض', default='booked', index=True)
+
+    # ── Inpatient Open Bill ──────────────────────────────────────────────────
+    sale_order_id  = fields.Many2one('sale.order', string='فاتورة الإقامة', copy=False, readonly=True)
+    discharge_date = fields.Datetime(string='وقت الخروج', copy=False, readonly=True)
 
     @api.model_create_multi
     def create(self, vals_list):
