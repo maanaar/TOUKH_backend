@@ -277,11 +277,21 @@ class ServiceController(http.Controller):
         return _json({'basket': _basket_items(product)})
 
     @http.route('/saycare/api/products/search', type='http', auth='user', methods=['GET'], csrf=False)
-    def search_products(self, q='', limit='40', goods_only='', **kw):
+    def search_products(self, q='', limit='40', goods_only='', location_id='', **kw):
         env = request.env
         domain = [('active', '=', True), ('sale_ok', '=', True)]
         if q and q.strip():
             domain = ['&'] + domain + ['|', ('name', 'ilike', q.strip()), ('default_code', 'ilike', q.strip())]
+        # location_id: تقتصر النتائج على الأصناف المتوفرة فعلياً (كمية > 0)
+        # في هذا الموقع أو أي موقع فرعي تابع له — تُستخدم في "صرف للمريض" حتى
+        # لا يُقترح صنف غير موجود أصلاً في مخزن المستخدم المخصَّص له.
+        if location_id:
+            quants = env['stock.quant'].sudo().search([
+                ('location_id', 'child_of', int(location_id)),
+                ('quantity', '>', 0),
+            ])
+            tmpl_ids = quants.mapped('product_id.product_tmpl_id').ids
+            domain = domain + [('id', 'in', tmpl_ids)]
         # goods_only: مستلزمات/سلع فقط — تستبعد شجرة تصنيف "Medications" بالكامل
         # (is_medicines غير مضبوط على كل التصنيفات الفرعية فعلياً في القاعدة،
         # فاستبعاد الشجرة بالاسم أدق) وتستبعد الخدمات/الإجراءات (categ_type)،
