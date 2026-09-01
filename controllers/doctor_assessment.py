@@ -161,6 +161,8 @@ def _list_row_dict(v):
         'patient_id':      v.patient_id.id if v.patient_id else None,
         'patient_name':    v.patient_id.name if v.patient_id else '',
         'patient_mrn':     getattr(v.patient_id, 'mrn', '') if v.patient_id else '',
+        'patient_phone':      v.patient_id.phone or '',
+        'patient_id_number':  v.patient_id.id_number or '',
         'has_assessment_record': bool(assessment),
     }
 

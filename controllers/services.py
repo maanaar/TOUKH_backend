@@ -85,6 +85,22 @@ def _categs_by_keyword(env, keyword):
     ).ids
 
 
+def _categs_by_exact_name(env, name):
+    """Return the IDs of product.category records whose name matches *name*
+    exactly (normalized for أ/إ/آ and ة/ه spelling variants — see
+    _normalize_ar). Deliberately NOT expanded to child categories — a
+    product's categ_id must literally be one of these, so a sibling or child
+    category (e.g. a "كشف طبيب أخصائي" consultation category nested under
+    the same parent) never leaks into a picker meant to show only this one
+    category's own products."""
+    norm_target = _normalize_ar(name)
+    if not norm_target:
+        return []
+    all_categs = env['product.category'].sudo().search([])
+    matched = all_categs.filtered(lambda c: _normalize_ar(c.name or '') == norm_target)
+    return matched.ids
+
+
 def _products_from_categ_keyword(env, keyword, existing_names=None):
     """Return _product_service_dict list for products in categories whose
     name or complete_name contains *keyword* (case-insensitive)."""
@@ -94,6 +110,52 @@ def _products_from_categ_keyword(env, keyword, existing_names=None):
     if not categ_ids:
         return []
     # No sale_ok filter — medical services may not be flagged as saleable
+    products = env['product.template'].sudo().search([
+        ('categ_id', 'in', categ_ids),
+        ('active', '=', True),
+    ])
+    results = []
+    for p in products:
+        if p.name not in existing_names:
+            results.append(_product_service_dict(p))
+            existing_names.add(p.name)
+    return results
+
+
+def _products_from_categ_type(env, categ_type, existing_names=None):
+    """Return _product_service_dict list for products whose category is
+    flagged with the given categ_type ('services'/'procedures') — matching
+    on that admin-set flag directly rather than a category-name keyword, so
+    "الإجراءات" pickers work regardless of what the procedures category is
+    actually named in this deployment."""
+    if existing_names is None:
+        existing_names = set()
+    categ_ids = env['product.category'].sudo().search([('categ_type', '=', categ_type)]).ids
+    if not categ_ids:
+        return []
+    categ_ids = env['product.category'].sudo().search([('id', 'child_of', categ_ids)]).ids
+    products = env['product.template'].sudo().search([
+        ('categ_id', 'in', categ_ids),
+        ('active', '=', True),
+    ])
+    results = []
+    for p in products:
+        if p.name not in existing_names:
+            results.append(_product_service_dict(p))
+            existing_names.add(p.name)
+    return results
+
+
+def _products_from_categ_exact(env, name, existing_names=None):
+    """Return _product_service_dict list for products whose categ_id is
+    literally the category named *name* (see _categs_by_exact_name) — a
+    narrow, unambiguous domain for pickers that should only ever show one
+    specific category's own products (e.g. "الإجراءات")."""
+    if existing_names is None:
+        existing_names = set()
+    categ_ids = _categs_by_exact_name(env, name)
+    if not categ_ids:
+        return []
     products = env['product.template'].sudo().search([
         ('categ_id', 'in', categ_ids),
         ('active', '=', True),
@@ -137,15 +199,16 @@ def _basket_items(product):
 class ServiceController(http.Controller):
 
     @http.route('/saycare/api/services', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_all(self, specialty_id='', visit_type='', categ_keyword='', **kw):
+    def get_all(self, specialty_id='', visit_type='', categ_keyword='', categ_type='', categ_exact='', **kw):
         env = request.env
 
         # ── 1. saycare.service records ────────────────────────────────────────
-        # Skip generic service records when categ_keyword is the only filter
-        # (lab/rad use categ_keyword without specialty_id — only category products wanted)
+        # Skip generic service records when categ_keyword/categ_type/categ_exact
+        # is the only filter (lab/rad/procedures use these without specialty_id
+        # — only category products wanted, not every saycare.service in the system)
         results = []
         existing_names = set()
-        if not (categ_keyword and not specialty_id):
+        if not ((categ_keyword or categ_type or categ_exact) and not specialty_id):
             domain = [('active', '=', True)]
             if specialty_id:
                 try:
@@ -206,6 +269,21 @@ class ServiceController(http.Controller):
         # Used by lab (keyword='تحاليل'), rad (keyword='أشعة'), clinic (keyword='عيادة')
         if categ_keyword:
             results.extend(_products_from_categ_keyword(env, categ_keyword, existing_names))
+
+        # ── 4. products from categories flagged categ_type ──────────────────────
+        # Matches the admin-set category flag directly instead of a name
+        # keyword. Not used by "الإجراءات" (too broad — matches every category
+        # flagged 'procedures' across every specialty); kept for callers that
+        # do want that broader match.
+        if categ_type:
+            results.extend(_products_from_categ_type(env, categ_type, existing_names))
+
+        # ── 5. products from the one category whose name is an exact match ──────
+        # Used by "الإجراءات" pickers — narrow on purpose, so a per-specialty
+        # category that merely contains the same word (e.g. "إجراءات الأسنان")
+        # never leaks into a picker meant to show only this one category.
+        if categ_exact:
+            results.extend(_products_from_categ_exact(env, categ_exact, existing_names))
 
         return _json(results)
 
