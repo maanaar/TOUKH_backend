@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from odoo import http
 from odoo.http import request
 from odoo.fields import Datetime as DT
-from .utils import _json
+from .utils import _json, local_day_bounds_utc
 
 
 def _med_dict(m):
@@ -262,13 +262,16 @@ class PharmacyQueueController(http.Controller):
 
     @http.route('/saycare/api/pharmacy/queue', type='http', auth='user', methods=['GET'], csrf=False)
     def queue(self, date_from='', date_to='', visit_type='', **kw):
-        if date_from:
-            try:
-                range_start = datetime.strptime(date_from, '%Y-%m-%d').replace(hour=0,  minute=0,  second=0)
-                range_end   = datetime.strptime(date_to or date_from, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-            except ValueError:
-                range_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-                range_end   = range_start + timedelta(days=1)
+        # date_from/date_to are plain local (Cairo) calendar dates from the
+        # screen's date picker — prescribed_at is stored as naive UTC, so
+        # comparing the two directly (no timezone conversion) silently drops
+        # anything prescribed after local midnight but before UTC midnight.
+        from zoneinfo import ZoneInfo
+        today_local = datetime.now(ZoneInfo('Africa/Cairo')).date().isoformat()
+        bounds = local_day_bounds_utc(date_from or today_local)
+        end_bounds = local_day_bounds_utc(date_to or date_from or today_local)
+        if bounds and end_bounds:
+            range_start, range_end = bounds[0], end_bounds[1]
         else:
             range_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             range_end   = range_start + timedelta(days=1)

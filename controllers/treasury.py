@@ -3,6 +3,7 @@ import json
 from zoneinfo import ZoneInfo
 from odoo import http, fields as odoo_fields
 from odoo.http import request
+from odoo.tools.mail import html2plaintext
 from .utils import _json
 
 _CAIRO_TZ = ZoneInfo('Africa/Cairo')
@@ -79,7 +80,7 @@ def _refund_row(rfn, visit=None):
         'amount_due':      0.0,
         'insurance_share': 0.0,
         'patient_share':   0.0,
-        'refund_reason':   rfn.narration or '',
+        'refund_reason':   html2plaintext(rfn.narration) if rfn.narration else '',
         'original_invoice_name': rfn.reversed_entry_id.name if rfn.reversed_entry_id else '',
     }
 
@@ -145,7 +146,7 @@ class TreasuryController(http.Controller):
             is_reversed = bool(rfn_move) or payment_state == 'reversed'
             refund_reason = ''
             if is_reversed:
-                refund_reason = (rfn_move.narration or '') if rfn_move else ''
+                refund_reason = (html2plaintext(rfn_move.narration) if rfn_move.narration else '') if rfn_move else ''
                 amount_total = -amount_total  # display as negative
 
             rows.append({
@@ -175,6 +176,75 @@ class TreasuryController(http.Controller):
                 'patient_share':     v_patient,
                 'refund_reason':     refund_reason,
             })
+
+        # ── Inpatient Open Bill discharge invoices ──────────────────────────
+        # These never get linked onto a saycare.visit — they're generated
+        # straight from the admission's own sale_order_id at discharge (see
+        # AdmissionRequestController.discharge) — so the visit-based query
+        # above never finds them. Without this, a discharged patient's bill
+        # would only ever be payable from فواتير المرضى, never from الخزنة's
+        # own daily list where cashiers actually work day to day.
+        admissions = request.env['saycare.admission.request'].sudo().search([
+            ('discharge_date', '>=', f'{target} 00:00:00'),
+            ('discharge_date', '<=', f'{target} 23:59:59'),
+            ('sale_order_id',  '!=', False),
+        ])
+        for adm in admissions:
+            for inv in adm.sale_order_id.invoice_ids.filtered(lambda m: m.move_type == 'out_invoice'):
+                payment_state = inv.payment_state
+                amount_total  = inv.amount_total
+                amount_due    = inv.amount_residual
+
+                time_dt = None
+                if payment_state == 'paid':
+                    payment = request.env['account.payment'].sudo().search(
+                        [('reconciled_invoice_ids', 'in', inv.id)], order='create_date desc', limit=1
+                    )
+                    if payment and payment.create_date:
+                        time_dt = payment.create_date
+                if not time_dt:
+                    time_dt = adm.discharge_date
+                time_dt = _to_cairo(time_dt)
+                time_str = f'{time_dt.hour:02d}:{time_dt.minute:02d}' if time_dt else ''
+
+                rfn_move = request.env['account.move'].sudo().search([
+                    ('reversed_entry_id', '=', inv.id),
+                    ('move_type', '=', 'out_refund'),
+                    ('state', '=', 'posted'),
+                ], limit=1)
+                is_reversed = bool(rfn_move) or payment_state == 'reversed'
+                refund_reason = ''
+                if is_reversed:
+                    refund_reason = html2plaintext(rfn_move.narration) if (rfn_move and rfn_move.narration) else ''
+                    amount_total = -amount_total
+
+                rows.append({
+                    'is_refund':       is_reversed,
+                    'visit_id':        adm.visit_id.id if adm.visit_id else None,
+                    'visit_name':      adm.inpatient_booking_number or adm.sale_order_id.name or '',
+                    'time':            time_str,
+                    'patient_id':      adm.patient_id.id if adm.patient_id else None,
+                    'patient_name':    adm.patient_id.name if adm.patient_id else (adm.patient_name or '—'),
+                    'mrn':             adm.patient_mrn or '',
+                    'national_id':     adm.national_id or '',
+                    'mobile':          adm.patient_mobile or '',
+                    'clinic':          adm.department_id.display_name if adm.department_id else '',
+                    'doctor':          adm.attending_doctor or '',
+                    'visit_type':      'فاتورة إقامة (داخلي)',
+                    'financial_class': 'cash',
+                    'financial_label': adm.payment_type or FINANCIAL_CLASS_AR.get('cash', ''),
+                    'payment_method':  'cash',
+                    'state':           'refunded' if is_reversed else inv.state,
+                    'invoice_id':      inv.id,
+                    'invoice_name':    inv.name or '',
+                    'invoice_state':   inv.state,
+                    'payment_state':   'refunded' if is_reversed else payment_state,
+                    'amount_total':    amount_total,
+                    'amount_due':      amount_due,
+                    'insurance_share': 0.0,
+                    'patient_share':   amount_total,
+                    'refund_reason':   refund_reason,
+                })
 
         # summary totals
         positive_rows  = [r for r in rows if r['amount_total'] > 0]

@@ -1,6 +1,66 @@
 # -*- coding: utf-8 -*-
+import datetime
 import json
+from zoneinfo import ZoneInfo
+from odoo import fields
 from odoo.http import Response
+
+_CAIRO_TZ = ZoneInfo('Africa/Cairo')
+
+
+def local_day_bounds_utc(date_str):
+    """Convert a plain 'YYYY-MM-DD' local (Cairo) calendar date into the
+    [start, end) naive-UTC datetime bounds that match how Odoo actually
+    stores Datetime fields. A date-range filter built by just parsing the
+    string and comparing directly (no timezone conversion at all) silently
+    excludes anything created after local midnight but before UTC midnight —
+    e.g. a medication prescribed at 00:40 local (Cairo, UTC+2/+3) has
+    prescribed_at stored as ~21:40-22:40 UTC the *previous* day, which a
+    naive 'today' filter for the new local day would never match."""
+    try:
+        d = datetime.date.fromisoformat(date_str)
+    except (TypeError, ValueError):
+        return None
+    start_local = datetime.datetime.combine(d, datetime.time.min, tzinfo=_CAIRO_TZ)
+    end_local = start_local + datetime.timedelta(days=1)
+    return (
+        start_local.astimezone(ZoneInfo('UTC')).replace(tzinfo=None),
+        end_local.astimezone(ZoneInfo('UTC')).replace(tzinfo=None),
+    )
+
+
+def assign_lots_for_move(move, source_location):
+    """For a lot/serial-tracked product, Odoo's own reservation doesn't pick
+    a lot on its own, and validating the move refuses to complete without
+    one. Auto-assign the nearest-to-expire available lot at source_location
+    (FEFO — same criterion the الأصناف المطلوبة transfer screen already uses),
+    or, if this product's stock was never actually recorded under any lot at
+    all (a real data gap seen on several catalog items — e.g. "حزام بطن"
+    had 50 units on hand with zero stock.lot records ever created for it),
+    auto-create one rather than hard-failing the dispense over a data-entry
+    gap the person dispensing has no way to fix themselves."""
+    env = move.env
+    for ml in move.move_line_ids:
+        product = ml.product_id
+        if product.tracking == 'none' or ml.lot_id:
+            continue
+        quant = env['stock.quant'].sudo().search([
+            ('product_id', '=', product.id),
+            ('location_id', '=', source_location.id),
+            ('quantity', '>', 0),
+            ('lot_id', '!=', False),
+        ], order='id')
+        quant = quant.sorted(
+            lambda q: getattr(q.lot_id, 'expiration_date', False) or fields.Datetime.now()
+        )[:1]
+        if quant:
+            ml.lot_id = quant.lot_id.id
+        else:
+            lot = env['stock.lot'].sudo().create({
+                'product_id': product.id,
+                'company_id': move.company_id.id,
+            })
+            ml.lot_id = lot.id
 
 
 def _json(data, status=200):

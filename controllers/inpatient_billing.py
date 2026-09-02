@@ -16,7 +16,7 @@ action_confirm() finally runs at discharge it sees the line already fully
 covered by a done move and does not schedule a second delivery for it.
 """
 import logging
-from odoo import fields
+from .utils import assign_lots_for_move
 
 _logger = logging.getLogger(__name__)
 
@@ -99,25 +99,7 @@ def add_bill_line(admission, product, qty, price_unit, name, warehouse=None, del
         })
         move._action_confirm()
         move._action_assign()
-
-        # Lot/serial-tracked products: reservation doesn't auto-pick a lot on
-        # its own, and _action_done() refuses to complete without one — pick
-        # the nearest-to-expire available lot at this location (FEFO), same
-        # criterion get_transfer_item_details already uses for this screen.
-        for ml in move.move_line_ids:
-            if ml.product_id.tracking != 'none' and not ml.lot_id:
-                quant = env['stock.quant'].sudo().search([
-                    ('product_id', '=', ml.product_id.id),
-                    ('location_id', '=', warehouse.lot_stock_id.id),
-                    ('quantity', '>', 0),
-                    ('lot_id', '!=', False),
-                ], order='id')
-                quant = quant.sorted(
-                    lambda q: getattr(q.lot_id, 'expiration_date', False) or fields.Datetime.now()
-                )[:1]
-                if quant:
-                    ml.lot_id = quant.lot_id.id
-
+        assign_lots_for_move(move, warehouse.lot_stock_id)
         move.write({'quantity': qty, 'picked': True})
         move._action_done()
 
@@ -161,10 +143,23 @@ def bill_service_orders(visit, records):
 
     for rec in records:
         svc = rec.service_id
-        if not svc:
+        if svc:
+            product = svc.product_id.product_variant_id if svc.product_id else None
+            if not product:
+                product = _get_or_create_service_product(env, svc.name)
+            for name, price in service_charge_items(visit, svc):
+                add_bill_line(admission, product, 1, price, name, deliver_now=False)
             continue
-        product = svc.product_id.product_variant_id if svc.product_id else None
-        if not product:
-            product = _get_or_create_service_product(env, svc.name)
-        for name, price in service_charge_items(visit, svc):
-            add_bill_line(admission, product, 1, price, name, deliver_now=False)
+
+        # No saycare.service link — most lab tests only ever resolve here,
+        # since /saycare/api/lab-tests (and part of the rad catalog) is
+        # sourced straight from product.template, a separate id space with
+        # no saycare.service counterpart to carry an insurance-split price.
+        # Bill the product's own price as a single line instead of dropping
+        # the charge silently.
+        tmpl = getattr(rec, 'product_id', False)
+        if not tmpl:
+            continue
+        product = tmpl.product_variant_id or _get_or_create_service_product(env, tmpl.name)
+        name = getattr(rec, 'test_name', None) or getattr(rec, 'study_type', None) or tmpl.name
+        add_bill_line(admission, product, 1, tmpl.list_price, name, deliver_now=False)

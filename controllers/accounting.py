@@ -2,6 +2,7 @@
 import json
 from odoo import http
 from odoo.http import request
+from odoo.tools.mail import html2plaintext
 from .utils import _json
 
 # Journals to always exclude from the accounting dashboard
@@ -36,7 +37,10 @@ def _move_dict(move):
         'journal_code':  move.journal_id.code if move.journal_id else '',
         'journal_type':  move.journal_id.type if move.journal_id else '',
         'partner_name':  move.partner_id.name if move.partner_id else '',
-        'narration':     move.narration or '',
+        # narration is an Html field — even plain text comes back wrapped in
+        # real <p> tags, which must be stripped before it reaches a client
+        # that renders it as plain text.
+        'narration':     html2plaintext(move.narration) if move.narration else '',
         'amount_total':  move.amount_total,
         'total_debit':   sum(l['debit']  for l in lines),
         'total_credit':  sum(l['credit'] for l in lines),

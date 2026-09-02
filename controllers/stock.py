@@ -3,7 +3,7 @@ import json
 import logging
 from odoo import http
 from odoo.http import request
-from .utils import _json
+from .utils import _json, assign_lots_for_move
 from .inpatient_billing import add_bill_line
 
 _logger = logging.getLogger(__name__)
@@ -244,7 +244,10 @@ class StockController(http.Controller):
             _logger.exception('dispatch-consumables: sale.order creation failed')
             return _json({'error': str(e)}, 500)
 
-        # Validate the outgoing picking to execute the stock move
+        # Validate the outgoing picking to execute the stock move. Reported as
+        # a real error rather than swallowed (unlike the previous behavior
+        # here): if this fails, stock never actually left the shelf, and the
+        # caller must not be told the dispense succeeded.
         picking = so.picking_ids[:1] if so.picking_ids else False
         picking_name = None
         if picking and picking.exists():
@@ -252,9 +255,11 @@ class StockController(http.Controller):
             try:
                 for move in picking.move_ids:
                     move.quantity = move.product_uom_qty
+                    assign_lots_for_move(move, move.location_id)
                 picking.button_validate()
-            except Exception:
-                _logger.warning('dispatch-consumables: picking validation failed, leaving as ready')
+            except Exception as e:
+                _logger.exception('dispatch-consumables: picking validation failed')
+                return _json({'error': str(e)}, 500)
 
         return _json({
             'sale_order_id':   so.id,
@@ -280,8 +285,8 @@ class StockController(http.Controller):
                     'sale_order_name':    so.name,
                     'product_product_id': line.product_id.id,
                     'name':               line.name or line.product_id.name,
-                    'uom':                line.product_uom.name if line.product_uom else '',
-                    'uom_id':             line.product_uom.id if line.product_uom else None,
+                    'uom':                line.product_uom_id.name if line.product_uom_id else '',
+                    'uom_id':             line.product_uom_id.id if line.product_uom_id else None,
                     'qty':                line.product_uom_qty,
                     'date':               str(so.create_date),
                 })
@@ -301,8 +306,8 @@ class StockController(http.Controller):
                     'sale_order_name':    so.name,
                     'product_product_id': line.product_id.id,
                     'name':               line.name or line.product_id.name,
-                    'uom':                line.product_uom.name if line.product_uom else '',
-                    'uom_id':             line.product_uom.id if line.product_uom else None,
+                    'uom':                line.product_uom_id.name if line.product_uom_id else '',
+                    'uom_id':             line.product_uom_id.id if line.product_uom_id else None,
                     'qty':                line.product_uom_qty,
                     'date':               str(line.create_date),
                 })

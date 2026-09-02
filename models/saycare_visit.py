@@ -101,7 +101,10 @@ class SaycareVisit(models.Model):
         ('against_advice',    'خروج الحالة على المسؤولية'),
         ('absconded',         'هروب الحالة'),
         ('not_reached_3_shifts', 'عدم الوصول للحالة على مدار ثلاث شيفتات'),
+        ('transfer_hospital', 'تحويل الى مستشفى آخر'),
     ], string='حالة خروج المريض')
+    transfer_hospital_from = fields.Char(string='خروج من', default='مستشفى مبرة مصر القديمة')
+    transfer_hospital_to   = fields.Char(string='محول إلى')
 
     # ── Kiosk self-service queue tickets ───────────────────────────────────────
     reception_number = fields.Char(string='رقم انتظار الاستقبال')

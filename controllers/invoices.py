@@ -2,11 +2,12 @@
 import json
 from odoo import http, fields
 from odoo.http import request
+from odoo.tools.mail import html2plaintext
 from .utils import _json
 
 
-def _invoice_dict(inv):
-    return {
+def _invoice_dict(inv, full=False):
+    d = {
         'id':           inv.id,
         'name':         inv.name or '',
         'state':        inv.state,          # draft / posted / cancel
@@ -20,7 +21,10 @@ def _invoice_dict(inv):
         'amount_total':   inv.amount_total,
         'amount_residual': inv.amount_residual,
         'currency':     inv.currency_id.name if inv.currency_id else 'EGP',
-        'narration':    inv.narration or '',
+        # narration is an Html field — Odoo stores/returns even plain text
+        # wrapped in real <p> tags, so it must be stripped back to plain text
+        # before going to a client that renders it as text, not markup.
+        'narration':    html2plaintext(inv.narration) if inv.narration else '',
         'lines': [{
             'id':          line.id,
             'name':        line.name or '',
@@ -30,6 +34,33 @@ def _invoice_dict(inv):
         } for line in inv.invoice_line_ids if line.display_type in ('product', False, '')],
         'odoo_url': f'/odoo/accounting/customer-invoices/{inv.id}',
     }
+    if full:
+        d['partner_address'] = ', '.join(filter(None, [
+            inv.partner_id.street, inv.partner_id.city,
+        ])) if inv.partner_id else ''
+        d['journal_name'] = inv.journal_id.name if inv.journal_id else ''
+        d['invoice_origin'] = inv.invoice_origin or ''
+        d['write_date'] = str(inv.write_date) if inv.write_date else None
+        d['payments'] = [{
+            'id':           p.id,
+            'name':         p.name or '',
+            'date':         str(p.date) if p.date else None,
+            'amount':       p.amount,
+            'journal_name': p.journal_id.name if p.journal_id else '',
+            'state':        p.state,
+        } for p in inv._get_reconciled_payments().sorted('date')]
+        d['lines'] = [{
+            'id':           line.id,
+            'name':         line.name or '',
+            'product_name': line.product_id.display_name if line.product_id else (line.name or ''),
+            'account_name': line.account_id.display_name if line.account_id else '',
+            'quantity':     line.quantity,
+            'uom_name':     line.product_uom_id.name if line.product_uom_id else '',
+            'price_unit':   line.price_unit,
+            'tax_names':    ', '.join(t.name for t in line.tax_ids) if line.tax_ids else '',
+            'price_total':  line.price_total,
+        } for line in inv.invoice_line_ids if line.display_type in ('product', False, '')]
+    return d
 
 
 class InvoiceController(http.Controller):
@@ -39,7 +70,7 @@ class InvoiceController(http.Controller):
         inv = request.env['account.move'].sudo().browse(invoice_id)
         if not inv.exists() or inv.move_type != 'out_invoice':
             return _json({'error': 'invoice not found'}, 404)
-        return _json(_invoice_dict(inv))
+        return _json(_invoice_dict(inv, full=True))
 
     @http.route('/saycare/api/invoice/<int:invoice_id>/confirm', type='http', auth='user', methods=['POST'], csrf=False)
     def confirm(self, invoice_id, **kw):
@@ -84,14 +115,20 @@ class InvoiceController(http.Controller):
 
             amount = float(body.get('amount') or 0) or inv.amount_residual
 
-            # Step 2: journal from visit.payment_method (طريقة الدفع) —
-            # this is independent of financial_class (الوجهة المالية: نقدي/تأمين/تعاقدات/...),
-            # which never affects journal selection.
+            # Step 2: journal from an explicit payment_method in the request body
+            # (the الخزنة collection popup lets the cashier choose it directly) —
+            # falling back to visit.payment_method (طريقة الدفع) when not given,
+            # e.g. for older callers. Independent of financial_class (الوجهة
+            # المالية: نقدي/تأمين/تعاقدات/...), which never affects journal selection.
             # 'مميكن' (deferred) → bank journal | 'نقدي' (cash, default) → cash journal
-            visit = request.env['saycare.visit'].sudo().search(
-                [('invoice_id', '=', inv.id)], limit=1
-            )
-            visit_pm = visit.payment_method if visit else 'cash'
+            explicit_pm = body.get('payment_method')
+            if explicit_pm in ('cash', 'deferred'):
+                visit_pm = explicit_pm
+            else:
+                visit = request.env['saycare.visit'].sudo().search(
+                    [('invoice_id', '=', inv.id)], limit=1
+                )
+                visit_pm = visit.payment_method if visit else 'cash'
             if visit_pm == 'deferred':
                 pay_journal = request.env['account.journal'].sudo().search(
                     [('type', '=', 'bank'), ('company_id', '=', inv.company_id.id)], limit=1
@@ -248,12 +285,24 @@ class InvoiceController(http.Controller):
         if not inv.exists():
             return _json({'error': 'invoice not found'}, 404)
 
+        # Ensures these lines exist rather than blindly appending — a caller
+        # (e.g. ReceptionPage's pending-request flow) that retries this same
+        # request after a failed payment must not keep duplicating the same
+        # lab/rad charge on every attempt.
+        existing_keys = {
+            (l.name or '', l.price_unit)
+            for l in inv.invoice_line_ids
+            if l.display_type in ('product', False, '')
+        }
+
         new_lines = []
         for line in body.get('lines', []):
             name  = (line.get('name') or '').strip()
             price = float(line.get('price') or 0)
             qty   = float(line.get('qty')   or 1)
             if not name or price <= 0:
+                continue
+            if (name, price) in existing_keys:
                 continue
 
             # Resolve product variant from 'prod-N' template ID
@@ -274,6 +323,7 @@ class InvoiceController(http.Controller):
                 'product_id':   product_id,
                 'display_type': 'product',
             }))
+            existing_keys.add((name, price))
 
         if new_lines:
             was_posted = inv.state == 'posted'
@@ -286,7 +336,8 @@ class InvoiceController(http.Controller):
         return _json(_invoice_dict(inv))
 
     @http.route('/saycare/api/invoices', type='http', auth='user', methods=['GET'], csrf=False)
-    def get_list(self, partner_id='', state='', payment_state='', **kw):
+    def get_list(self, partner_id='', state='', payment_state='', search='',
+                 date_from='', date_to='', limit='80', offset='0', **kw):
         domain = [('move_type', '=', 'out_invoice')]
         if partner_id:
             domain.append(('partner_id', '=', int(partner_id)))
@@ -294,7 +345,25 @@ class InvoiceController(http.Controller):
             domain.append(('state', '=', state))
         if payment_state:
             domain.append(('payment_state', '=', payment_state))
-        records = request.env['account.move'].sudo().search(
-            domain, order='invoice_date desc, id desc', limit=100
-        )
-        return _json([_invoice_dict(i) for i in records])
+        if date_from:
+            domain.append(('invoice_date', '>=', date_from))
+        if date_to:
+            domain.append(('invoice_date', '<=', date_to))
+        if search:
+            domain.append('|')
+            domain.append(('name', 'ilike', search))
+            domain.append(('partner_id.name', 'ilike', search))
+
+        try:
+            limit_i = max(1, min(200, int(limit)))
+            offset_i = max(0, int(offset))
+        except (TypeError, ValueError):
+            limit_i, offset_i = 80, 0
+
+        Move = request.env['account.move'].sudo()
+        total = Move.search_count(domain)
+        records = Move.search(domain, order='invoice_date desc, id desc', limit=limit_i, offset=offset_i)
+        return _json({
+            'items': [_invoice_dict(i) for i in records],
+            'total': total,
+        })

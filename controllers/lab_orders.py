@@ -33,6 +33,8 @@ def _lab_dict(lo):
         'patient_mrn':       getattr(lo.patient_id, 'mrn', '') if lo.patient_id else '',
         'service_id':        lo.service_id.id if lo.service_id else None,
         'service_name':      lo.service_id.name if lo.service_id else '',
+        'product_id':        f'prod-{lo.product_id.id}' if lo.product_id else None,
+        'product_name':      lo.product_id.name if lo.product_id else '',
         'request_group':     lo.request_group or '',
         'test_name':         lo.test_name or '',
         'test_code':         lo.test_code or '',
@@ -65,10 +67,28 @@ def _normalise_lab_vals(visit, body, request_group=None):
     if service_id and (not service or not service.exists()):
         raise ValueError('invalid service_id')
 
+    # The lab test catalog (/saycare/api/lab-tests) is sourced straight from
+    # product.template — a different id space than saycare.service. Callers
+    # send whichever one their test actually resolved to; product_id here is
+    # the plain (unprefixed) product.template id, unlike rad's 'prod-N' shape,
+    # since lab's own catalog never mixes in real saycare.service ids at all.
+    raw_product_id = body.get('product_id')
+    product = None
+    if raw_product_id:
+        try:
+            candidate = request.env['product.template'].sudo().browse(
+                int(str(raw_product_id).removeprefix('prod-'))
+            )
+        except (TypeError, ValueError):
+            candidate = None
+        if candidate and candidate.exists():
+            product = candidate
+
     return {
         'visit_id':     visit.id,
         'patient_id':   body.get('patient_id') or visit.patient_id.id,
         'service_id':   service.id if service and service.exists() else False,
+        'product_id':   product.id if product else False,
         'request_group': request_group or body.get('request_group') or False,
         'test_name':    test_name,
         'test_code':    body.get('test_code', ''),

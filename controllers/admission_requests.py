@@ -555,6 +555,141 @@ class AdmissionRequestController(http.Controller):
         result['invoiceAmount'] = invoice.amount_total if invoice else 0.0
         return _json(result)
 
+    @http.route('/saycare/api/admission-requests/<int:rec_id>/open-bill/charge', type='http', auth='user', methods=['POST'], csrf=False)
+    def add_open_bill_charge(self, rec_id, **kw):
+        """Bills arbitrary named items (procedures, or any other one-off
+        service that has no dedicated order model of its own — unlike lab/rad,
+        which bill via inpatient_billing.bill_service_orders when their own
+        saycare.lab.order/rad.order gets created) directly onto the admission's
+        Open Bill. Used by DoctorInternal.jsx/InpatientNursingSheetsForm.jsx's
+        procedure "طلب" action for inpatient visits, instead of routing through
+        the outpatient basket/Reception ad-hoc-invoice flow."""
+        rec = request.env[self._model].sudo().browse(rec_id)
+        if not rec.exists():
+            return _json({'error': 'admission request not found'}, 404)
+        if rec.worklist_stage == 'discharged':
+            return _json({'error': 'تم إغلاق فاتورة هذا المريض بعد الخروج — لا يمكن إضافة رسوم جديدة'}, 400)
+
+        body, err = _load_body()
+        if err:
+            return err
+        items = body.get('items') or []
+        if not items:
+            return _json({'error': 'items is required'}, 400)
+
+        from .inpatient_billing import add_bill_line, _get_or_create_service_product
+
+        added = []
+        for item in items:
+            name = str(item.get('name') or '').strip()
+            price = float(item.get('price') or 0)
+            if not name:
+                continue
+
+            product = None
+            service_id = item.get('service_id')
+            raw_service_id = str(service_id or '')
+            if raw_service_id.startswith('prod-'):
+                # Product-category-sourced item (e.g. procedures picked from
+                # a product catalog rather than a saycare.service record) —
+                # same id shape rad orders already handle.
+                try:
+                    tmpl = request.env['product.template'].sudo().browse(int(raw_service_id[5:]))
+                    if tmpl.exists():
+                        product = tmpl.product_variant_ids[:1]
+                except (TypeError, ValueError):
+                    product = None
+            elif service_id:
+                try:
+                    svc = request.env['saycare.service'].sudo().browse(int(service_id))
+                    if svc.exists() and svc.product_id:
+                        product = svc.product_id.product_variant_id
+                except (TypeError, ValueError):
+                    product = None
+            if not product:
+                product = _get_or_create_service_product(request.env, name)
+
+            line, _move = add_bill_line(rec, product, 1, price, name, deliver_now=False)
+            added.append(line.id)
+
+        return _json({
+            'ok':            True,
+            'line_ids':      added,
+            'sale_order_id': rec.sale_order_id.id if rec.sale_order_id else None,
+            'bill_total':    rec.sale_order_id.amount_total if rec.sale_order_id else 0.0,
+        })
+
+    @http.route('/saycare/api/admission-requests/open-bills', type='http', auth='user', methods=['GET'], csrf=False)
+    def list_open_bills(self, **kw):
+        """Admitted-but-not-yet-discharged patients with charges already
+        accumulated on their Open Bill (saycare.admission.request.sale_order_id,
+        still draft — only becomes a real account.move invoice at discharge).
+        Surfaced in فواتير المرضى alongside real invoices, distinguished on
+        the frontend, so staff can see what's building up before discharge."""
+        admissions = request.env[self._model].sudo().search([
+            ('worklist_stage', '!=', 'discharged'),
+            ('sale_order_id', '!=', False),
+        ], order='admitted_at desc, id desc')
+        items = []
+        for adm in admissions:
+            so = adm.sale_order_id
+            if not so.order_line:
+                continue
+            items.append({
+                'id':              adm.id,
+                'name':            so.name,
+                'partner_name':    adm.patient_id.name if adm.patient_id else (adm.patient_name or ''),
+                'date':            str(adm.admitted_at) if adm.admitted_at else str(so.create_date),
+                'amount_untaxed':  so.amount_untaxed,
+                'amount_total':    so.amount_total,
+            })
+        return _json({'items': items, 'total': len(items)})
+
+    @http.route('/saycare/api/admission-requests/<int:rec_id>/open-bill', type='http', auth='user', methods=['GET'], csrf=False)
+    def get_open_bill(self, rec_id, **kw):
+        """Detail view for one admission's in-progress Open Bill — same shape
+        as _invoice_dict(full=True) in invoices.py where the two overlap, so
+        the existing invoice detail UI can render either with minimal branching,
+        but sourced from the sale.order (nothing here is a real invoice yet)."""
+        rec = request.env[self._model].sudo().browse(rec_id)
+        if not rec.exists():
+            return _json({'error': 'admission request not found'}, 404)
+        so = rec.sale_order_id
+        if not so or not so.exists():
+            return _json({'error': 'لا توجد فاتورة إقامة مفتوحة لهذا المريض بعد'}, 404)
+
+        return _json({
+            'id':               rec.id,
+            'name':             so.name,
+            'state':            'open_bill',
+            'payment_state':    'not_paid',
+            'partner_id':       rec.patient_id.id if rec.patient_id else None,
+            'partner_name':     rec.patient_id.name if rec.patient_id else (rec.patient_name or ''),
+            'partner_address':  '',
+            'journal_name':     '',
+            'invoice_date':     str(rec.admitted_at) if rec.admitted_at else None,
+            'invoice_date_due': None,
+            'invoice_origin':   rec.inpatient_booking_number or '',
+            'narration':        '',
+            'currency':         so.currency_id.name if so.currency_id else 'EGP',
+            'amount_untaxed':   so.amount_untaxed,
+            'amount_tax':       so.amount_tax,
+            'amount_total':     so.amount_total,
+            'amount_residual':  so.amount_total,
+            'payments':         [],
+            'lines': [{
+                'id':           line.id,
+                'name':         line.name or '',
+                'product_name': line.product_id.display_name if line.product_id else (line.name or ''),
+                'account_name': '',
+                'quantity':     line.product_uom_qty,
+                'uom_name':     line.product_uom_id.name if line.product_uom_id else '',
+                'price_unit':   line.price_unit,
+                'tax_names':    ', '.join(t.name for t in line.tax_ids) if line.tax_ids else '',
+                'price_total':  line.price_total,
+            } for line in so.order_line if line.display_type not in ('line_section', 'line_note')],
+        })
+
     @http.route('/saycare/api/admission-requests/<int:rec_id>/ensure-visit', type='http', auth='user', methods=['POST'], csrf=False)
     def ensure_visit(self, rec_id, **kw):
         """Purely-inpatient admissions (source != an OPD visit) often have no
