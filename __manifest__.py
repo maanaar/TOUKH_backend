@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 {
-    'name': 'SayCare-odoo',
+    'name': 'TOUKH',
     'version': '19.0.1.0.8',
     'summary': 'HTTP REST Endpoints for Inventory, Purchase, Employee Requisition and Clinical HIS',
     'description': """

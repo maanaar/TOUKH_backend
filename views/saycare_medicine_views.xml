@@ -201,7 +201,7 @@
 
   <menuitem id="menu_saycare_usage_type"
             name="أنواع الاستخدام"
-            parent="saycare_odoo_19.menu_saycare_config"
+            parent="menu_saycare_config"
             action="action_saycare_usage_type"
             sequence="30"/>
 
